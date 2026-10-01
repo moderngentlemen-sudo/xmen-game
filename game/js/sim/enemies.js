@@ -68,7 +68,10 @@ function physics(S, e, friction = 1) {
   const T = ENEMIES[e.type];
   if (!T.flier || e.state === 'stagger' || e.state === 'launched' || e.state === 'thrown') e.vy = Math.max(e.vy - GRAVITY * DT * (e.state === 'launched' ? 0.8 : 1), -MAX_FALL);
   if (e.onGround && friction < 1) e.vx *= friction;
+  const want = e.vx;
   moveBody(e, DT, S.gates);
+  // Walkers hop over knee-high obstacles in their way (vents, barriers, crate stacks)
+  if (e.hitWall && e.onGround && Math.abs(want) > 0.5 && !T.flier && !T.boss && e.state === 'idle') { e.vy = 12.5; e.onGround = false; }
 }
 
 // Lift and hold: floated up and pinned until it runs out (team.js starts it)
@@ -89,7 +92,7 @@ function held(S, e) {
 function thrown(S, e) {
   const J = HEROES.jean.tk, by = e.thrownBy;
   if (e.homing) { const t = nearestOther(S, e); if (t) e.vx += Math.sign(t.x - e.x) * 30 * DT; }
-  e.vy = Math.max(e.vy - GRAVITY * DT * 0.6, -MAX_FALL);
+  e.vy = Math.max(e.vy - GRAVITY * DT * 0.35, -MAX_FALL);
   moveBody(e, DT, S.gates);
   const power = e.homing ? 'team' : 'tk';
   for (const o of S.enemies) {
@@ -249,7 +252,8 @@ function carry(S, e) {
   const T = ENEMIES.collector, k = S.kid;
   if (!k || k.state !== 'carried' || k.carriedBy !== e.id) { e.carry = 0; setE(e, 'idle'); return; }
   let exit = null, bd = Infinity;
-  for (const x of EXITS) { const d = Math.abs(x.x - e.x) + Math.abs(x.y - e.y) * 3; if (d < bd) { bd = d; exit = x; } }
+  const ways = EXITS.filter(x => x.sec === S.mission.secId);
+  for (const x of ways.length ? ways : EXITS) { const d = Math.abs(x.x - e.x) + Math.abs(x.y - e.y) * 3; if (d < bd) { bd = d; exit = x; } }
   e.facing = exit.x >= e.x ? 1 : -1;
   e.vx = e.facing * T.grab.carry;
   physics(S, e);

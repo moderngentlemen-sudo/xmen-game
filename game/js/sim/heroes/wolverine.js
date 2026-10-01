@@ -1,6 +1,7 @@
 // Wolverine, the berserker. Rage builds from damage dealt and taken. His healing factor spends it: unhurt
 // for a moment, he turns rage into health. Full rage is the other way to spend it: the Signature sends him
-// berserk (faster, harder, every hit heals him, no stagger, no guard: he takes more). Power is the Drill Claw:
+// berserk (faster, harder, every hit heals him, no stagger, no guard: he takes more); it is ready from 80 rage,
+// and the fuller the rage the longer it lasts. Power is the Drill Claw:
 // hold to coil through three tiers, let go to lunge along the aim (eight ways), drilling through everything
 // in line, once per jump in the air. He climbs walls (hold toward one with jump held) and pounces off them.
 import { DT, HEROES, TEAM } from '../config.js';
@@ -51,8 +52,8 @@ export default {
   sig(S, p) {
     const R = W().rage;
     if (p.berserkT > 0) return;
-    if (p.rage < R.max) { emit(S, 'sigWait', { id: p.id, rage: p.rage }); return; }
-    p.rage = 0; p.berserkT = W().berserk.ticks;
+    if (p.rage < R.ready) { emit(S, 'sigWait', { id: p.id, rage: p.rage }); return; }
+    p.berserkT = Math.round(W().berserk.ticks * p.rage / R.max); p.rage = 0;   // fuller rage, longer berserk
     emit(S, 'berserk', { id: p.id, x: p.x, y: p.y + p.h * 0.6 });
   },
 

@@ -79,7 +79,7 @@ export function killEnemy(S, e, h) {
   if (e.carry) dropCarried(S, e);
   // A Hunter's mark dies with it
   for (const p of S.players) if (p.markedBy === e.id) { p.markedBy = 0; emit(S, 'unmarked', { id: p.id }); }
-  emit(S, 'kill', { id: e.id, type: e.type, x: e.x, y: e.y + e.h * 0.5, by: h ? h.owner : 0, boss: !!ENEMIES[e.type].boss });
+  emit(S, 'kill', { id: e.id, unit: e.type, x: e.x, y: e.y + e.h * 0.5, by: h ? h.owner : 0, boss: !!ENEMIES[e.type].boss });
 }
 export function releaseToken(S, e) {
   if (e.token) { S.director[e.token] = Math.max(0, S.director[e.token] - 1); e.token = null; }

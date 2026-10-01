@@ -19,7 +19,7 @@ export function makePlayer(S, slot, hero, x, y) {
     move: null, combo: 0, comboT: 0, atkHeld: 0,
     evade: null, evadeCd: 0, counterT: 0,
     hitstunT: 0, downedT: 0, revive: 0, markedBy: 0, heldBy: 0, thrown: null,
-    teamCd: 0, tagCd: 0, edge: null, squad: null, lastHurtT: 999,
+    teamCd: 0, tagCd: 0, teamPress: 0, edge: null, squad: null, lastHurtT: 999, fastball: null,
   };
   for (const b of BTN_NAMES) { p.buf[b] = 99; p.holdT[b] = 0; }
   HERO[hero].init(p);
@@ -61,7 +61,7 @@ export function updatePlayer(S, p, cmd, frozen) {
   if (p.edge && --p.edge.t <= 0) p.edge = null;
 
   if (p.state === 'downed') { downed(S, p); return; }
-  if (p.state === 'held' || p.state === 'thrown' || p.state === 'ult' || p.state === 'tagout') return;   // team.js moves them
+  if (p.state === 'held' || p.state === 'thrown' || p.state === 'teamup' || p.state === 'ult' || p.state === 'tagout') return;   // team.js moves them
   mod.tick(S, p, cmd, E);
   if (p.state === 'downed') return;
 

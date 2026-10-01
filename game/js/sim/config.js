@@ -44,7 +44,7 @@ export const HEROES = {
     evade: { ticks: 15, speed: 15, iframes: 10, perfect: 7, cd: 20, back: false },   // a roll in the pushed direction
     // Drill Claw: hold Power to coil (three tiers), let go to lunge along the aim, drilling through what is in line
     drill: { tiers: [0, 20, 44], speed: [20, 25, 31], ticks: [10, 13, 16], dmg: [5, 8, 12], poise: [30, 55, 90], cd: 24 },
-    rage: { max: 100, dealt: 0.55, taken: 0.9, healDelay: 120, healRate: 0.12, healCost: 1.6 },   // healing factor spends rage as health
+    rage: { max: 100, ready: 80, dealt: 0.55, taken: 0.9, healDelay: 120, healRate: 0.12, healCost: 1.6 },   // healing factor spends rage as health; berserk from `ready`
     berserk: { ticks: 480, dmg: 1.4, speed: 0.72, steal: 0.25, taken: 1.15 },   // full rage: faster, harder, no guard
     climb: { speed: 4.5, pounce: { vx: 16, vy: 9 } },
     attack: 'wolverine',

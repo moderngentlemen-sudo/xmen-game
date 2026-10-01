@@ -19,7 +19,8 @@ const RAW = [
   [68, 74, 4.2, 4.5, 'o', 'perch'],
   [79, 81, 0, 1.0, 's', 'barrier'],
   [86.5, 87.2, 0, 3.4, 'g', 'cell'],
-  [87.2, 93, 3.4, 3.7, 's', 'cellroof'],
+  [87.2, 93.6, 3.4, 3.7, 's', 'cellroof'],
+  [93, 93.6, 0, 3.4, 's', 'cellwall'],
   [96, 97, 0, 9, 'g', 'G2'],
   // Assembly hall: conveyor walkways overhead
   [97, 176, -6, 0, 's', 'floor'],
@@ -40,9 +41,10 @@ const RAW = [
 export const BOXES = RAW.map(([x0, x1, y0, y1, type, tag]) => ({ x0, x1, y0, y1, type, tag }));
 export const LEVEL_X0 = -12, LEVEL_X1 = 264, KILL_Y = -10;
 export const GATE_IDS = ['G1', 'G2', 'G3', 'cell'];
-// Where the young mutant is held, where Collectors carry a captive out, and the X-Jet's ramp
+// Where the young mutant is held, where Collectors carry a captive out (each section has its own way out), and
+// the X-Jet's ramp
 export const CELL = { x: 90, y: 0, door: { x0: 86.5, x1: 87.2, y0: 0, y1: 3.4, hp: 30 } };
-export const EXITS = [{ x: 175.2, y: 0, open: 'hall' }, { x: 262.5, y: 3.6, open: 'hangar' }];
+export const EXITS = [{ x: 42.5, y: 0, sec: 'cells' }, { x: 175.2, y: 0, sec: 'hall' }, { x: 262.5, y: 3.6, sec: 'hangar' }];
 export const JET = { x0: 244, x1: 262, y: 3.6, ramp: 246 };
 // Crates Jean can throw (and anyone can break), placed at the start of the mission
 export const CRATES = [[9, 0], [10.1, 0], [33, 0], [47, 0], [62, 0], [64.5, 0], [104, 0], [121, 0], [122.1, 0], [147, 1.1], [168, 0], [200, 3.6], [218, 3.6], [236, 3.6]];

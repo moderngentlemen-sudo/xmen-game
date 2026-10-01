@@ -4,12 +4,13 @@
 // same seed plus the same inputs always gives the same run.
 import { DT, HEROES, HERO_IDS, ENEMIES, KID } from './config.js';
 import { seedState } from './rng.js';
-import { CRATES, KILL_Y } from './level.js';
+import { KILL_Y } from './level.js';
 import { updatePlayer, makePlayer } from './player.js';
 import { updateEnemies } from './enemies.js';
 import { updateKid } from './kid.js';
 import { updateProps, updateProjectiles, resolveHitboxes } from './combat.js';
 import { updateTeam } from './team.js';
+import { HERO } from './heroes/index.js';
 import { updateAdapt } from './adapt.js';
 import { updateMission, startMission } from './mission.js';
 
@@ -26,18 +27,20 @@ export function createWorld({ seed = 1, players = 1 } = {}) {
     mission: null, cam: { x: 0, y: 3, dist: 16, halfW: 14, halfH: 8 },
     events: [],
   };
-  for (let i = 0; i < players; i++) addPlayer(S, i, players === 1);
   startMission(S);
+  for (let i = 0; i < players; i++) addPlayer(S, i, players === 1);
   return S;
 }
 
 export const newId = S => S.nextId++;
-export function emit(S, type, data = {}) { S.events.push({ type, tick: S.tick, ...data }); }
+export function emit(S, type, data = {}) { S.events.push({ ...data, type, tick: S.tick }); }   // data never overrides the type
 
 // A player joins as the first hero nobody else is playing; alone, they run a squad of all three
 export function addPlayer(S, slot, solo = false) {
   const hero = HERO_IDS.find(h => !S.players.some(p => p.hero === h)) || HERO_IDS[slot % HERO_IDS.length];
-  const cp = S.mission ? S.mission.spawn : { x: 0, y: 0 };
+  // Joining mid-mission: next to a teammate who is still standing, else at the section's start
+  const lead = S.players.find(q => q.state !== 'downed' && q.state !== 'dead');
+  const cp = lead ? { x: lead.x + 0.9, y: lead.y + 0.5 } : S.mission ? S.mission.spawn : { x: 0, y: 0 };
   const p = makePlayer(S, slot, hero, cp.x - slot * 0.9, cp.y);
   if (solo) p.squad = HERO_IDS.map(h => ({ hero: h, hp: HEROES[h].hp, assistCd: 0, down: false }));
   S.players.push(p);
@@ -48,13 +51,20 @@ export function addPlayer(S, slot, solo = false) {
 }
 export function removePlayer(S, slot) {
   const i = S.players.findIndex(p => p.slot === slot);
-  if (i >= 0) { emit(S, 'leave', { id: S.players[i].id, slot }); S.players.splice(i, 1); }
+  if (i < 0) return;
+  const p = S.players[i];
+  HERO[p.hero].cancel(S, p);
+  // Let go of anything this player was holding, or anyone holding them
+  for (const q of S.players) if (q.heldBy === p.id) { q.heldBy = 0; q.state = 'normal'; q.st = 0; }
+  if (p.heldBy) { const j = ent(S, p.heldBy); if (j && j.fastball) j.fastball = null; if (j && j.state === 'teamup') { j.state = 'normal'; j.st = 0; } }
+  emit(S, 'leave', { id: p.id, slot });
+  S.players.splice(i, 1);
 }
 
-// Entity lookup by id (players, enemies, props, assists); the kid is id -1
+// Entity lookup by id (players, enemies, props, assists, projectiles); the kid is id -1
 export function ent(S, id) {
   if (id === -1) return S.kid;
-  for (const L of [S.players, S.enemies, S.props, S.assists]) for (const e of L) if (e.id === id) return e;
+  for (const L of [S.players, S.enemies, S.props, S.assists, S.projectiles]) for (const e of L) if (e.id === id) return e;
   return null;
 }
 

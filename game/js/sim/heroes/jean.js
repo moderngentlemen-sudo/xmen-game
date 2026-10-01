@@ -128,7 +128,7 @@ function drop(S, p, throwIt) {
   const vx = p.aimX * T.throwSpeed * boost, vy = p.aimY * T.throwSpeed * boost;
   if (tk.kind === 'enemy') {
     o.heldBy = 0;
-    if (throwIt && !tk.heavy) { o.state = 'thrown'; o.st = 0; o.thrownBy = p.id; o.vx = vx; o.vy = vy + 3; o.onGround = false; o.homing = rapport; emit(S, 'tkThrow', { id: p.id, kind: 'enemy', target: o.id, x: o.x, y: o.y }); }
+    if (throwIt && !tk.heavy) { o.state = 'thrown'; o.st = 0; o.thrownBy = p.id; o.vx = vx; o.vy = vy + 4; o.onGround = false; o.homing = rapport; emit(S, 'tkThrow', { id: p.id, kind: 'enemy', target: o.id, x: o.x, y: o.y }); }
     else { o.state = 'stagger'; o.st = 0; o.staggerT = 20; }
   } else if (tk.kind === 'proj') {
     o.heldBy = 0;
