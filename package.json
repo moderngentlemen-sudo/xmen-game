@@ -1,0 +1,9 @@
+{
+  "name": "nova-striker-fresh-start-prototype",
+  "private": true,
+  "type": "module",
+  "description": "Isolated fresh-start browser prototype track for Nova Striker (placeholder art and sound).",
+  "scripts": {
+    "test": "node tests/run-all.mjs"
+  }
+}
