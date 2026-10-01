@@ -1,4 +1,4 @@
-// Nova Striker browser prototype — tuning data.
+// X-Men: Sentinel Strike — tuning data. An unofficial fan prototype built on the Nova Striker Version 9 engine.
 // Units: metres, seconds. Frame data is in simulation ticks (60 per second).
 
 export const TICK_HZ = 60;
@@ -19,28 +19,80 @@ export const PARRY_BUFFER = 3;      // short on purpose: long parry buffers make
 export const PARRY = { window: 12, perfect: 4, whiff: 16 };
 export const MERCY_TICKS = 60;
 
-export const CHARS = {
-  nova: {
-    name: 'Nova', role: 'Sentinel', hp: 100,
-    run: 7.4, backpedal: 0.8, accelG: 95, decelG: 120, accelA: 60, crouchSpeed: 0.4,
-    jumpV: 17.7, dblV: 15.2,
-    dash: { ticks: 11, speed: 22, exitKeep: 0.3, cooldown: 18 },
-    slide: { ticks: 16, speed: 12.5, decay: 0.965 },
-    wall: { slide: 3.6, jumpVx: 9.5, jumpVy: 16, lock: 7 },
-    width: 0.72, height: 1.72, crouchH: 0.95,
-    energy: '#ffb547', trim: '#2f5f9e', base: '#eef2f7', under: '#1c2c48',
-  },
-  echo: {
-    name: 'Echo', role: 'Pursuit', hp: 100,
-    run: 8.8, backpedal: 0.65, accelG: 70, decelG: 50, accelA: 52, crouchSpeed: 0.45,
-    jumpV: 17.7, dblV: 15.2,
-    dash: { ticks: 13, speed: 24, exitKeep: 0.6, cooldown: 16 },
-    slide: { ticks: 18, speed: 13.5, decay: 0.972 },
-    wall: { slide: 4.2, jumpVx: 10.5, jumpVy: 16, lock: 6 },
-    width: 0.68, height: 1.74, crouchH: 0.95,
-    energy: '#ff9a1f', trim: '#15151b', base: '#f4f4f2', under: '#1b1b22',
-  },
+// Two body frames from Nova Striker carry every hero: 'nova', the ranged frame (charged shots, the Level 4
+// beam, rocket jumps, the dodge, the close-range combo) and 'echo', the close-range frame (blade chains, the
+// Dash Slash, parry and deflect). A hero takes movement and physics from its frame (`arch`), and its kit,
+// colours and voice from its own entry. Nova and Echo stay in the table as the frames' reference builds: the
+// regression suite drives them, and they are never offered in the hero select.
+const NOVA_FRAME = {
+  arch: 'nova', hp: 100,
+  run: 7.4, backpedal: 0.8, accelG: 95, decelG: 120, accelA: 60, crouchSpeed: 0.4,
+  jumpV: 17.7, dblV: 15.2,
+  dash: { ticks: 11, speed: 22, exitKeep: 0.3, cooldown: 18 },
+  slide: { ticks: 16, speed: 12.5, decay: 0.965 },
+  wall: { slide: 3.6, jumpVx: 9.5, jumpVy: 16, lock: 7 },
+  width: 0.72, height: 1.72, crouchH: 0.95,
 };
+const ECHO_FRAME = {
+  arch: 'echo', hp: 100,
+  run: 8.8, backpedal: 0.65, accelG: 70, decelG: 50, accelA: 52, crouchSpeed: 0.45,
+  jumpV: 17.7, dblV: 15.2,
+  dash: { ticks: 13, speed: 24, exitKeep: 0.6, cooldown: 16 },
+  slide: { ticks: 18, speed: 13.5, decay: 0.972 },
+  wall: { slide: 4.2, jumpVx: 10.5, jumpVy: 16, lock: 6 },
+  width: 0.68, height: 1.74, crouchH: 0.95,
+};
+
+// What each hero's buttons do.
+// Nova frame: `attachments` (charged fire, cycled with the mode button), `subs` (secondary powers on the melee
+//   button when nobody is close, cycled with LB), `sig` ('aegis' the shield dome, 'visor' Visor Overdrive,
+//   'squall' Squall), `boost` (null: no hover; otherwise the hover tank, BOOST below), `skate` (glide on the
+//   ground), `eyes` (shots leave from the eyes rather than the chest).
+// Echo frame: `fire` ('rifle': focus shot and snares, 'drill': Drill Claw), `snares`, `scarf` (the three modes
+//   on the mode button and the Signature), `sig` ('scarf' or 'berserk'), `heal` (healing factor).
+// `ult` picks the ultimate's engine: 'beam' (a colossal steerable beam, then a burst), 'cuts' (a storm of
+//   blink strikes), 'storm' (lightning from the sky on everything in sight).
+const ALL_ATTACH = ['lance', 'volley', 'arc', 'prism'], ALL_SUBS = ['scatter', 'grenade', 'chain', 'disc', 'well'];
+export const BOOST = {
+  nova: { fuel: 60, rise: 3.5, thrust: 70, refill: 2.5, minStart: 6, air: 1.1 },
+  jean: { fuel: 96, rise: 3.8, thrust: 72, refill: 2.5, minStart: 6, air: 1.12 },     // telekinetic levitation
+  storm: { fuel: 170, rise: 4.8, thrust: 86, refill: 3, minStart: 6, air: 1.25 },     // she rides the wind: real flight
+};
+
+export const CHARS = {
+  nova: { ...NOVA_FRAME, name: 'Nova', role: 'Sentinel', hidden: true,
+    energy: '#ffb547', trim: '#2f5f9e', base: '#eef2f7', under: '#1c2c48',
+    kit: { attachments: ALL_ATTACH, subs: ALL_SUBS, sig: 'aegis', boost: BOOST.nova, skate: true, eyes: false, ult: 'beam' } },
+  echo: { ...ECHO_FRAME, name: 'Echo', role: 'Pursuit', hidden: true,
+    energy: '#ff9a1f', trim: '#15151b', base: '#f4f4f2', under: '#1b1b22',
+    kit: { fire: 'rifle', snares: true, scarf: true, sig: 'scarf', heal: false, ult: 'cuts' } },
+
+  // The X-Men. `look` holds the costume colours the rigs use beyond the four shared ones.
+  cyclops: { ...NOVA_FRAME, name: 'Cyclops', role: 'Field Leader', power: 'Optic blasts',
+    energy: '#ff3b30', trim: '#f2c230', base: '#2d55b8', under: '#16234d',
+    look: { visor: '#ff2a1f', hair: '#5a3a22', skin: '#e2b896' },
+    kit: { attachments: ['lance', 'prism', 'volley'], subs: ['scatter', 'grenade'], sig: 'visor', boost: null, skate: false, eyes: true, ult: 'beam' } },
+  wolverine: { ...ECHO_FRAME, name: 'Wolverine', role: 'Berserker', power: 'Adamantium claws, healing factor',
+    energy: '#ffd84d', trim: '#2a4bb0', base: '#f4c21f', under: '#17224f',
+    look: { claw: '#dfe6ee', skin: '#d9a77f', hair: '#1c1714', stripe: '#121216' },
+    kit: { fire: 'drill', snares: false, scarf: false, sig: 'berserk', heal: true, ult: 'cuts' } },
+  storm: { ...NOVA_FRAME, name: 'Storm', role: 'Weather Witch', power: 'Lightning, wind and flight',
+    energy: '#9fe9ff', trim: '#e9edf5', base: '#1d1d26', under: '#2b2b38',
+    look: { hair: '#f2f4fa', skin: '#6b4430', tiara: '#e9c46a', cape: '#16161e', capeIn: '#e9edf5' },
+    kit: { attachments: ['lance', 'arc', 'volley'], subs: ['chain', 'well', 'grenade'], sig: 'squall', boost: BOOST.storm, skate: true, eyes: false, ult: 'storm' } },
+  jean: { ...NOVA_FRAME, name: 'Jean Grey', role: 'Telekinetic', power: 'Telekinesis and telepathy',
+    energy: '#ff8a1f', trim: '#f0c23a', base: '#1f9a55', under: '#0f5a33',
+    look: { hair: '#c8331c', skin: '#efc8a8', sash: '#f0c23a' },
+    kit: { attachments: ['volley', 'arc', 'lance'], subs: ['disc', 'well', 'scatter'], sig: 'aegis', boost: BOOST.jean, skate: true, eyes: false, ult: 'beam' } },
+  psylocke: { ...ECHO_FRAME, name: 'Psylocke', role: 'Psi-Ninja', power: 'Psychic blades',
+    energy: '#b77bff', trim: '#d0213f', base: '#2a2f86', under: '#16183f',
+    look: { hair: '#4a2a7a', skin: '#e8c1a0', sash: '#d0213f' },
+    kit: { fire: 'rifle', snares: true, scarf: true, sig: 'scarf', heal: false, ult: 'cuts' } },
+};
+// The hero select, in order (number keys 1-5); new players join in this order
+export const HEROES = ['cyclops', 'wolverine', 'storm', 'jean', 'psylocke'];
+export const kitOf = p => CHARS[p.char].kit;
+export const boostOf = p => CHARS[p.char].kit.boost || null;
 
 // Wall play (both characters). Touching a wall in the air while holding toward it starts a slide that
 // eases in: a brief grip at gripSpeed, then over `ease` ticks up to the character's slide speed (hold down
@@ -354,15 +406,53 @@ export const DODGE = { ticks: 16, speed: 13, airSpeed: 11, keep: 0.86, iframes: 
 //     bursts in a nova of light.
 //   Echo, Thousand Cuts: he vanishes and cuts every enemy close by in a storm of blinks (`strikes` shared
 //     among up to `targets` enemies), then every cut lands again at once.
+//   Storm, Eye of the Storm: she rises into the eye and calls lightning down on every enemy in sight (within
+//     `reach` m of the screen; `strikes` bolts shared among up to `targets`), then a great bolt on each at once.
 //   Team: everyone who joined runs their ultimate together at `team.power`, then a team finisher hits every
 //     enemy on screen for `team.dmg` per member. Bosses take `boss` of ultimate damage.
+// A hero's kit picks the engine (`ult`: 'beam' runs Nova's, 'cuts' Echo's, 'storm' Storm's); `names` is
+// what the call shows: Cyclops's Optic Overload and Jean's Phoenix Force are beams, Wolverine's Berserker
+// Barrage X and Psylocke's Thousand Butterflies are cuts.
 export const ULT = {
   max: 100, gain: { dealt: 0.6, taken: 0.35, kill: 2, perfect: 6 }, chord: 6, cast: 54, join: 18, boss: 0.5, mercy: 60,
   nova: { name: 'Supernova', rise: 1.6, gather: 24, beam: 110, pulse: 5, dmg: 5, width: 1.25, range: 40, turn: 0.06, nova: { r: 6, dmg: 12, poise: 120 }, end: 150 },
   echo: { name: 'Thousand Cuts', range: 16, targets: 8, strikes: 20, every: 3, dmg: 3, start: 10, finisher: 14, flourish: { r: 5, dmg: 10 }, end: 40 },
+  storm: { rise: 2.2, reach: 2, targets: 10, strikes: 24, every: 4, dmg: 3, start: 20, finisher: 14, flourish: { r: 6, dmg: 10 }, end: 56 },
   team: { power: 1.3, dmg: 12, t: 50 },
-  teamNames: { 'echo+nova': 'Eclipse Protocol', 'nova+nova': 'Binary Star', 'echo+echo': 'Twin Phantom' }, teamAll: 'Full Resonance',
+  names: {
+    nova: 'Supernova', echo: 'Thousand Cuts',
+    cyclops: 'Optic Overload', wolverine: 'Berserker Barrage X', storm: 'Eye of the Storm', jean: 'Phoenix Force', psylocke: 'Thousand Butterflies',
+  },
+  // Two heroes together (ids in alphabetical order); three or four together is teamAll
+  teamNames: {
+    'echo+nova': 'Eclipse Protocol', 'nova+nova': 'Binary Star', 'echo+echo': 'Twin Phantom',
+    'cyclops+jean': 'Bonded Minds', 'cyclops+psylocke': 'Optic Blade', 'cyclops+storm': 'Storm Front', 'cyclops+wolverine': 'Uneasy Alliance',
+    'jean+psylocke': 'Psychic Chorus', 'jean+storm': 'Sky of Fire', 'jean+wolverine': 'Feral Flame',
+    'psylocke+storm': 'Silent Thunder', 'psylocke+wolverine': 'Shadow Claws', 'storm+wolverine': 'Thunderclaw',
+    'cyclops+cyclops': 'Double Vision', 'jean+jean': 'Twin Phoenix', 'psylocke+psylocke': 'Mirror Butterflies',
+    'storm+storm': 'Perfect Storm', 'wolverine+wolverine': 'Snikt Squared',
+  },
+  teamAll: 'To Me, My X-Men',
 };
+export const ultName = p => ULT.names[p.char] || ULT[CHARS[p.char].arch].name;
+
+// Cyclops's Visor Overdrive (Signature): he opens the visor wide. Overcharge fills (`over`, held `hold` ticks
+// before it drains: faster charging and harder charged releases, as from the shield dome) and a concussive
+// flare bursts round him. Cooldown `cd` from use.
+export const VISOR = { cd: 600, over: 100, hold: 300, flare: { r: 2.4, dmg: 2.5, poise: 35, kb: 9 } };
+// Storm's Squall (Signature): a burst of wind round her that throws enemies away and blows their shots out of
+// the air. In the air it also lifts her (`lift` m/s) and tops up her flight by `fuel`.
+export const SQUALL = { cd: 420, r: 4.2, dmg: 2.5, poise: 45, kb: 13, up: 6, lift: 7, fuel: 60 };
+// Wolverine's Drill Claw (fire): a corkscrew lunge along the aim (eight ways, or at the lock-on target) that
+// cuts through everything on the way, using the Dash Slash tiers. Tap for tier 1; hold `charge` ticks for
+// tiers 2 and 3. Once per airtime in the air (a wall gives it back); `cd` ticks from the release.
+export const DRILL = { charge: [22, 50], cd: 26, box: { w: 2.0, h: 2.0 } };
+// Wolverine's Berserker Rage (Signature): `ticks` of fury. Melee hits deal `dmg` times the damage and heal
+// `steal` of it, swings run `speed` times their usual windup and recovery, and hits taken don't stagger him
+// (damage x `taken`). Cooldown `cd` from when it ends.
+export const BERSERK = { ticks: 360, cd: 840, dmg: 1.3, steal: 0.3, speed: 0.7, taken: 0.8 };
+// Wolverine's healing factor: `delay` ticks after the last hit he took, he regenerates `rate` hp a second.
+export const HEAL = { delay: 150, rate: 4 };
 
 // Presentation only: HUD names and a tint for each attachment, kept inside Nova's gold family so
 // his shots still read as his in a 4-player fight (shapes tell the attachments apart)
@@ -370,6 +460,23 @@ export const ATTACH_LOOK = {
   lance: { name: 'Lance', tint: '#ffb547' }, volley: { name: 'Volley', tint: '#ffd889' },
   arc: { name: 'Arc', tint: '#ff9f40' }, prism: { name: 'Prism', tint: '#fff0c8' },
 };
+// Each X-Man's names and tints for the same mechanics, in their own colour family
+export const HERO_LOOK = {
+  cyclops: {
+    attach: { lance: { name: 'Piercing Blast', tint: '#ff3b30' }, prism: { name: 'Ricochet Blast', tint: '#ff8f80' }, volley: { name: 'Spread Blast', tint: '#ff5e4a' } },
+    sub: { scatter: { name: 'Optic Spray', tint: '#ff6a55' }, grenade: { name: 'Optic Mine', tint: '#ff2f45' } },
+  },
+  storm: {
+    attach: { lance: { name: 'Lightning Bolt', tint: '#bff4ff' }, arc: { name: 'Thunderhead', tint: '#8fd8ff' }, volley: { name: 'Hailstones', tint: '#e6fbff' } },
+    sub: { chain: { name: 'Chain Lightning', tint: '#d6f7ff' }, well: { name: 'Cyclone', tint: '#a6e6ff' }, grenade: { name: 'Hailstorm', tint: '#e6fbff' } },
+  },
+  jean: {
+    attach: { volley: { name: 'Mind Darts', tint: '#ff9f40' }, arc: { name: 'TK Debris', tint: '#ffb35c' }, lance: { name: 'Psi Spear', tint: '#ff7a1f' } },
+    sub: { disc: { name: 'TK Throw', tint: '#ffc06b' }, well: { name: 'TK Grip', tint: '#ff8a1f' }, scatter: { name: 'Psychic Push', tint: '#ffd08a' } },
+  },
+};
+export const attachLook = (p, k) => (HERO_LOOK[p.char] && HERO_LOOK[p.char].attach[k]) || ATTACH_LOOK[k];
+export const subLook = (p, k) => (HERO_LOOK[p.char] && HERO_LOOK[p.char].sub[k]) || SUB_LOOK[k];
 
 export const ECHO = {
   cellsMax: 4, boltCd: 12, boltDmg: 1.5, boltSpeed: 34,
@@ -412,16 +519,15 @@ export const DEFAULT_SETTINGS = {
 
 export const SETTINGS = { ...DEFAULT_SETTINGS };
 
-const KEY = 'nova-striker-proto-settings';
+// Kept apart from Nova Striker's own settings. The X-Men always play the frames' current kits (Marksman,
+// Hunter); the Pass 1 kits stay in the engine for the regression suite only.
+const KEY = 'xmen-sentinel-strike-settings';
 export function loadSettings() {
   try {
     const raw = localStorage.getItem(KEY);
     if (raw) {
       const saved = JSON.parse(raw);
-      // Settings saved before Version 8 pick up its new default once: impact frames on
-      if (!(saved.settingsVersion >= 8)) { saved.impactFrames = true; saved.settingsVersion = 8; }
-      // Version 9 introduces automatic lock-on as the default
-      if (!(saved.settingsVersion >= 9)) { saved.lockMode = 'auto'; saved.settingsVersion = 9; }
+      for (const k of ['novaKit', 'echoKit', 'echoHead', 'echoRanged', 'settingsVersion']) delete saved[k];
       Object.assign(SETTINGS, saved);
     }
   } catch (e) { /* storage unavailable: keep defaults */ }

@@ -1,5 +1,5 @@
 // Combat resolution: melee hitboxes, projectiles, barriers, shockwaves, damage and parries.
-import { DT, PARRY, MERCY_TICKS, DIFFICULTY, SETTINGS, ECHO, SCARF, MARKSMAN, DEFLECT, SUB, DODGE, ULT } from './config.js';
+import { DT, PARRY, MERCY_TICKS, DIFFICULTY, SETTINGS, ECHO, SCARF, MARKSMAN, DEFLECT, SUB, DODGE, ULT, BERSERK, HEAL } from './config.js';
 import { onDealtDamage, addResolve, breakVeil, parryWindows, gainFocus, loseFocus, gainUlt, chest } from './player.js';
 import { pointInSolid, groundBelow, BOXES, LEVEL_X0, LEVEL_X1, KILL_Y } from './level.js';
 
@@ -77,6 +77,8 @@ export function hitEnemy(world, e, hit, source) {
   }
 
   let dmg = (hit.dmg || 0) * (ambush ? SCARF.ambushDmg : 1), poise = hit.poise || 0;
+  // Wolverine's Berserker Rage: every close-range hit (claws, Dash Slash, Drill Claw) lands harder
+  if (source === 'melee' && owner && owner.berserkT > 0) { dmg *= BERSERK.dmg; poise *= BERSERK.dmg; }
   let armored = e.armor > 0;
   if (armored) {
     if (hit.armorBreak || ambush) {
@@ -197,7 +199,7 @@ export function hitPlayer(world, p, hit) {
         else if (perfect && attacker.state === 'charge') { attacker.state = 'dazed'; attacker.st = 0; attacker.vx = -attacker.facing * 3; }   // a parried Charger reels
       }
       if (perfect) {
-        if (p.char === 'nova') {
+        if (p.arch === 'nova') {
           p.bulwarkCd = Math.max(0, p.bulwarkCd - 120);
           for (const e of world.enemies) {
             if (e.dead || ['post', 'turret'].includes(e.type)) continue;
@@ -218,12 +220,14 @@ export function hitPlayer(world, p, hit) {
   if (p.state === 'dodge' && p.dodge && !p.dodge.perfect && p.dodge.t <= DODGE.perfect && world.perfectDodge) world.perfectDodge(p, hit);
   if (p.mercy > 0 || p.iframe) return 'ignored';
   const diff = DIFFICULTY[SETTINGS.difficulty] || DIFFICULTY.normal;
-  const dmg = hit.dmg * diff.dmg;
-  const armored = p.char === 'echo' && p.state === 'attack' && p.moveId === 'echo_charged' && p.resolve >= ECHO.resolveHalf;
-  p.hp -= dmg;
+  // In a Berserker Rage nothing staggers Wolverine, and hits do a little less
+  const rage = p.berserkT > 0;
+  const dmg = hit.dmg * diff.dmg * (rage ? BERSERK.taken : 1);
+  const armored = rage || (p.arch === 'echo' && p.state === 'attack' && p.moveId === 'echo_charged' && p.resolve >= ECHO.resolveHalf);
+  p.hp -= dmg; p.hurtT = HEAL.delay;   // the healing factor waits a moment after every hit
   gainUlt(p, dmg * ULT.gain.taken, world);
   breakVeil(p, world, 'hit');
-  if (p.char === 'echo') {
+  if (p.arch === 'echo') {
     p.strain = Math.min(p.maxHp - Math.max(0, p.hp), p.strain + dmg * 0.5); p.strainT = 300;
     if (world.nearestEnemyDist(p.x, p.y + 1) < 4 && world.tick - p.lastResolveHitT > 30) {
       addResolve(p, 8); p.lastResolveHitT = world.tick;
@@ -296,7 +300,7 @@ function projectileHits(world, pr) {
 // of a parry (all round him), or in front of him while a `deflect` staff swing is out. Shells that burst
 // (unblockable) cannot be deflected.
 function canDeflect(p, pr) {
-  if (p.char !== 'echo' || SETTINGS.echoKit !== 'hunter' || pr.blast || pr.team !== 'e') return false;
+  if (p.arch !== 'echo' || SETTINGS.echoKit !== 'hunter' || pr.blast || pr.team !== 'e') return false;
   const cx = p.x, cy = p.y + p.h * 0.6, d = Math.hypot(pr.x - cx, pr.y - cy);
   if (p.state === 'parry' && p.parryT <= DEFLECT.window) return d < DEFLECT.reach + pr.r;
   const m = p.move;
@@ -311,7 +315,7 @@ function canDeflect(p, pr) {
 // (2 on a Perfect Release); every basic round that lands earns a little.
 export function awardFocus(world, pr) {
   const p = pr.owner;
-  if (!p || p.kind !== 'player' || p.char !== 'nova') return;
+  if (!p || p.kind !== 'player' || p.arch !== 'nova') return;
   if (pr.family) {
     if (!pr.family.focused) { pr.family.focused = true; gainFocus(p, pr.family.perfect ? 2 : 1, world); }
   } else if (pr.kind === 'shot') gainFocus(p, MARKSMAN.focus.perRound, world);
@@ -457,7 +461,7 @@ function discTurn(pr, phase) {
 }
 function steerDisc(world, pr) {
   const D = SUB.disc, s = pr.disc, o = pr.owner; s.t++;
-  if (!o || !world.players.includes(o) || o.state === 'dead' || o.state === 'downed' || o.char !== 'nova') {
+  if (!o || !world.players.includes(o) || o.state === 'dead' || o.state === 'downed' || o.arch !== 'nova') {
     pr.dead = true; world.emit('discFade', { x: pr.x, y: pr.y }); return;
   }
   if (s.phase === 'out') {

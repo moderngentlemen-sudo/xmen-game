@@ -1,8 +1,8 @@
 // World: owns every entity, runs the fixed-tick simulation, and emits events for
 // rendering, audio and UI. Nothing in here touches the DOM or Three.js.
-import { SETTINGS, DIFFICULTY, NOVA, MARKSMAN, ECHO, HUNTER, SCARF, CHARS, GRAVITY, DT, LOCK, AEGIS, DEFLECT, SUB, DODGE, ULT } from './config.js';
+import { SETTINGS, DIFFICULTY, NOVA, MARKSMAN, ECHO, HUNTER, SCARF, CHARS, GRAVITY, DT, LOCK, AEGIS, DEFLECT, SUB, DODGE, ULT, VISOR, SQUALL, BERSERK, kitOf, boostOf, ultName } from './config.js';
 import { BOXES, GATES, CHECKPOINTS, ZONES, KILL_Y, ARENA_TRIGGER_X, TOWER_TRIGGER_X, ENCOUNTERS, ROUTE_END_X, hasHeadroom, groundBelow, segmentBlocked, rayCast, rayBoxT, pointInSolid } from './level.js';
-import { createPlayer, updatePlayer, setCharacter, chest, addResolve, focusMult, marksman, rocketHeight, chargeStage, spendOvercharge, parryWindows, gainUlt, trackChord, chordReady, lockChosen } from './player.js';
+import { createPlayer, updatePlayer, setCharacter, chest, muzzle, addResolve, focusMult, marksman, rocketHeight, chargeStage, spendOvercharge, parryWindows, gainUlt, trackChord, chordReady, lockChosen } from './player.js';
 import { createEnemy, updateEnemy, ENEMY_TYPES } from './enemies.js';
 import { spawnBoss, BOSS } from './bosses.js';
 import { resolveHitboxes, updateProjectiles, updateShockwaves, crossesBarrier, hitEnemy, hitPlayer, awardFocus, hurtbox } from './combat.js';
@@ -12,7 +12,7 @@ const sign = v => (v > 0 ? 1 : v < 0 ? -1 : 0);
 // Height gained by a body launched upward at v with no rise cut, as the fixed-tick integration plays it out
 const apexGain = v => Math.max(0, v * v / (2 * GRAVITY) - v * DT / 2);
 
-// Placeholder lines for the CP-09 test. Not canon; written only to test the feel.
+// Short lines the heroes call out (Settings: Character barks). Nova's and Echo's are the CP-09 placeholders.
 const BARKS = {
   nova: {
     intercept_save: ['Got that one.', 'Covered.'], saved_reply: ['Thanks. Eyes up.'],
@@ -28,6 +28,43 @@ const BARKS = {
     revived: ['I was fine.', 'Thanks.'], lash_reply: ['Nice pull.'],
     lash_save: ['Mine now!', 'Over here!'], lock_broken: ["That's how it's done."],
     challenge: ['Eyes on me!', 'Come on, all of you!'], ambush: ['Missed me?', 'Right behind you.'],
+  },
+  // The X-Men: lines written for this prototype in each hero's voice
+  cyclops: {
+    intercept_save: ['Covered.', 'I have your back.'], saved_reply: ['Good eye.', 'Thanks. Stay sharp.'],
+    perfect: ['Saw it coming.', 'Too predictable.'], revive: ['On your feet, X-Man.', 'Stay with me. Up.'],
+    revived: ['Thanks. Regroup.', 'I owe you one.'], lash_reply: ['Good teamwork.'], lash_save: ['Over here!'],
+    lock_broken: ['Area secure. Move out.', 'X-Men, regroup. Next objective.'],
+    challenge_reply: ["Don't get reckless.", 'I see them. Covering you.'],
+    perfect_shot: ['Right on target.', 'Bank shot.', 'Textbook.'], visor: ['Full power!', 'Visor wide open!'],
+  },
+  wolverine: {
+    intercept_save: ['Got it, bub.'], saved_reply: ['Had it handled.', "Didn't need that."],
+    perfect: ['That all you got?', 'Too slow, tin can.'], revive: ['Get up, kid.', "C'mon. You're tougher than this."],
+    revived: ['I heal fast.', 'Appreciate it.'], lash_reply: ['Show-off.'], lash_save: ['Over here!'],
+    lock_broken: ['Next.', "That's how it's done."], challenge_reply: ["Now we're talkin'.", 'Save some for me.'],
+    berserk: ['RRRAAGH!', 'Now you made me mad.'],
+  },
+  storm: {
+    intercept_save: ['I have it.'], saved_reply: ['My thanks.'],
+    perfect: ['The wind warned me.', 'Too slow.'], revive: ['Rise, my friend.', 'Come. I have you.'],
+    revived: ['Thank you, friend.'], lash_reply: ['Well done.'], lash_save: ['Over here!'],
+    lock_broken: ['The storm has passed.', 'Onward, X-Men.'], challenge_reply: ['Have a care!', 'I will cover you from above.'],
+    perfect_shot: ['Strike true.', 'The sky answers.'], squall: ['Winds, rise!', 'Away with you!'],
+  },
+  jean: {
+    intercept_save: ['Got it!'], saved_reply: ['Thanks!'],
+    perfect: ['I felt that coming.', 'Not even close.'], revive: ["I've got you.", 'Stay with me.'],
+    revived: ['Thanks. I owe you.'], lash_reply: ['Nice one.'], lash_save: ['Over here!'],
+    lock_broken: ["It's over. Let's go.", 'Clear. Keep moving.'], challenge_reply: ['Careful!', "I'll shield you."],
+    perfect_shot: ['Mind over matter.', 'Right where I wanted it.'],
+  },
+  psylocke: {
+    intercept_save: ['Got it.'], saved_reply: ['I had it.', 'Unnecessary.'],
+    perfect: ['Predictable.', 'Too slow.'], revive: ['Up. Now.', 'On your feet.'],
+    revived: ['I am in your debt.'], lash_reply: ['Elegant.'], lash_save: ['Mine.', 'Come here.'],
+    lock_broken: ['Done.', 'Next.'], challenge_reply: ['Show-off.'],
+    challenge: ['Face me!', 'Come, all of you!'], ambush: ['Behind you.', 'You never saw me.'],
   },
 };
 
@@ -61,7 +98,7 @@ export class World {
   telegraph(e, cat, ticks) { this.emit('telegraph', { e, cat, ticks }); }
 
   fireShot(p, level) {
-    const c = chest(p), ax = p.aimX, ay = p.aimY, far = marksman(p);
+    const c = muzzle(p), ax = p.aimX, ay = p.aimY, far = marksman(p);
     const spec = level === 0 ? { speed: NOVA.shotSpeed, dmg: NOVA.shotDmg, poise: 6, r: 0.16, kb: 1.5, kind: 'shot' }
       : level === 1 ? { speed: NOVA.lance.speed, dmg: NOVA.lance.dmg, poise: NOVA.lance.poise, r: 0.24, pierce: true, kb: 5, kind: 'lance' }
         : { speed: NOVA.rail.speed, dmg: NOVA.rail.dmg, poise: NOVA.rail.poise, r: 0.3, pierce: true, rail: true, armorBreak: true, kb: 9, kind: 'rail' };
@@ -79,7 +116,7 @@ export class World {
   // shares a family, so the shot as a whole earns Focus once and rocket-jumps Nova at most once. The
   // family also carries how long the shot was charged (chargeT), which sets the rocket jump height.
   fireAttachment(p, kind, level, perfect, chargeT = MARKSMAN.charge[level - 1]) {
-    const M = MARKSMAN, c = chest(p), ax = p.aimX, ay = p.aimY;
+    const M = MARKSMAN, c = muzzle(p), ax = p.aimX, ay = p.aimY;
     const over = spendOvercharge(p);   // Aegis Overcharge: a stronger release
     const x = c.x + ax * 0.7, y = c.y + ay * 0.7, fm = focusMult(p) * over;
     const mult = fm * (perfect ? M.perfectMult : 1);
@@ -209,7 +246,7 @@ export class World {
   // Every tick: trace the beam to the first wall (a Prism beam bounces once), erase enemy shots it touches,
   // and every `pulse` ticks hit every enemy in it. Attachments add their flavour.
   beamTick(p) {
-    const B = MARKSMAN.beam, b = p.beam, c = chest(p);
+    const B = MARKSMAN.beam, b = p.beam, c = muzzle(p);
     const segs = []; let sx = c.x + b.dx * 0.6, sy = c.y + b.dy * 0.6, dx = b.dx, dy = b.dy;
     const bounces = b.attach === 'prism' ? B.prism.bounces : 0;
     for (let i = 0; i <= bounces; i++) {
@@ -271,6 +308,40 @@ export class World {
     this.emit('aegisOff', { p, why, x: c.x, y: c.y, frac });
   }
   detonateAegis(p) { this.endAegis(p, 'detonate'); }
+
+  // ---- Signatures: Cyclops's Visor Overdrive, Storm's Squall, Wolverine's Berserker Rage ----
+  // Visor Overdrive: Overcharge fills, and a concussive flare off the visor throws back everything close
+  visorOverdrive(p) {
+    const V = VISOR, F = V.flare, c = muzzle(p);
+    p.sigCd = V.cd; p.overcharge = Math.min(AEGIS.over.max, p.overcharge + V.over); p.overT = V.hold;
+    this.spawnHitbox({ owner: p, team: 'p', x0: p.x - F.r, x1: p.x + F.r, y0: p.y - 0.3, y1: p.y + p.h + 0.8, dmg: F.dmg, poise: F.poise,
+      kb: [F.kb, 4], radial: true, cx: p.x, instance: this.newInstance(), aegisBurst: true });
+    this.emit('visor', { p, x: c.x, y: c.y, r: F.r });
+    this.bark(p, 'visor', 0.5);
+  }
+  // Squall: a burst of wind round Storm that throws enemies away and blows their shots out of the air
+  squall(p) {
+    const Q = SQUALL, c = chest(p);
+    p.sigCd = Q.cd;
+    for (const pr of this.projectiles) if (pr.team === 'e' && !pr.dead && Math.hypot(pr.x - c.x, pr.y - c.y) < Q.r + pr.r) { pr.dead = true; this.emit('erase', { x: pr.x, y: pr.y }); }
+    this.spawnHitbox({ owner: p, team: 'p', x0: c.x - Q.r, x1: c.x + Q.r, y0: c.y - Q.r, y1: c.y + Q.r, dmg: Q.dmg, poise: Q.poise,
+      kb: [Q.kb, Q.up], radial: true, cx: c.x, instance: this.newInstance(), aegisBurst: true });
+    if (!p.onGround) { p.vy = Math.max(p.vy, Q.lift); p.fastFall = false; }
+    const B = boostOf(p); if (B) p.fuel = Math.min(B.fuel, p.fuel + Q.fuel);
+    this.emit('squall', { p, x: c.x, y: c.y, r: Q.r });
+    this.bark(p, 'squall', 0.4);
+  }
+  // Berserker Rage: faster swings that hit harder and heal him, and hits taken don't stagger him (combat.js)
+  berserk(p) {
+    p.berserkT = BERSERK.ticks;
+    this.emit('berserk', { p, x: p.x, y: p.y + p.h * 0.6 });
+    this.bark(p, 'berserk', 0.7, true);
+  }
+  endBerserk(p) {
+    if (!(p.berserkT > 0)) return;
+    p.berserkT = 0; p.sigCd = BERSERK.cd;
+    this.emit('berserkEnd', { p });
+  }
   // The Nova whose Aegis shelters this player (their own, or one they stand inside), if any
   shieldFor(q) {
     for (const n of this.players) {
@@ -372,7 +443,7 @@ export class World {
   // Scatter: point-blank pellets, level 0 for the quick press or 1-3 when charged; level 3 adds a blast at
   // the muzzle. No recoil: Nova stays where he is.
   fireBurst(p, level, perfect = false) {
-    const B = MARKSMAN.burst, S = level ? B[level] : B.tap, c = chest(p), ax = p.aimX, ay = p.aimY, a0 = Math.atan2(ay, ax);
+    const B = MARKSMAN.burst, S = level ? B[level] : B.tap, c = muzzle(p), ax = p.aimX, ay = p.aimY, a0 = Math.atan2(ay, ax);
     const x = c.x + ax * 0.5, y = c.y + ay * 0.5, mult = perfect ? MARKSMAN.perfectMult : 1;
     for (let i = 0; i < S.pellets; i++) {
       const a = a0 + S.fan * (i / (S.pellets - 1) - 0.5);
@@ -391,7 +462,7 @@ export class World {
   // Grenade: a bouncing frag on a fuse (combat.js bounces it); it bursts early on an enemy, and level 3
   // scatters bomblets when it goes off (clusterBurst)
   throwGrenade(p, level, perfect) {
-    const G = SUB.grenade, c = chest(p), ax = p.aimX, ay = p.aimY, dy = ay + G.lift, m = Math.hypot(ax, dy) || 1, sp = G.speed[level];
+    const G = SUB.grenade, c = muzzle(p), ax = p.aimX, ay = p.aimY, dy = ay + G.lift, m = Math.hypot(ax, dy) || 1, sp = G.speed[level];
     const mult = perfect ? MARKSMAN.perfectMult : 1, B = G.blast[level];
     const x = c.x + ax * 0.6, y = c.y + ay * 0.6;
     this.spawnProjectile({ team: 'p', owner: p, x, y, vx: ax / m * sp, vy: dy / m * sp, gravity: G.gravity, bouncy: G.bounce, r: G.r, ttl: G.fuse[level],
@@ -415,7 +486,7 @@ export class World {
   // from each enemy on to the nearest one within `hop` m it has not hit. It needs a clear line each jump,
   // arcs round shields, and stuns light enemies (combat.hitEnemy: hit.stun).
   fireChain(p, level, perfect) {
-    const C = SUB.chain, c = chest(p), ax = p.aimX, ay = p.aimY, mult = perfect ? MARKSMAN.perfectMult : 1;
+    const C = SUB.chain, c = muzzle(p), ax = p.aimX, ay = p.aimY, mult = perfect ? MARKSMAN.perfectMult : 1;
     const x0 = c.x + ax * 0.6, y0 = c.y + ay * 0.6, R = C.range[level], cos = Math.cos(C.cone);
     const mid = e => ({ x: e.x, y: e.y + e.h * 0.55 });
     const clear = (a, b) => !segmentBlocked(a.x, a.y, b.x, b.y);
@@ -452,7 +523,7 @@ export class World {
 
   // Disc: out along the aim, (from level 2) a hover at the far end, then back to him (combat.steerDisc)
   throwDisc(p, level, perfect) {
-    const D = SUB.disc, c = chest(p), ax = p.aimX, ay = p.aimY, sp = D.speed[level], mult = perfect ? MARKSMAN.perfectMult : 1;
+    const D = SUB.disc, c = muzzle(p), ax = p.aimX, ay = p.aimY, sp = D.speed[level], mult = perfect ? MARKSMAN.perfectMult : 1;
     const x = c.x + ax * 0.6, y = c.y + ay * 0.6;
     this.spawnProjectile({ team: 'p', owner: p, x, y, vx: ax * sp, vy: ay * sp, ttl: 100000, r: D.r[level] * (perfect ? 1.2 : 1),
       dmg: D.dmg[level] * mult, poise: D.poise[level] * mult, kb: 3, pierce: true, intercept: true, interceptHeavy: level >= 2, kind: 'disc', level, perfect,
@@ -462,7 +533,7 @@ export class World {
   }
   // Gravity Well: an orb that opens where it stops (updateWells)
   launchWell(p, level, perfect) {
-    const W = SUB.well, c = chest(p), x = c.x + p.aimX * 0.7, y = c.y + p.aimY * 0.7;
+    const W = SUB.well, c = muzzle(p), x = c.x + p.aimX * 0.7, y = c.y + p.aimY * 0.7;
     this.wells.push({ owner: p, x, y, px: x, py: y, vx: p.aimX * W.speed, vy: p.aimY * W.speed, phase: 'orb', t: 0, level, perfect,
       r: W.r[level] * (perfect ? 1.2 : 1), life: W.life[level] + (perfect ? 30 : 0), mult: perfect ? MARKSMAN.perfectMult : 1, held: new Set() });
     p.burstCd = W.cd;
@@ -708,7 +779,7 @@ export class World {
 
   // Echo's dash chases tagged enemies roughly in the dash direction.
   pursuitTarget(p, dx, dy) {
-    if (p.char !== 'echo') return null;
+    if (p.arch !== 'echo') return null;
     let best = null, bd = 12;
     const c = chest(p);
     for (const e of this.enemies) {
@@ -806,7 +877,7 @@ export class World {
   bark(p, key, chance = 1, force = false) {
     if (!SETTINGS.barks || !p || Math.random() > chance) return;
     if (!force && ((p.barkCd || 0) > 0 || this.globalBarkCd > 0)) return;
-    const lines = BARKS[p.char][key];
+    const lines = (BARKS[p.char] || BARKS[p.arch])[key];
     if (!lines) return;
     p.barkCd = 300; this.globalBarkCd = 60;
     this.emit('bark', { p, text: lines[Math.floor(Math.random() * lines.length)] });
@@ -837,7 +908,11 @@ export class World {
     if (p.thrusting) this.emit('thrustOff', { p });
     if (p.aegis) this.endAegis(p, 'swap');
     if (p.beam) this.endBeam(p, 'swap');
+    this.endBerserk(p);
+    // Each hero keeps their own Signature cooldown, still counting down while they are off the field
+    (p.sigStash ||= {})[p.char] = { cd: p.sigCd, tick: this.tick };
     setCharacter(p, charId);
+    const s = p.sigStash[charId]; p.sigCd = s ? Math.max(0, s.cd - (this.tick - s.tick)) : 0;
     this.emit('swap', { p });
   }
 
@@ -845,6 +920,7 @@ export class World {
     if (p.lockT) this.setLock(p, null, 'downed');
     if (p.aegis) this.endAegis(p, 'down');
     if (p.beam) this.endBeam(p, 'down');
+    this.endBerserk(p); p.drillT = 0;
     p.hp = 0; p.chargeT = 0; p.meleeCharged = false; p.dash = null; p.lash = null; p.zip = null; p.rifleT = 0; p.dashChargeT = 0;
     p.dodge = null; p.pound = null; p.burstT = 0; p.subArmed = false;
     p.veiled = false; p.veilCharge = 0; p.ambushT = 0;
@@ -881,6 +957,8 @@ export class World {
       p.veiled = false; p.veilCharge = 0; p.veilBreakT = 0; p.ambushT = 0; p.focus = 0;
       p.aegis = null; p.aegisCd = 0; p.overcharge = 0; p.beam = null;
       p.dodge = null; p.pound = null; p.burstT = 0; p.subArmed = false; p.ultRun = null; p.lockSuspend = false;
+      p.berserkT = 0; p.sigCd = 0; p.drillT = 0; p.drillCd = 0; p.hurtT = 0;
+      const B = boostOf(p); p.fuel = B ? B.fuel : 0;
     });
     this.projectiles = []; this.shockwaves = []; this.barriers = []; this.snares = []; this.wells = []; this.ultCast = null;
     for (const p of this.players) p.leash = null;
@@ -957,7 +1035,7 @@ export class World {
   startUlt(p) {
     p.ult = 0; p.chordP = p.chordF = 99;
     this.enterUlt(p);
-    this.ultCast = { members: [p], phase: 'cast', t: 0, len: ULT.cast, name: ULT[p.char].name, team: false, power: 1 };
+    this.ultCast = { members: [p], phase: 'cast', t: 0, len: ULT.cast, name: ultName(p), team: false, power: 1 };
     // Nothing is left mid-motion to smear while everything holds still
     for (const q of [...this.players, ...this.enemies]) { q.prevX = q.x; q.prevY = q.y; }
     for (const pr of this.projectiles) { pr.px = pr.x; pr.py = pr.y; }
@@ -969,7 +1047,7 @@ export class World {
     if (p.thrusting) { p.thrusting = false; this.emit('thrustOff', { p }); }
     if (p.leash) this.releaseLeash(p);
     Object.assign(p, { state: 'ult', st: 0, ultRun: null, dash: null, dodge: null, pound: null, lash: null, zip: null, slash: null, chargeT: 0, burstT: 0,
-      subArmed: false, rifleT: 0, dashChargeT: 0, meleeCharged: false, crouch: false, hitstop: 0, wallSliding: false });
+      subArmed: false, rifleT: 0, drillT: 0, dashChargeT: 0, meleeCharged: false, crouch: false, hitstop: 0, wallSliding: false });
   }
   ultCastTick(cmds) {
     const U = this.ultCast; U.t++;
@@ -993,8 +1071,16 @@ export class World {
     this.emit('ultRun', { members: [...U.members], team: U.team, name: U.name });
   }
   beginUlt(p, power) {
-    const c = chest(p);
-    if (p.char === 'nova') {
+    const c = chest(p), kind = kitOf(p).ult;
+    if (kind === 'storm') {
+      // Eye of the Storm: every enemy in sight is a target, nearest first, and the bolts are shared out among them
+      const S = ULT.storm, C = this.cam, d = e => Math.hypot(e.x - c.x, e.y + e.h / 2 - c.y);
+      const seen = e => !e.dead && Math.abs(e.x - C.x) <= C.halfW + S.reach && Math.abs(e.y + e.h / 2 - C.y) <= C.halfH + S.reach;
+      const targets = this.enemies.filter(seen).sort((a, b) => d(a) - d(b)).slice(0, S.targets);
+      const cuts = targets.length ? Array.from({ length: S.strikes }, (_, i) => ({ e: targets[i % targets.length], at: S.start + i * S.every, i })) : [];
+      const fin = cuts.length ? cuts[cuts.length - 1].at + 16 : S.start + 10;
+      p.ultRun = { kind: 'storm', t: 0, power, targets, cuts, fin, end: fin + S.end };
+    } else if (kind === 'beam') {
       // Supernova: it opens toward the lock-on target if he has one
       let dx = p.aimX, dy = p.aimY;
       if (p.lockT && !p.lockT.dead) { const ex = p.lockT.x - c.x, ey = p.lockT.y + p.lockT.h * 0.55 - c.y, m = Math.hypot(ex, ey) || 1; dx = ex / m; dy = ey / m; }
@@ -1018,10 +1104,31 @@ export class World {
     const R = p.ultRun;
     if (!R) { p.vx = 0; p.vy = p.onGround ? -0.5 : 0; return; }
     R.t++;
-    if (R.kind === 'nova') this.ultNova(p, R); else this.ultEcho(p, R);
+    if (R.kind === 'nova') this.ultNova(p, R); else if (R.kind === 'storm') this.ultStorm(p, R); else this.ultEcho(p, R);
+  }
+  // Eye of the Storm: she rises into the eye and holds there while lightning falls on every target in turn,
+  // then a great bolt strikes all of them at once (with nobody in sight, a ring of lightning round her)
+  ultStorm(p, R) {
+    const S = ULT.storm, t = R.t;
+    p.vx *= 0.7; p.vy = t <= 14 ? S.rise * 10 * (1 - t / 14) : 0;
+    for (const cut of R.cuts) {
+      if (cut.at !== t) continue;
+      let e = cut.e;
+      if (e.dead) e = R.targets.find(q => !q.dead);   // its target fell: the bolt finds one still standing
+      if (!e) continue;
+      this.ultHit(p, e, S.dmg * R.power, 20, (cut.i % 2 ? 1 : -1) * 1.5);
+      this.emit('ultBolt', { p, e, x: e.x, y: e.y, top: e.y + e.h + 11, i: cut.i });
+    }
+    if (t === R.fin) {
+      const c = chest(p);
+      if (R.cuts.length) for (const e of R.targets) { if (!e.dead) this.ultHit(p, e, S.finisher * R.power, 90, (sign(e.x - p.x) || 1) * 6); }
+      else for (const e of this.enemies) if (!e.dead && Math.hypot(e.x - c.x, e.y + e.h / 2 - c.y) <= S.flourish.r) this.ultHit(p, e, S.flourish.dmg * R.power, 60);
+      this.emit('ultThunder', { p, x: c.x, y: c.y, targets: R.targets.filter(e => !e.dead || e.deathT < 3), flourish: !R.cuts.length, r: S.flourish.r });
+    }
+    if (t >= R.end) this.finishUlt(p);
   }
   ultNova(p, R) {
-    const N = ULT.nova, t = R.t, c = chest(p);
+    const N = ULT.nova, t = R.t, c = muzzle(p);
     // He rises into a hover while the light gathers, then holds there
     p.vx *= 0.7; p.vy = t <= 12 ? N.rise * 10 * (1 - t / 12) : 0;
     if (t > N.gather && t <= N.gather + N.beam) {
@@ -1370,7 +1477,7 @@ function makeDirector(world) {
       const n = Math.max(1, world.players.filter(p => p.state !== 'dead').length);
       const d = (DIFFICULTY[SETTINGS.difficulty] || DIFFICULTY.normal).tokens;
       // Flare's cost: one more enemy may commit to a melee attack at a time
-      const flare = world.players.some(p => p.char === 'echo' && p.scarfMode === 'flare' && p.state !== 'dead' && p.state !== 'downed') ? 1 : 0;
+      const flare = world.players.some(p => p.arch === 'echo' && p.scarfMode === 'flare' && p.state !== 'dead' && p.state !== 'downed') ? 1 : 0;
       return pool === 'melee' ? Math.max(1, 2 + (n - 1) + d + flare) : n >= 3 ? 2 : 1;
     },
     request(e, pool) {

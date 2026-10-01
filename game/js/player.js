@@ -3,15 +3,19 @@
 import {
   DT, GRAVITY, FALL_MULT, RISE_CUT_MULT, MAX_FALL, FAST_FALL, HIGH_VEL,
   COYOTE, JUMP_BUFFER, ACTION_BUFFER, PARRY_BUFFER, PARRY, CHARS, MOVES, VB, NOVA, MARKSMAN, ECHO, HUNTER, SCARF, SETTINGS,
-  WALL, DASH_CHARGE, LOCK, AEGIS, DASH_SLASH, POUND, SUBS, SUB, DODGE, ULT,
+  WALL, DASH_CHARGE, LOCK, AEGIS, DASH_SLASH, POUND, SUBS, SUB, DODGE, ULT, DRILL, BERSERK, HEAL, kitOf, boostOf,
 } from './config.js';
 import { moveBody, hasHeadroom } from './level.js';
 
 const sign = v => (v > 0 ? 1 : v < 0 ? -1 : 0);
 const approach = (v, t, d) => (v < t ? Math.min(v + d, t) : Math.max(v - d, t));
 
-// Nova with the Marksman kit (bracer attachments, secondary weapons, dodge, skate glide)
-export const marksman = p => p.char === 'nova' && SETTINGS.novaKit === 'marksman';
+// A hero on the Nova frame with the Marksman kit (attachments, secondary powers, dodge; hover and glide
+// where their kit has them): Cyclops, Storm, Jean Grey, and Nova himself
+export const marksman = p => p.arch === 'nova' && SETTINGS.novaKit === 'marksman';
+// The attachments and secondary powers this hero carries
+const attachList = p => (marksman(p) && kitOf(p).attachments) || MARKSMAN.attachments;
+const subList = p => (marksman(p) && kitOf(p).subs) || SUBS;
 
 export function snap8(x, y) {
   if (Math.hypot(x, y) < 0.35) return null;
@@ -20,9 +24,9 @@ export function snap8(x, y) {
 }
 
 export function createPlayer(slot, device, charId, x, y) {
-  const c = CHARS[charId];
+  const c = CHARS[charId], kit = c.kit;
   return {
-    kind: 'player', slot, device, char: charId,
+    kind: 'player', slot, device, char: charId, arch: c.arch,
     x, y, vx: 0, vy: 0, w: c.width, h: c.height, prevX: x, prevY: y,
     facing: 1, onGround: false, wallDir: 0, coyote: 0, jumpsUsed: 0, airDashes: 1,
     state: 'normal', st: 0, crouch: false, dropT: 0, controlLock: 0, wallSliding: false,
@@ -37,10 +41,11 @@ export function createPlayer(slot, device, charId, x, y) {
     resolve: 0, calmT: 0, lastResolveHitT: 0, cells: ECHO.cellsMax, tracerCd: 0,
     snares: HUNTER.snareCharges, snareRecharge: 0, leash: null,
     scarfMode: 'tether', modeCd: 0, veiled: false, veilCharge: 0, veilBreakT: 0, ambushT: 0, targetedBy: 0,
-    attachment: 'lance', focus: 0, focusT: 0, burstCd: 0, burstT: 0, shootT: 0, carveT: 0,
-    fuel: MARKSMAN.boost.fuel, thrusting: false, rockets: 0, rocketT: 0, rocketPow: 0,
+    attachment: (kit.attachments || ['lance'])[0], focus: 0, focusT: 0, burstCd: 0, burstT: 0, shootT: 0, carveT: 0,
+    fuel: kit.boost ? kit.boost.fuel : 0, thrusting: false, rockets: 0, rocketT: 0, rocketPow: 0,
     aegis: null, aegisCd: 0, overcharge: 0, overT: 0, beam: null, slash: null, pound: null,
-    sub: 'scatter', subSwCd: 0, subArmed: false, dodge: null, dodgeCd: 0, airDodge: true, airRise: true, stick: [0, 0],
+    sub: (kit.subs || ['scatter'])[0], subSwCd: 0, subArmed: false, dodge: null, dodgeCd: 0, airDodge: true, airRise: true, stick: [0, 0],
+    sigCd: 0, berserkT: 0, drillT: 0, drillCd: 0, airDrill: true, hurtT: 0,
     ult: 0, ultRun: null, chordP: 99, chordF: 99,
     aimX: 1, aimY: 0, aimFree: false,
     wallT: 0, wallStick: 0, wallCoyote: 0, lastWallDir: 0, dashChargeT: 0, rifleT: 0, rifleCd: 0,
@@ -52,18 +57,25 @@ export function createPlayer(slot, device, charId, x, y) {
 }
 
 export function setCharacter(p, charId) {
-  const c = CHARS[charId];
-  p.char = charId; p.w = c.width; p.h = c.height; p.maxHp = c.hp;
+  const c = CHARS[charId], kit = c.kit;
+  p.char = charId; p.arch = c.arch; p.w = c.width; p.h = c.height; p.maxHp = c.hp;
   p.hp = Math.min(p.hp, p.maxHp); p.chargeT = 0; p.resolve = 0; p.strain = 0;
   p.cells = ECHO.cellsMax; p.lashCharges = ECHO.lashCharges; p.state = 'normal'; p.st = 0;
   p.veiled = false; p.veilCharge = 0; p.veilBreakT = 0; p.ambushT = 0; p.targetedBy = 0;
   p.focus = 0; p.focusT = 0; p.burstCd = 0; p.burstT = 0; p.shootT = 0;
-  p.fuel = MARKSMAN.boost.fuel; p.thrusting = false; p.rockets = 0; p.rocketT = 0;
+  p.fuel = kit.boost ? kit.boost.fuel : 0; p.thrusting = false; p.rockets = 0; p.rocketT = 0;
   p.rifleT = 0; p.rifleCd = 0; p.dashChargeT = 0; p.overcharge = 0; p.overT = 0; p.beam = null; p.aegis = null;
   p.subArmed = false; p.dodge = null; p.pound = null;
+  // A new hero brings their own loadout; the Signature cooldown carries over (no swapping to dodge it)
+  if (kit.attachments && !kit.attachments.includes(p.attachment)) p.attachment = kit.attachments[0];
+  if (kit.subs && !kit.subs.includes(p.sub)) p.sub = kit.subs[0];
+  if (!kit.scarf) p.scarfMode = 'tether';
+  p.berserkT = 0; p.drillT = 0; p.drillCd = 0; p.airDrill = true; p.hurtT = 0;
 }
 
 export function chest(p) { return { x: p.x, y: p.y + p.h * 0.62 }; }
+// Where a hero's shots leave from: the chest, or for Cyclops the visor
+export function muzzle(p) { return kitOf(p).eyes ? { x: p.x + p.facing * 0.1, y: p.y + p.h * 0.9 } : chest(p); }
 
 // Which Velocity Break tier is available right now (0 = none)?
 export function vbTier(p) {
@@ -107,10 +119,10 @@ export function updatePlayer(p, cmd, world) {
   for (const b in p.buf) p.buf[b] = cmd.pressed[b] ? 0 : Math.min(99, p.buf[b] + 1);
   trackChord(p, cmd); p.stick = [cmd.mx, cmd.my];
   if (p.state === 'dead') return;
-  // Mode switches (Echo's scarf, Nova's bracer attachment and secondary weapon) are instant, so a press
-  // during hitstop is never lost
+  // Mode switches (the scarf or sash, the loaded attachment and secondary power) are instant, so a press
+  // during hitstop is never lost. Wolverine has no modes.
   if (cmd.pressed.mode && p.modeCd === 0 && p.state !== 'downed' && p.state !== 'ult') {
-    if (p.char === 'echo') cycleScarf(p, world);
+    if (p.arch === 'echo') { if (kitOf(p).scarf) cycleScarf(p, world); }
     else if (marksman(p)) cycleAttachment(p, world);
   }
   if (cmd.pressed.sub && p.subSwCd === 0 && marksman(p) && p.state !== 'downed' && p.state !== 'ult') cycleSub(p, world);
@@ -121,12 +133,14 @@ export function updatePlayer(p, cmd, world) {
   p.st++;
   for (const k of ['mercy', 'dashCd', 'fireCd', 'bulwarkCd', 'tracerCd', 'controlLock', 'launchedT',
     'zipArriveT', 'boostT', 'dropT', 'riposteT', 'coyote', 'modeCd', 'ambushT', 'burstCd', 'shootT', 'carveT', 'rocketT',
-    'rifleCd', 'wallCoyote', 'aegisCd', 'subSwCd', 'dodgeCd']) if (p[k] > 0) p[k]--;
+    'rifleCd', 'wallCoyote', 'aegisCd', 'subSwCd', 'dodgeCd', 'sigCd', 'drillCd', 'hurtT']) if (p[k] > 0) p[k]--;
   // Aegis time, and Overcharge draining once it has not grown for a while
   if (p.aegis && --p.aegis.t <= 0) world.endAegis(p, 'expire');
   if (p.overcharge > 0) { if (p.overT > 0) p.overT--; else p.overcharge = Math.max(0, p.overcharge - AEGIS.over.drain); }
+  // Berserker Rage runs out; its cooldown starts then
+  if (p.berserkT > 0 && --p.berserkT === 0) { p.sigCd = BERSERK.cd; world.emit('berserkEnd', { p }); }
   p.postDash = Math.min(99, p.postDash + 1);
-  if (p.char === 'echo') tickEcho(p, world, cmd);
+  if (p.arch === 'echo') tickEcho(p, world, cmd);
   else tickFocus(p, world);
 
   if (p.state === 'downed') { updateDowned(p, cmd, world); return; }
@@ -165,13 +179,14 @@ export function updatePlayer(p, cmd, world) {
   moveBody(p, DT);
   if (p.onGround) {
     p.coyote = COYOTE; p.jumpsUsed = 0; p.airDashes = 1; p.fastFall = false; p.dashCarry = false; p.airDodge = true; p.airRise = true;
-    p.rockets = 0; p.rocketT = 0; p.wallCoyote = 0; if (p.fuel < MARKSMAN.boost.fuel) p.fuel = Math.min(MARKSMAN.boost.fuel, p.fuel + MARKSMAN.boost.refill);
+    p.rockets = 0; p.rocketT = 0; p.wallCoyote = 0; p.airDrill = true;
+    const B = boostOf(p); if (B && p.fuel < B.fuel) p.fuel = Math.min(B.fuel, p.fuel + B.refill);
     if (!wasGround && p.st > 1) world.emit('land', { p, vy: fallV });
     p.lastSafeX = p.x; p.lastSafeY = p.y;
   }
   if (p.wallDir && !p.onGround) {
     // Touching a wall gives back the air dash and the double jump, and remembers the wall for a late wall jump
-    p.airDashes = 1; p.jumpsUsed = 0; p.airDodge = true; p.airRise = true; p.lastWallDir = p.wallDir; p.wallCoyote = WALL.coyote;
+    p.airDashes = 1; p.jumpsUsed = 0; p.airDodge = true; p.airRise = true; p.airDrill = true; p.lastWallDir = p.wallDir; p.wallCoyote = WALL.coyote;
   }
   p.iframe = (SETTINGS.dashIframes && p.state === 'dash' && p.st <= 8) || (p.state === 'dash' && !!p.dash && p.st <= p.dash.iframes) ||
     (p.state === 'dodge' && !!p.dodge && p.dodge.t <= DODGE.iframes) || p.state === 'ult';
@@ -282,10 +297,18 @@ function tryParry(p, world) {
 
 function trySignature(p, cmd, world) {
   if (p.buf.sig > ACTION_BUFFER) return false;
-  if (p.char === 'nova') {
+  const sig = kitOf(p).sig;
+  if (p.arch === 'nova') {
     if (marksman(p)) {
-      // Marksman kit: the hard-light Aegis. Instant: no state change, he keeps moving and shooting.
-      // Pressing again while it is up detonates it outward.
+      // Cyclops's Visor Overdrive and Storm's Squall: instant, on a cooldown, he or she keeps moving and shooting
+      if (sig === 'visor' || sig === 'squall') {
+        if (p.sigCd > 0) return false;
+        p.buf.sig = 99;
+        if (sig === 'visor') world.visorOverdrive(p); else world.squall(p);
+        return false;
+      }
+      // The shield dome (Nova's hard-light Aegis, Jean's TK Shield). Instant: no state change, she keeps
+      // moving and shooting. Pressing again while it is up detonates it outward.
       if (p.aegis) { p.buf.sig = 99; world.detonateAegis(p); return false; }
       if (p.aegisCd > 0) return false;
       p.buf.sig = 99; world.raiseAegis(p);
@@ -295,6 +318,12 @@ function trySignature(p, cmd, world) {
     p.buf.sig = 99; p.bulwarkCd = NOVA.bulwarkCd;
     setState(p, 'bulwark');
     return true;
+  }
+  // Wolverine's Berserker Rage: instant, so the swing under way carries on
+  if (sig === 'berserk') {
+    if (p.sigCd > 0 || p.berserkT > 0) return false;
+    p.buf.sig = 99; world.berserk(p);
+    return false;
   }
   // Every scarf Signature spends a scarf charge; Vanish is not spent while already hidden
   if (p.lashCharges <= 0 || (p.scarfMode === 'veil' && p.veiled)) return false;
@@ -318,18 +347,18 @@ function trySignature(p, cmd, world) {
 
 function tryMelee(p, cmd, world) {
   if (p.buf.melee > ACTION_BUFFER) return false;
-  const hunter = p.char === 'echo' && SETTINGS.echoKit === 'hunter';
+  const hunter = p.arch === 'echo' && SETTINGS.echoKit === 'hunter';
   // Echo on a wall: Wall Slash (before anything else, so a slide never turns it into something else)
   if (hunter && p.wallSliding && !p.onGround) { p.buf.melee = 99; startMove(p, 'echo_wall', world); return true; }
   // In the air, the secondary aimed down: the ground pound. Holding down to fast-fall must not turn it into
   // a Velocity Break; a dash, slide, launch or zip still does.
   const down = cmd.my < -0.55 || (p.aimFree && p.aimY < POUND.aimDown);
   const moving = p.state === 'dash' || p.state === 'slide' || p.postDash <= 6 || p.boostT > 0 || p.launchedT > 0 || p.zipArriveT > 0;
-  if (!p.onGround && down && !moving && (p.char === 'nova' || hunter)) { p.buf.melee = 99; startPound(p, world); return true; }
+  if (!p.onGround && down && !moving && (p.arch === 'nova' || hunter)) { p.buf.melee = 99; startPound(p, world); return true; }
   const tier = vbTier(p);
   if (tier > 0) { velocityBreak(p, tier, world); return true; }
   // Nova's rising attack, the Solar Uppercut (up + melee; once per airtime in the air)
-  if (p.char === 'nova' && cmd.my > 0.55 && (p.onGround || p.airRise)) {
+  if (p.arch === 'nova' && cmd.my > 0.55 && (p.onGround || p.airRise)) {
     p.buf.melee = 99; if (!p.onGround) p.airRise = false;
     startMove(p, 'nova_rise', world); return true;
   }
@@ -340,8 +369,8 @@ function tryMelee(p, cmd, world) {
     return pressSub(p, world);
   }
   p.buf.melee = 99;
-  if (p.char === 'echo' && p.riposteT > 0) { startMove(p, 'echo_riposte', world); p.riposteT = 0; return true; }
-  if (p.char === 'echo' && !p.onGround && cmd.my < -0.55) {
+  if (p.arch === 'echo' && p.riposteT > 0) { startMove(p, 'echo_riposte', world); p.riposteT = 0; return true; }
+  if (p.arch === 'echo' && !p.onGround && cmd.my < -0.55) {
     // Pursuit kit: the dive (fast fall into a Velocity Break on landing)
     breakVeil(p, world, 'attack');
     p.vy = -FAST_FALL; p.vx = p.facing * 5;
@@ -350,7 +379,7 @@ function tryMelee(p, cmd, world) {
     return true;
   }
   let id;
-  if (p.char === 'nova') id = p.onGround ? 'nova_jab1' : 'nova_air';
+  if (p.arch === 'nova') id = p.onGround ? 'nova_jab1' : 'nova_air';
   else if (!p.onGround) id = hunter ? (cmd.my > 0.55 ? 'echo_spin' : 'echo_ab1') : 'echo_air1';
   else if (cmd.my > 0.55) id = 'echo_rise';   // Echo's rising attack in either kit
   else id = hunter ? 'echo_b1' : 'echo_g1';
@@ -371,20 +400,23 @@ function meleeTarget(p, world) {
   return null;
 }
 
-// Echo's Dash Slash (Hunter kit's Velocity Break): a lunging cut along the dash that carries him through
-function startDashSlash(p, tier, world) {
+// Echo's Dash Slash (Hunter kit's Velocity Break): a lunging cut along the dash that carries him through.
+// Wolverine's Drill Claw starts one along an aim of its own (`dir`), at any angle.
+function startDashSlash(p, tier, world, dir = null) {
   breakVeil(p, world, 'attack');
   p.buf.melee = 99;
   const sp = Math.hypot(p.vx, p.vy);
   let dx = sp > 0.5 ? p.vx / sp : p.facing, dy = sp > 0.5 ? p.vy / sp : 0;
   if (p.state === 'dash' && p.dash) { dx = p.dash.dx; dy = p.dash.dy; }
-  if (Math.abs(dy) < 0.45) { dy = 0; dx = sign(dx) || p.facing; }
+  if (dir) { dx = dir.dx; dy = dir.dy; if (Math.abs(dy) < 0.2) { dy = 0; dx = sign(dx) || p.facing; } }
+  else if (Math.abs(dy) < 0.45) { dy = 0; dx = sign(dx) || p.facing; }
   const m = Math.hypot(dx, dy) || 1; dx /= m; dy /= m;
   if (Math.abs(dx) > 0.2) p.facing = sign(dx);
-  p.slash = { tier, dx, dy };
+  p.slash = { tier, dx, dy, drill: !!(dir && dir.drill) };
   p.hitConfirm = false; p.instance = world.newInstance();
-  p.boostT = 0; p.launchedT = 0; p.zipArriveT = 0; p.postDash = 99;
-  setState(p, 'dashslash'); world.emit('dashSlash', { p, tier, dx, dy });
+  p.boostT = 0; p.launchedT = 0; p.zipArriveT = 0; p.postDash = 99; p.fastFall = false;
+  if (p.slash.drill && dy > 0.2) p.onGround = false;
+  setState(p, 'dashslash'); world.emit('dashSlash', { p, tier, dx, dy, drill: p.slash.drill });
 }
 
 function stateDashSlash(p, cmd, world) {
@@ -393,9 +425,12 @@ function stateDashSlash(p, cmd, world) {
   else if (!p.onGround) { p.vx = approach(p.vx, cmd.mx * CHARS[p.char].run * 0.5, 30 * DT); applyGravity(p, cmd); }
   else { p.vx *= 0.8; p.vy = -0.5; }
   if (t >= 2 && t <= D.ticks - 3) {
-    const cx = p.x + p.facing * D.box.fx, cy = p.y + 0.95 + s.dy * 0.5;
-    world.spawnHitbox({ owner: p, team: 'p', x0: cx - D.box.w / 2, x1: cx + D.box.w / 2, y0: cy - D.box.h / 2, y1: cy + D.box.h / 2,
-      dmg: D.dmg[T], poise: D.poise[T], kb: [p.facing * 7, 3], armorBreak: D.armorBreak[T], instance: p.instance, vbTier: s.tier, dashSlash: true });
+    // The Drill Claw's box leads along its own direction (up, down or diagonal); the Dash Slash's sweeps ahead
+    const B = s.drill ? DRILL.box : D.box;
+    const cx = s.drill ? p.x + s.dx * D.box.fx : p.x + p.facing * D.box.fx, cy = s.drill ? p.y + 0.95 + s.dy * D.box.fx : p.y + 0.95 + s.dy * 0.5;
+    world.spawnHitbox({ owner: p, team: 'p', x0: cx - B.w / 2, x1: cx + B.w / 2, y0: cy - B.h / 2, y1: cy + B.h / 2,
+      dmg: D.dmg[T], poise: D.poise[T], kb: [(sign(s.dx) || p.facing) * 7, s.drill ? 3 + Math.max(0, s.dy) * 6 : 3], armorBreak: D.armorBreak[T],
+      instance: p.instance, vbTier: s.tier, dashSlash: true, drill: s.drill });
   }
   if (p.hitConfirm && t >= 4) {
     if (SETTINGS.vbRefund && !p.onGround) p.airDashes = 1;
@@ -404,9 +439,22 @@ function stateDashSlash(p, cmd, world) {
   if (t >= D.ticks + (p.hitConfirm ? D.hitRecover : D.recover)) setState(p, 'normal');
 }
 
+// Berserker Rage runs every swing faster: the same hits on quicker windups and recoveries
+const fastMoves = new Map();
+export function moveFor(p, id) {
+  if (!(p.berserkT > 0)) return MOVES[id];
+  let m = fastMoves.get(id);
+  if (!m) {
+    const b = MOVES[id];
+    m = { ...b, su: Math.max(1, Math.round(b.su * BERSERK.speed)), rc: Math.max(2, Math.round(b.rc * BERSERK.speed)), fast: true };
+    fastMoves.set(id, m);
+  }
+  return m;
+}
+
 function startMove(p, id, world) {
   breakVeil(p, world, 'attack');
-  p.moveId = id; p.move = MOVES[id]; p.queued = null; p.hitConfirm = false; p.instance = world.newInstance();
+  p.moveId = id; p.move = moveFor(p, id); p.queued = null; p.hitConfirm = false; p.instance = world.newInstance();
   p.crouch = false; p.riseAir = !p.onGround;
   if (Math.abs(p.aimX) > 0.2 && p.aimFree) p.facing = sign(p.aimX);
   // Lock-on: turn to a target that is close, and step in toward it during the swing (lungeTo)
@@ -421,7 +469,7 @@ function startMove(p, id, world) {
 
 // A Velocity Break: Echo's Hunter kit turns it into the Dash Slash
 function velocityBreak(p, tier, world) {
-  if (p.char === 'echo' && SETTINGS.echoKit === 'hunter') startDashSlash(p, Math.max(1, tier), world); else startVB(p, tier, world);
+  if (p.arch === 'echo' && SETTINGS.echoKit === 'hunter') startDashSlash(p, Math.max(1, tier), world); else startVB(p, tier, world);
 }
 
 function startVB(p, tier, world) {
@@ -450,8 +498,8 @@ function cancelInto(p, cmd, world, { jump = true, dash = true, parry = true, sig
 // ---- States ----------------------------------------------------------------------------
 
 function horizontalControl(p, cmd, world, scale = 1) {
-  const c = CHARS[p.char], skates = marksman(p);
-  let tgt = cmd.mx * (skates ? MARKSMAN.skate.top : c.run) * (p.crouch ? c.crouchSpeed : 1) * (p.thrusting ? MARKSMAN.boost.air : 1) * scale;
+  const c = CHARS[p.char], skates = marksman(p) && !!kitOf(p).skate, B = boostOf(p);
+  let tgt = cmd.mx * (skates ? MARKSMAN.skate.top : c.run) * (p.crouch ? c.crouchSpeed : 1) * (p.thrusting && B ? B.air : 1) * scale;
   const rifle = p.rifleT >= HUNTER.rifle.raise;   // Echo's staff-rifle up: slower on foot
   if (rifle && p.onGround) tgt *= HUNTER.rifle.slow;
   const firing = p.chargeT > 0 || p.fireCd > 0 || p.shootT > 0 || rifle;
@@ -515,7 +563,7 @@ function stateNormal(p, cmd, world) {
   // Charged melee: release after holding
   if (p.meleeCharged && !cmd.held.melee) {
     p.meleeCharged = false;
-    startMove(p, p.char === 'nova' ? 'nova_brace' : 'echo_charged', world);
+    startMove(p, p.arch === 'nova' ? 'nova_brace' : 'echo_charged', world);
   }
   if (p.meleeHeldT >= 30 && p.state === 'normal' && !p.meleeCharged) { p.meleeCharged = true; world.emit('meleeCharged', { p }); }
 }
@@ -550,8 +598,8 @@ function wallCling(p, cmd, turn) {
 // holding keeps them on: he hovers and climbs gently on a small tank of fuel that refills on the
 // ground. Ordinary jumps are untouched. Returns true while thrusting.
 function thrust(p, cmd, world) {
-  if (!marksman(p)) return false;
-  const B = MARKSMAN.boost;
+  const B = boostOf(p);
+  if (!marksman(p) || !B) return false;   // Cyclops has no hover; Jean levitates, Storm flies
   const start = cmd.pressed.jump && p.jumpsUsed >= 1 && p.wallDir === 0 && p.fuel >= B.minStart;
   const on = !p.onGround && !p.wallSliding && p.fuel > 0 && cmd.held.jump && (p.thrusting || start);
   if (on !== p.thrusting) { p.thrusting = on; world.emit(on ? 'thrustOn' : 'thrustOff', { p }); }
@@ -675,7 +723,7 @@ function statePound(p, cmd, world) {
   }
   if (S.phase === 'drop') {
     // Echo's quick pound bounces off what it hits
-    if (p.char === 'echo' && S.level === 0 && p.hitConfirm) {
+    if (p.arch === 'echo' && S.level === 0 && p.hitConfirm) {
       p.vy = P.bounce; p.vx *= 0.5; p.airDashes = 1; p.jumpsUsed = 0; p.fastFall = false; p.dashCarry = false;
       p.pound = null; setState(p, 'normal'); world.emit('pogo', { p });
       return;
@@ -865,7 +913,7 @@ function canFire(p) { return ['normal', 'dash', 'slide', 'lash', 'dodge'].includ
 
 function handleFire(p, cmd, world) {
   if (marksman(p)) { fireMarksman(p, cmd, world); return; }
-  if (p.char === 'nova') {
+  if (p.arch === 'nova') {
     if (cmd.pressed.fire && p.fireCd === 0 && canFire(p)) {
       world.fireShot(p, 0); p.fireCd = NOVA.shotCd;
     }
@@ -880,8 +928,10 @@ function handleFire(p, cmd, world) {
     }
     return;
   }
-  // Echo, Hunter kit: tap to throw a snare (crouch + tap plants one at your feet); hold to raise the
-  // staff-rifle and let go to fire a long shot, or hold longer for a marking shot (HUNTER.rifle)
+  // Wolverine: the Drill Claw
+  if (kitOf(p).fire === 'drill' && SETTINGS.echoKit === 'hunter') { fireDrill(p, cmd, world); return; }
+  // Echo and Psylocke, Hunter kit: tap to throw a snare (crouch + tap plants one at your feet); hold to raise
+  // the staff-rifle and let go to fire a long shot, or hold longer for a marking shot (HUNTER.rifle)
   if (SETTINGS.echoKit === 'hunter') {
     const R = HUNTER.rifle;
     if (cmd.pressed.fire) p.plantPress = p.onGround && cmd.my < -0.55;   // crouched when pressed: plant on release
@@ -921,6 +971,28 @@ function handleFire(p, cmd, world) {
     if (p.chargeT >= ECHO.tracerHold && p.tracerCd === 0 && canFire(p)) { world.fireTracer(p); p.tracerCd = ECHO.tracerCd; breakVeil(p, world, 'attack'); }
     p.chargeT = 0;
   }
+}
+
+// Wolverine's Drill Claw (DRILL): holding fire coils him (tiers 2 and 3 at DRILL.charge); letting go launches
+// a corkscrew lunge along the aim, a Dash Slash in that direction. In the air he gets one per airtime.
+function fireDrill(p, cmd, world) {
+  const D = DRILL, ready = p.drillCd === 0 && (p.onGround || p.airDrill || p.wallSliding) && canFire(p);
+  if (cmd.held.fire && ready) {
+    p.drillT++;
+    if (p.drillT === D.charge[0] || p.drillT === D.charge[1]) world.emit('drillLevel', { p, level: p.drillT === D.charge[0] ? 2 : 3 });
+  }
+  if (!cmd.held.fire && p.drillT > 0) {
+    const t = p.drillT; p.drillT = 0;
+    if (!ready) return;
+    const tier = t >= D.charge[1] ? 3 : t >= D.charge[0] ? 2 : 1;
+    let dx = p.aimX, dy = p.aimY;
+    if (p.onGround && dy < -0.3) { dx = p.facing; dy = 0; }   // no drilling into the floor
+    const m = Math.hypot(dx, dy) || 1;
+    if (!p.onGround && !p.wallSliding) p.airDrill = false;
+    p.drillCd = D.cd;
+    startDashSlash(p, tier, world, { dx: dx / m, dy: dy / m, drill: true });
+  }
+  p.chargeT = 0;
 }
 
 // Marksman kit: tap for basic rounds, hold to charge the loaded attachment through three levels.
@@ -972,7 +1044,9 @@ function pressSub(p, world) {
 const subReady = (p, world) => !((p.sub === 'disc' || p.sub === 'well') && world.subOut(p, p.sub));
 
 function cycleSub(p, world) {
-  p.sub = SUBS[(SUBS.indexOf(p.sub) + 1) % SUBS.length]; p.subSwCd = SUB.switchCd; p.burstT = 0; p.subArmed = false;
+  const S = subList(p);
+  if (S.length < 2) return;
+  p.sub = S[(S.indexOf(p.sub) + 1) % S.length]; p.subSwCd = SUB.switchCd; p.burstT = 0; p.subArmed = false;
   world.emit('subSwitch', { p, sub: p.sub });
 }
 
@@ -1037,7 +1111,7 @@ function stateBeam(p, cmd, world) {
   b.dx = Math.cos(a); b.dy = Math.sin(a);
   if (Math.abs(b.dx) > 0.2) p.facing = sign(b.dx);
   // No push-back: on the ground he can creep along; in the air he hangs, sinking slowly, while it fires
-  if (p.onGround) { p.vx = approach(p.vx, cmd.mx * CHARS.nova.run * B.slow, 40 * DT); p.vy = -0.5; }
+  if (p.onGround) { p.vx = approach(p.vx, cmd.mx * CHARS[p.char].run * B.slow, 40 * DT); p.vy = -0.5; }
   else { p.vx = approach(p.vx, 0, 20 * DT); p.vy = approach(p.vy, -B.hover, 40 * DT); p.fastFall = false; }
   if (tryParry(p, world) || tryDash(p, cmd, world)) { world.endBeam(p, 'cancel'); return; }
   world.beamTick(p);
@@ -1079,7 +1153,8 @@ export function rocketHeight(t, attach, perfect) {
 // ---- Nova: bracer attachments and Focus ---------------------------------------------------
 
 function cycleAttachment(p, world) {
-  const A = MARKSMAN.attachments;
+  const A = attachList(p);
+  if (A.length < 2) return;
   p.attachment = A[(A.indexOf(p.attachment) + 1) % A.length]; p.modeCd = MARKSMAN.switchCd;
   world.emit('attach', { p, attach: p.attachment });
 }
@@ -1121,6 +1196,12 @@ function tickEcho(p, world, cmd) {
     if (p.lashRecharge <= 0) { p.lashCharges++; p.lashRecharge = p.lashCharges < ECHO.lashCharges ? ECHO.lashRecharge : 0; }
   }
   tickScarf(p, world);
+  // Wolverine's healing factor: a little while after the last hit he took, he knits back together
+  if (kitOf(p).heal && p.hurtT === 0 && p.hp < p.maxHp && p.state !== 'downed' && p.state !== 'dead') {
+    p.hp = Math.min(p.maxHp, p.hp + HEAL.rate / 60);
+    p.strain = Math.min(p.strain, p.maxHp - p.hp);
+    if (p.hp >= p.maxHp) world.emit('healed', { p });
+  }
   const near = world.nearestEnemyDist(p.x, p.y + 1) < 6 || (p.scarfMode === 'flare' && p.targetedBy > 0);
   p.calmT = near ? 0 : p.calmT + 1;
   if (p.calmT > 120) p.resolve = Math.max(0, p.resolve - 5 / 60);
@@ -1128,14 +1209,16 @@ function tickEcho(p, world, cmd) {
 }
 
 export function addResolve(p, amount) {
-  if (p.char !== 'echo') return;
+  if (p.arch !== 'echo') return;
   if (p.scarfMode === 'flare') amount *= SCARF.flareResolve;
   p.resolve = Math.min(100, p.resolve + amount);
 }
 
 // Called when this player deals damage (Rally recovery + ranged refills).
 export function onDealtDamage(p, dmg, isMelee) {
-  if (p.char !== 'echo') return;
+  if (p.arch !== 'echo') return;
+  // Berserker Rage: his claw hits heal him
+  if (p.berserkT > 0 && isMelee && p.state !== 'downed') { p.hp = Math.min(p.maxHp, p.hp + dmg * BERSERK.steal); p.strain = Math.min(p.strain, p.maxHp - p.hp); }
   if (p.strain > 0) {
     const heal = Math.min(p.strain, dmg * 3);
     p.strain -= heal; p.hp = Math.min(p.maxHp, p.hp + heal);
@@ -1160,7 +1243,7 @@ function cycleScarf(p, world) {
 // Attacking or taking a hit drops Veil; it re-arms after SCARF.veilRearm quiet ticks.
 // Breaking it with an attack while fully hidden makes that attack's first hit an ambush.
 export function breakVeil(p, world, reason) {
-  if (p.char !== 'echo' || p.scarfMode !== 'veil') return;
+  if (p.arch !== 'echo' || p.scarfMode !== 'veil') return;
   const wasHidden = p.veiled, fading = p.veilCharge > 0;
   p.veilBreakT = SCARF.veilRearm;
   if (!wasHidden && !fading) return;
@@ -1171,7 +1254,7 @@ export function breakVeil(p, world, reason) {
 
 // Flare widens the parry windows while at least one enemy is targeting Echo.
 export function parryWindows(p) {
-  const on = p.char === 'echo' && p.scarfMode === 'flare' && p.targetedBy > 0;
+  const on = p.arch === 'echo' && p.scarfMode === 'flare' && p.targetedBy > 0;
   return { window: PARRY.window + (on ? SCARF.flareParry : 0), perfect: PARRY.perfect + (on ? SCARF.flarePerfect : 0) };
 }
 

@@ -42,7 +42,7 @@ export function nearestPlayer(e, world, maxD = 40) {
     if (!canTarget(p)) continue;
     const d = Math.hypot(p.x - e.x, (p.y + 0.9) - (e.y + e.h / 2));
     if (d < bd) { bd = d; best = p; }
-    if (p.char === 'echo' && p.scarfMode === 'flare' && d < fd) { fd = d; flare = p; }
+    if (p.arch === 'echo' && p.scarfMode === 'flare' && d < fd) { fd = d; flare = p; }
   }
   return flare || best;
 }
