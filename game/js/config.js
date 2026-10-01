@@ -475,6 +475,18 @@ export const HERO_LOOK = {
     sub: { disc: { name: 'TK Throw', tint: '#ffc06b' }, well: { name: 'TK Grip', tint: '#ff8a1f' }, scatter: { name: 'Psychic Push', tint: '#ffd08a' } },
   },
 };
+// Presentation only: each hero's effect colours. `energy` is their signature glow (shots, slashes, charge),
+// `hot` the white-hot core, `soft` a pale accent (sparks, dust glints), `deep` a darker accent.
+export const FXPAL = {
+  nova: { energy: '#ffb547', hot: '#fff1c9', soft: '#ffe2a8', deep: '#ff8a1f' },
+  echo: { energy: '#ff9a1f', hot: '#fff1d6', soft: '#ffe2a8', deep: '#ff6a00' },
+  cyclops: { energy: '#ff3b30', hot: '#ffe3dc', soft: '#ff9c8c', deep: '#c8101e' },
+  wolverine: { energy: '#ffd84d', hot: '#fffbe8', soft: '#e8eef5', deep: '#ffae00' },
+  storm: { energy: '#9fe9ff', hot: '#ffffff', soft: '#dff8ff', deep: '#4aa8ff' },
+  jean: { energy: '#ff8a1f', hot: '#fff0d6', soft: '#ffc27a', deep: '#ff3d1f' },
+  psylocke: { energy: '#b77bff', hot: '#f4e9ff', soft: '#e0b8ff', deep: '#7b3cff' },
+};
+export const fxPal = p => FXPAL[p && p.char] || FXPAL.nova;
 export const attachLook = (p, k) => (HERO_LOOK[p.char] && HERO_LOOK[p.char].attach[k]) || ATTACH_LOOK[k];
 export const subLook = (p, k) => (HERO_LOOK[p.char] && HERO_LOOK[p.char].sub[k]) || SUB_LOOK[k];
 

@@ -55,7 +55,7 @@ for (const char of ['nova', 'echo']) {
   p.x = 190.5; p.y = 15.6; run({}, 2); p.x = 192; run({}, 2);
   const S = w.encounters.find(s => s.def.id === 'patrol');
   const spawned = w.enemies.filter(e => e.enc === 'patrol');
-  assert(S.state === 'active' && spawned.length === 4 && spawned.filter(e => e.type === 'drone').length === 2 && log.some(e => e.type === 'banner' && e.text === 'Skyline Relay'),
+  assert(S.state === 'active' && spawned.length === 4 && spawned.filter(e => e.type === 'drone').length === 2 && log.some(e => e.type === 'banner' && e.text === 'Rooftop Relay'),
     `Drone patrol starts at x=${S.def.trigger} with ${spawned.length} enemies`);
 }
 { // Relay Gate: seals, pulls stragglers in, runs two waves, opens when cleared, then the route completes
@@ -74,7 +74,7 @@ for (const char of ['nova', 'echo']) {
   const open = !GATES.L2 && !GATES.R2 && R.state === 'cleared';
   for (const r of [p, q]) { r.x = ROUTE_END_X + 1; r.y = 18.6; }   // together: the co-op camera keeps players close
   run(3);
-  assert(sealed && pulled && w1 >= 5 && wave2 && open && count(log, 'banner', b => b.text === 'Relay secured') === 1 && count(log, 'banner', b => b.text === 'Route complete') === 1,
+  assert(sealed && pulled && w1 >= 5 && wave2 && open && count(log, 'banner', b => b.text === 'Relay secured') === 1 && count(log, 'banner', b => b.text === 'Mission complete') === 1,
     `Relay Gate seals (straggler pulled in), wave 1 (${w1}) then the Brute wave, opens when cleared, and the route completes`);
 }
 { // A wipe mid-encounter resets it: its enemies go, the gates open, and it can start again

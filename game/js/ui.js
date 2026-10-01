@@ -40,8 +40,8 @@ function aegisChips(p) {
 }
 
 // Chips every character can show: a charging dash, and the lock-on target
-const ENEMY_NAMES = { swarmer: 'Swarmer', shield: 'Shieldbearer', sniper: 'Sniper', brute: 'Brute', post: 'Sparring post', turret: 'Turret',
-  drone: 'Drone', mortar: 'Mortar', charger: 'Charger' };
+const ENEMY_NAMES = { swarmer: 'Prowler', shield: 'Sentinel Guard', sniper: 'Spotter', brute: 'Mk-I Sentinel', post: 'Training dummy', turret: 'Danger Room turret',
+  drone: 'Sentinel drone', mortar: 'Mortar unit', charger: 'Ram unit', warden: 'Juggernaut', stormcaller: 'Magneto' };
 function commonChips(p) {
   const C = DASH_CHARGE.charge, t = p.state === 'dashCharge' ? p.dashChargeT : 0, L = t >= C[2] ? 3 : t >= C[1] ? 2 : t >= C[0] ? 1 : 0;
   const pl = p.state === 'pound' && p.pound && p.pound.phase === 'hold' ? p.pound.level : 0;

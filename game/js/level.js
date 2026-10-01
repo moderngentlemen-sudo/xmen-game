@@ -79,10 +79,10 @@ export const LEVEL_X0 = Math.min(...BOXES.map(b => b.x0)), LEVEL_X1 = Math.max(.
 export const GATES = { L: false, R: false, L2: false, R2: false };
 
 export const ZONES = [
-  { id: 'gym', name: 'Movement Gym', x0: -10, x1: 60, spawn: { x: 0, y: 0 } },
-  { id: 'arena', name: 'Concourse Lock', x0: 60, x1: 97, spawn: { x: 58.5, y: 0 } },
-  { id: 'tower', name: 'Storm Spire Climb', x0: 97, x1: 162, spawn: { x: 100, y: 0 } },
-  { id: 'skyline', name: 'Skyline Relay', x0: 162, x1: 318, spawn: { x: 166, y: 15.6 } },
+  { id: 'gym', name: 'Danger Room', x0: -10, x1: 60, spawn: { x: 0, y: 0 } },
+  { id: 'arena', name: 'Sentinel Works', x0: 60, x1: 97, spawn: { x: 58.5, y: 0 } },
+  { id: 'tower', name: 'Trask Tower', x0: 97, x1: 162, spawn: { x: 100, y: 0 } },
+  { id: 'skyline', name: 'Rooftop Relay', x0: 162, x1: 318, spawn: { x: 166, y: 15.6 } },
 ];
 export function zoneAt(x) {
   return ZONES.find(z => x >= z.x0 && x < z.x1) || ZONES[0];
@@ -97,10 +97,10 @@ export const CHECKPOINTS = [
 // most one enemy of the current wave is left, and the last wave must be cleared. `extra` joins the
 // first wave with three or more players. Gated encounters seal the Relay Gate until cleared.
 export const ENCOUNTERS = [
-  { id: 'patrol', trigger: 191, banner: ['Skyline Relay', 'Drones inbound.'],
+  { id: 'patrol', trigger: 191, banner: ['Rooftop Relay', 'Sentinel drones inbound.'],
     waves: [[['drone', 204, 19.5], ['drone', 209, 20.5], ['swarmer', 207, 15.6], ['swarmer', 211, 15.6]]],
     extra: [['drone', 212, 19]] },
-  { id: 'yard', trigger: 221, banner: ['Mortar Yard', 'Watch for the landing markers.'],
+  { id: 'yard', trigger: 221, banner: ['Artillery Deck', 'Watch for the landing markers.'],
     waves: [[['mortar', 251, 18.6], ['mortar', 255.5, 18.6], ['charger', 240, 12.6], ['swarmer', 233, 12.6]]],
     extra: [['swarmer', 236, 12.6]] },
   { id: 'relay', trigger: 261, gates: ['L2', 'R2'], inside: 260, banner: ['Relay Gate', 'Gates sealed. Take the relay.'],
@@ -109,12 +109,12 @@ export const ENCOUNTERS = [
       [['brute', 290, 18.6], ['charger', 266, 18.6], ['drone', 270, 24], ['drone', 288, 24.5], ['mortar', 294, 18.6],
         ['swarmer', 280, 18.6], ['swarmer', 284, 18.6]],
     ],
-    waveBanners: [null, ['Final wave', 'The Brute holds the relay.']],
+    waveBanners: [null, ['Final wave', 'A Mk-I Sentinel holds the relay.']],
     extra: [['swarmer', 276, 18.6]],
     cleared: ['Relay secured', 'Gates open. The beacon is ahead.'] },
-  // The level boss: the gunship guarding the beacon. Its gate seals behind the team.
-  { id: 'beacon', trigger: 300.5, gates: ['R2'], inside: 299.5, boss: 'stormcaller', bossAt: [308, 32], banner: ['Stormcaller', 'It keeps the relay beacon.'],
-    cleared: ['Beacon secured', 'The Stormcaller is down.'] },
+  // The level boss: Magneto, on a slab of steel above the beacon he has seized. Its gate seals behind the team.
+  { id: 'beacon', trigger: 300.5, gates: ['R2'], inside: 299.5, boss: 'stormcaller', bossAt: [308, 32], banner: ['Magneto', 'He has seized the Sentinel beacon.'],
+    cleared: ['Beacon secured', 'Magneto is down. The Sentinels go quiet.'] },
 ];
 export const ROUTE_END_X = 304;
 

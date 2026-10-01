@@ -3,7 +3,7 @@
 // rings down its path, streams sparks, flares at the bracer and throws sparks and smoke where it hits a wall;
 // when it ends it narrows to nothing. Presentation only: reads the sim, never changes it.
 import * as THREE from 'three';
-import { ATTACH_LOOK, MARKSMAN } from './config.js';
+import { ATTACH_LOOK, MARKSMAN, attachLook } from './config.js';
 import { toWorld, planeDir } from './space.js';
 
 const MAXP = 72;
@@ -58,7 +58,7 @@ export class BeamFX {
 
   onEvent(ev) {
     if (ev.type === 'beamStart') {
-      const B = this.of(ev.p); B.age = 0; B.end = -1; B.tint.set(ATTACH_LOOK[ev.attach] ? ATTACH_LOOK[ev.attach].tint : '#ffd889');
+      const B = this.of(ev.p); B.age = 0; B.end = -1; B.tint.set(ATTACH_LOOK[ev.attach] ? attachLook(ev.p, ev.attach).tint : '#ffd889');
       if (ev.over) B.tint.lerp(WHITE, 0.35);
     } else if (ev.type === 'beamEnd') {
       const B = this.beams.get(ev.p); if (B) B.end = 0;

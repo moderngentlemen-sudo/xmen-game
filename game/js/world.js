@@ -753,7 +753,7 @@ export class World {
   applySnare(e, owner) {
     if (e.dead) return;
     if (e.type === 'post' || e.type === 'turret') { this.emit('snared', { e, x: e.x, y: e.y + 0.4, owner, weak: true }); return; }
-    e.tagged = Math.max(e.tagged, 600);
+    e.tagged = Math.max(e.tagged, 600); e.snaredBy = owner;
     if (e.light && e.armor <= 0) {
       this.director.release(e);
       if (e.catcher && e.catcher.leash && e.catcher.leash.e === e) this.releaseLeash(e.catcher);
@@ -769,7 +769,7 @@ export class World {
       for (const e of this.enemies) {
         if (e.dead || e.state === 'snared' || e.type === 'turret') continue;
         if (Math.abs(e.x - s.x) < e.w / 2 + 0.45 && e.y < s.y + 0.6 && e.y + e.h > s.y - 0.1) {
-          this.applySnare(e, s.owner); s.dead = true; this.emit('snareTrigger', { x: s.x, y: s.y, e });
+          this.applySnare(e, s.owner); s.dead = true; this.emit('snareTrigger', { x: s.x, y: s.y, e, owner: s.owner });
           break;
         }
       }
@@ -994,7 +994,7 @@ export class World {
     this.arena = { state: boss ? 'bossReady' : 'idle' };   // a wipe in the boss fight comes back to the boss
   }
 
-  // The Concourse Lock's last wave: the Lockwarden drops in
+  // The Sentinel Works' last wave: the Juggernaut drops in
   startWarden() {
     this.arena.state = 'boss';
     spawnBoss(this, 'warden', 87, 12, { zone: 'arena' });   // drops in beside the dais, not onto it
@@ -1012,7 +1012,7 @@ export class World {
     this.enemies = this.enemies.filter(e => e.zone !== 'skyline');
     this.checkpoint = CHECKPOINTS.findIndex(c => c.x === 302); this.wipeT = 0;
     this.resetToCheckpoint();
-    this.emit('banner', { text: 'Skyline Relay', sub: 'The beacon pad' });
+    this.emit('banner', { text: 'Rooftop Relay', sub: 'The beacon pad' });
   }
 
   // ---- Nova: the perfect dodge ----
@@ -1361,7 +1361,7 @@ export class World {
       const sp = [createEnemy('shield', 88, 0), createEnemy('shield', 92, 0), createEnemy('sniper', 94.1, 5.4)];
       if (n >= 3) { sp.push(createEnemy('shield', 71, 0)); sp.push(createEnemy('sniper', 64.9, 5.4, { facing: 1 })); }
       for (const e of sp) { e.zone = 'arena'; this.enemies.push(e); }
-      this.emit('banner', { text: 'Concourse Lock', sub: 'Gate sealed. Break the lock.' });
+      this.emit('banner', { text: 'Sentinel Works', sub: 'Floor sealed. Break the assembly lock.' });
       this.emit('gates', { closed: true });
     } else if (A.state === 'wave1') {
       const alive = this.enemies.filter(e => e.zone === 'arena' && !e.dead).length;
@@ -1372,7 +1372,7 @@ export class World {
           const e = createEnemy('swarmer', i % 2 ? 66 : 94, 0); e.zone = 'arena'; e.cd = 20 + i * 12; this.enemies.push(e);
         }
         const b = createEnemy('brute', 90, 0); b.zone = 'arena'; this.enemies.push(b);
-        this.emit('banner', { text: 'Wave 2', sub: 'The Brute holds the lock.' });
+        this.emit('banner', { text: 'Wave 2', sub: 'A Mk-I Sentinel holds the lock.' });
       }
     } else if (A.state === 'wave2') {
       if (!this.enemies.some(e => e.zone === 'arena' && !e.dead)) this.startWarden();
@@ -1386,7 +1386,7 @@ export class World {
     } else if (A.state === 'boss') {
       if (!this.enemies.some(e => e.zone === 'arena' && !e.dead)) {
         A.state = 'cleared'; GATES.L = false; GATES.R = false;
-        this.emit('banner', { text: 'Lockwarden destroyed', sub: 'Gates open. Storm Spire climb ahead.' });
+        this.emit('banner', { text: 'Juggernaut stopped', sub: 'Gates open. Trask Tower is ahead.' });
         this.emit('gates', { closed: false });
         const talker = this.activePlayers()[Math.floor(Math.random() * Math.max(1, this.activePlayers().length))];
         this.bark(talker, 'lock_broken', 1, true);
@@ -1458,7 +1458,7 @@ World.prototype.updateSkyline = function (n) {
   // The route completes once every encounter is won (a few seconds after a boss falls, so the banners don't collide)
   if (!this.routeDone && this.encounters.every(S => S.state === 'cleared') && here(ROUTE_END_X) && this.tick - (this.bossClearedT ?? -1e9) > 150) {
     this.routeDone = true;
-    this.emit('banner', { text: 'Route complete', sub: 'You reached the end of this build.' });
+    this.emit('banner', { text: 'Mission complete', sub: 'The beacon is silent. X-Men, head home.' });
   }
 };
 

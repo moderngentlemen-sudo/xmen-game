@@ -134,7 +134,7 @@ const put = (p, x, y) => Object.assign(p, { x, y, prevX: x, prevY: y, vx: 0, vy:
 { // It arrives when the team steps onto the beacon pad, and the gate seals behind them
   const t = fight('stormcaller');
   const S = t.w.encounters.find(q => q.def.id === 'beacon');
-  assert(S.state === 'active' && !!t.e && t.e.type === 'stormcaller' && GATES.R2 && count(t.log, 'banner', b => b.text === 'Stormcaller') === 1,
+  assert(S.state === 'active' && !!t.e && t.e.type === 'stormcaller' && GATES.R2 && count(t.log, 'banner', b => b.text === 'Magneto') === 1,
     `Stormcaller: stepping onto the pad seals the gate and brings it in (${S.state})`);
 }
 { // Its volley is standard fire: Echo's parry deflects a shot back into it
@@ -178,6 +178,6 @@ const put = (p, x, y) => Object.assign(p, { x, y, prevX: x, prevY: y, vx: 0, vy:
   const after = t.w.enemies.filter(q => q.enc === 'beacon' && !q.dead).length;
   t.run({}, 160);
   assert(drones === BOSS.stormcaller.drones && after === 0 && S.state === 'cleared' && !GATES.R2 && count(t.log, 'bossDown') === 1 &&
-    count(t.log, 'banner', b => b.text === 'Beacon secured') === 1 && count(t.log, 'banner', b => b.text === 'Route complete') === 1,
+    count(t.log, 'banner', b => b.text === 'Beacon secured') === 1 && count(t.log, 'banner', b => b.text === 'Mission complete') === 1,
     `Phase two brings ${drones} drones; defeat takes them down, opens the gate, secures the beacon, then the route completes`);
 }

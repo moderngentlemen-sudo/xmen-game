@@ -2,7 +2,7 @@
 // crackling with a chain's shock, slowed by a perfect dodge or caught in a well, the dodge's afterimages and
 // the uppercut's boot jets. Presentation only: reads the sim, never changes it.
 import * as THREE from 'three';
-import { SUB, SUB_LOOK, CHARS } from './config.js';
+import { SUB, SUB_LOOK, CHARS, subLook, fxPal } from './config.js';
 import { toWorld, planeDir } from './space.js';
 import { Strip } from './beamfx.js';
 
@@ -51,49 +51,50 @@ export class SubFX {
   }
 
   onEvent(ev) {
-    const F = this.fx;
+    const F = this.fx, who = ev.p && ev.p.kind === 'player' ? ev.p : { char: 'nova' }, PAL = fxPal(who), T = k => subLook(who, k).tint;
     switch (ev.type) {
       case 'subSwitch': {
-        const p = ev.p, L = SUB_LOOK[ev.sub];
+        const p = ev.p, L = subLook(p, ev.sub);
         F.popText(p.x, p.y + p.h + 0.7, L.name.toUpperCase(), L.tint, 0.6);
         F.sprite(p.x + p.facing * 0.35, p.y + 1.05, 'ring', L.tint, 0.5, 0.2, 2); F.burst(p.x + p.facing * 0.35, p.y + 1.05, L.tint, 6, 2.5, 0.25, 0.25);
         break;
       }
-      case 'grenadeThrow': F.burst(ev.x, ev.y, SUB_LOOK.grenade.tint, 6 + 3 * ev.level, 4, 0.22, 0.2); F.sprite(ev.x, ev.y, 'ring', '#ffe2b8', 0.35 + 0.08 * ev.level, 0.14, 2); break;
+      case 'grenadeThrow': F.burst(ev.x, ev.y, T('grenade'), 6 + 3 * ev.level, 4, 0.22, 0.2); F.sprite(ev.x, ev.y, 'ring', PAL.soft, 0.35 + 0.08 * ev.level, 0.14, 2); break;
       case 'bounce':
         if (ev.sp > 5) { F.burst(ev.x, ev.y, '#ffe2b8', 4, 3, 0.18, 0.18, { dir: Math.PI / 2, spread: 2 }); F.dust(ev.x, ev.y, 0.12, [0, Math.PI], { noRing: true, reach: 0.4 }); }
         break;
       case 'frag': {
-        const k = (ev.level || 0) + (ev.perfect ? 1 : 0), c = SUB_LOOK.grenade.tint;
-        F.fireball(ev.x, ev.y + 0.2, '#ff8a2e', 0.8 + ev.r * 0.45, 0.24 + 0.03 * k);
+        const k = (ev.level || 0) + (ev.perfect ? 1 : 0), c = T('grenade');
+        F.fireball(ev.x, ev.y + 0.2, who.char === 'storm' ? '#cfefff' : PAL.deep, 0.8 + ev.r * 0.45, 0.24 + 0.03 * k);
         F.sprite(ev.x, ev.y + 0.1, 'star', '#ffffff', 0.8 + ev.r * 0.5, 0.14, 1.5);
-        F.sprite(ev.x, ev.y + 0.1, 'ring', '#ffe2b8', ev.r * 0.9, 0.26, 2.4);
+        F.sprite(ev.x, ev.y + 0.1, 'ring', PAL.soft, ev.r * 0.9, 0.26, 2.4);
         F.burst(ev.x, ev.y + 0.2, c, 16 + 6 * k, 7 + ev.r * 2, 0.34, 0.4, { grav: 8 }); F.burst(ev.x, ev.y + 0.2, '#5d6674', 8 + 3 * k, 6, 0.26, 0.6, { dir: Math.PI / 2, spread: 2.2, grav: 18 });
         F.smoke(ev.x, ev.y + 0.3, '#7d8692', 4 + 2 * k, 1.4, 0.6 + 0.12 * k, 0.8, { dir: Math.PI / 2, spread: 1.6, grav: -0.9, op: 0.5 });
         F.dust(ev.x, ev.y, 0.35 + 0.12 * k, [0, Math.PI], { reach: 1 + ev.r * 0.4 });
         break;
       }
-      case 'cluster': F.sprite(ev.x, ev.y + 0.3, 'star', '#ffffff', 1.8, 0.18, 1.6); F.burst(ev.x, ev.y + 0.3, '#ffd28a', 18, 9, 0.3, 0.3, { dir: Math.PI / 2, spread: 2.6, grav: 10 }); break;
+      case 'cluster': F.sprite(ev.x, ev.y + 0.3, 'star', '#ffffff', 1.8, 0.18, 1.6); F.burst(ev.x, ev.y + 0.3, PAL.soft, 18, 9, 0.3, 0.3, { dir: Math.PI / 2, spread: 2.6, grav: 10 }); break;
       case 'chain': this.chain(ev); break;
-      case 'discThrow': F.sprite(ev.x, ev.y, 'ring', SUB_LOOK.disc.tint, 0.5 + 0.1 * ev.level, 0.16, 2.2); F.burst(ev.x, ev.y, '#fff1c9', 6 + 2 * ev.level, 4, 0.2, 0.2); break;
+      case 'discThrow': F.sprite(ev.x, ev.y, 'ring', T('disc'), 0.5 + 0.1 * ev.level, 0.16, 2.2); F.burst(ev.x, ev.y, PAL.hot, 6 + 2 * ev.level, 4, 0.2, 0.2); break;
       case 'discRecall': F.sprite(ev.x, ev.y, 'ring', '#ffffff', 0.6, 0.18, 2.2); break;
-      case 'discCatch': F.sprite(ev.x, ev.y, 'star', '#fff4d6', 0.9, 0.12, 1.4); F.burst(ev.x, ev.y, SUB_LOOK.disc.tint, 8, 3, 0.2, 0.22); break;
-      case 'discFade': F.burst(ev.x, ev.y, SUB_LOOK.disc.tint, 10, 3, 0.2, 0.3); break;
-      case 'wellLaunch': F.sprite(ev.x, ev.y, 'glow', GOLD, 0.8, 0.16, 1.6); break;
+      case 'discCatch': F.sprite(ev.x, ev.y, 'star', PAL.hot, 0.9, 0.12, 1.4); F.burst(ev.x, ev.y, T('disc'), 8, 3, 0.2, 0.22); break;
+      case 'discFade': F.burst(ev.x, ev.y, T('disc'), 10, 3, 0.2, 0.3); break;
+      case 'wellLaunch': F.sprite(ev.x, ev.y, 'glow', T('well'), 0.8, 0.16, 1.6); break;
       case 'wellOpen': {
         // It opens inward: a ring collapsing onto the point, light drawn into it
-        F.sprite(ev.x, ev.y, 'ring', '#ffe7b0', ev.r * 2.2, 0.28, 0.15); F.sprite(ev.x, ev.y, 'star', '#ffffff', 1.4, 0.14, 1.3);
+        F.sprite(ev.x, ev.y, 'ring', PAL.soft, ev.r * 2.2, 0.28, 0.15); F.sprite(ev.x, ev.y, 'star', '#ffffff', 1.4, 0.14, 1.3);
+        if (who.char === 'storm') F.dust(ev.x, ev.y, 0.6, [0, Math.PI], { reach: 2.5 });
         for (let i = 0; i < 24; i++) {
           const a = Math.random() * Math.PI * 2, r = ev.r * (0.7 + Math.random() * 0.4), w = toWorld(ev.x + Math.cos(a) * r, ev.y + Math.sin(a) * r, 0.2, this.v);
-          const P = F.particle(w, Math.random() < 0.4 ? '#ffffff' : GOLD, 0.2, 0.3); planeDir(ev.x, -Math.cos(a) * r * 3.4, -Math.sin(a) * r * 3.4, P.v); P.drag = 0.96;
+          const P = F.particle(w, Math.random() < 0.4 ? '#ffffff' : T('well'), 0.2, 0.3); planeDir(ev.x, -Math.cos(a) * r * 3.4, -Math.sin(a) * r * 3.4, P.v); P.drag = 0.96;
         }
         break;
       }
       case 'wellCollapse': {
         const k = ev.level || 1;
-        F.sprite(ev.x, ev.y, 'star', '#ffffff', 2 + 0.5 * k, 0.2, 1.6); F.fireball(ev.x, ev.y, '#ffd27a', 1 + 0.4 * k, 0.3);
-        F.sprite(ev.x, ev.y, 'ring', '#ffffff', ev.r * 0.6, 0.35, 3.2); F.sprite(ev.x, ev.y, 'ring', GOLD, ev.r * 0.4, 0.45, 4);
-        F.burst(ev.x, ev.y, GOLD, 24 + 8 * k, 10 + 2 * k, 0.35, 0.45, { grav: 4 }); F.burst(ev.x, ev.y, '#ffffff', 12 + 4 * k, 7, 0.24, 0.3);
+        F.sprite(ev.x, ev.y, 'star', '#ffffff', 2 + 0.5 * k, 0.2, 1.6); F.fireball(ev.x, ev.y, T('well'), 1 + 0.4 * k, 0.3);
+        F.sprite(ev.x, ev.y, 'ring', '#ffffff', ev.r * 0.6, 0.35, 3.2); F.sprite(ev.x, ev.y, 'ring', T('well'), ev.r * 0.4, 0.45, 4);
+        F.burst(ev.x, ev.y, T('well'), 24 + 8 * k, 10 + 2 * k, 0.35, 0.45, { grav: 4 }); F.burst(ev.x, ev.y, '#ffffff', 12 + 4 * k, 7, 0.24, 0.3);
         F.dust(ev.x, ev.y, 0.5 + 0.15 * k, [0, Math.PI], { reach: 2.2 });
         break;
       }
@@ -111,10 +112,10 @@ export class SubFX {
         break;
       }
       case 'riseBlast': {
-        // The Solar Uppercut's flare off the fist
-        F.sprite(ev.x, ev.y, 'star', '#ffffff', 2.2, 0.18, 1.5); F.sprite(ev.x, ev.y, 'glow', '#ffd27a', 2.2, 0.22, 1.8);
-        F.sprite(ev.x, ev.y, 'ring', '#fff1c9', ev.r * 0.8, 0.3, 3);
-        F.burst(ev.x, ev.y, GOLD, 26, 9, 0.32, 0.4, { grav: 6 }); F.burst(ev.x, ev.y, '#ffffff', 12, 7, 0.22, 0.25);
+        // The rising attack's flare off the fist (Nova's Solar Uppercut; the X-Men's in their own colour)
+        F.sprite(ev.x, ev.y, 'star', '#ffffff', 2.2, 0.18, 1.5); F.sprite(ev.x, ev.y, 'glow', PAL.energy, 2.2, 0.22, 1.8);
+        F.sprite(ev.x, ev.y, 'ring', PAL.hot, ev.r * 0.8, 0.3, 3);
+        F.burst(ev.x, ev.y, PAL.energy, 26, 9, 0.32, 0.4, { grav: 6 }); F.burst(ev.x, ev.y, '#ffffff', 12, 7, 0.22, 0.25);
         break;
       }
     }
@@ -124,7 +125,7 @@ export class SubFX {
   chain(ev) {
     const F = this.fx, b = this.bolts.find(q => q.life <= 0) || this.bolts.reduce((a, c) => (a.life < c.life ? a : c));
     b.pts = ev.pts.map(q => ({ x: q.x, y: q.y })); b.level = ev.level || 0; b.life = b.max = 0.2 + 0.05 * b.level + (ev.perfect ? 0.08 : 0);
-    const c = SUB_LOOK.chain.tint, s = ev.pts[0];
+    const c = subLook(ev.p, 'chain').tint, s = ev.pts[0]; b.tint = new THREE.Color(c); this.lastChain = c;
     F.sprite(s.x, s.y, 'star', '#fff6cc', 0.5 + 0.1 * b.level, 0.1, 1.4);
     for (let i = 1; i < ev.pts.length; i++) {
       const q = ev.pts[i];
@@ -150,13 +151,31 @@ export class SubFX {
   }
 
   // ---- Gravity wells ----
+  // Each owner's look, built once and shared by all their wells: Nova's black singularity in a gold accretion
+  // disc, Storm's Cyclone (no core: stacked rings of wind spinning round a pale funnel), Jean's TK Grip (a
+  // glowing orange sphere ringed with her light)
+  wellLook(owner) {
+    const id = owner && owner.char === 'storm' ? 'storm' : owner && owner.char === 'jean' ? 'jean' : 'nova';
+    this.looks = this.looks || {};
+    if (this.looks[id]) return this.looks[id];
+    const W = this.wellParts, tint = subLook(owner || { char: 'nova' }, 'well').tint;
+    if (id === 'nova') return (this.looks.nova = { style: 'gravity', coreMat: W.coreMat, discMat: W.discMat, rimMat: W.rimMat, haloMat: W.haloMat, glowMat: W.glowMat, tint });
+    const c = new THREE.Color(tint), discMat = W.discMat.clone(); discMat.color = id === 'storm' ? new THREE.Color(1.1, 1.35, 1.6) : c.clone().multiplyScalar(1.4);
+    const coreMat = new THREE.MeshBasicMaterial({ color: id === 'storm' ? '#dbeeff' : tint, transparent: true, opacity: id === 'storm' ? 0.18 : 0.42, depthWrite: false, toneMapped: false });
+    const sm = (mat, col) => { const m = mat.clone(); m.color = new THREE.Color(col); return m; };
+    return (this.looks[id] = { style: id === 'storm' ? 'cyclone' : 'tk', coreMat, discMat, rimMat: sm(W.rimMat, id === 'storm' ? '#e6f6ff' : '#ffd8a8'),
+      haloMat: sm(W.haloMat, tint), glowMat: sm(W.glowMat, tint), tint });
+  }
   makeWell(w) {
-    const W = this.wellParts, g = new THREE.Group();
-    const core = new THREE.Mesh(W.core, W.coreMat), disc = new THREE.Mesh(W.disc, W.discMat);
-    const rim = new THREE.Sprite(W.rimMat), halo = new THREE.Sprite(W.haloMat), glow = new THREE.Sprite(W.glowMat);
+    const W = this.wellParts, L = this.wellLook(w.owner), g = new THREE.Group();
+    const core = new THREE.Mesh(W.core, L.coreMat), disc = new THREE.Mesh(W.disc, L.discMat);
+    const rim = new THREE.Sprite(L.rimMat), halo = new THREE.Sprite(L.haloMat), glow = new THREE.Sprite(L.glowMat);
     disc.renderOrder = 5; rim.renderOrder = 5; halo.renderOrder = 4; glow.renderOrder = 5;
     g.add(glow, core, disc, rim, halo); this.scene.add(g);
-    const M = { g, core, disc, rim, halo, glow, spin: Math.random() * 6 };
+    // The Cyclone: more rings stacked up the funnel, wider toward the top
+    const rings = [];
+    if (L.style === 'cyclone') for (const [y, s] of [[-0.75, 0.55], [-0.2, 0.8], [0.4, 1.05], [1.0, 1.3]]) { const r = new THREE.Mesh(W.disc, L.discMat); r.renderOrder = 5; r.userData = { y, s }; g.add(r); rings.push(r); }
+    const M = { g, core, disc, rim, halo, glow, rings, look: L, spin: Math.random() * 6 };
     this.wells.set(w, M); return M;
   }
   syncWells(world, alpha, dt) {
@@ -166,10 +185,12 @@ export class SubFX {
       const M = this.wells.get(w) || this.makeWell(w);
       const x = w.px + (w.x - w.px) * alpha, y = w.py + (w.y - w.py) * alpha;
       toWorld(x, y, 0.2, M.g.position);
+      const tint = M.look.tint;
       if (w.phase === 'orb') {
-        // The orb: a small black heart in a gold glow, shedding sparks
+        // The orb: a small heart in a glow, shedding sparks
         M.core.scale.setScalar(0.13); M.glow.scale.setScalar(0.9 + 0.15 * Math.sin(this.t * 30)); M.disc.visible = M.rim.visible = M.halo.visible = false;
-        if (Math.random() < 0.7) F.burst(x, y, Math.random() < 0.5 ? '#ffffff' : GOLD, 1, 1, 0.16, 0.2);
+        for (const r of M.rings) r.visible = false;
+        if (Math.random() < 0.7) F.burst(x, y, Math.random() < 0.5 ? '#ffffff' : tint, 1, 1, 0.16, 0.2);
         continue;
       }
       // Open: a black singularity in a spinning accretion disc, a halo showing its reach, light spiralling in
@@ -181,9 +202,17 @@ export class SubFX {
       M.disc.rotation.set(1.18, 0, M.spin); M.disc.scale.setScalar((1.4 + 0.22 * L) * open * (0.5 + 0.5 * fade));
       M.rim.scale.setScalar((0.85 + 0.12 * L) * open); M.glow.scale.setScalar((1.6 + 0.3 * L) * open);
       M.halo.scale.setScalar(w.r * 2 * open); M.halo.material.rotation = this.t * 0.6;
+      // What it holds glints in its owner's colour
+      for (const e of world.enemies) if (e.wellT > 0) e.wellTint = tint;
+      if (M.look.style === 'cyclone') {
+        // A funnel of wind: the rings spin fast and sway, dust and debris whirl up through it
+        M.core.scale.set(0.9 * open, 1.8 * open, 0.9 * open); M.disc.visible = false;
+        M.rings.forEach((r, i) => { r.visible = true; r.position.set(Math.sin(this.t * 3 + i) * 0.12, r.userData.y * open, 0); r.rotation.set(1.42, 0, M.spin * (1.2 + 0.2 * i)); r.scale.setScalar((0.9 + 0.2 * L) * r.userData.s * open * (0.5 + 0.5 * fade)); });
+        if (Math.random() < 0.5) F.smoke(x + (Math.random() - 0.5) * 1.2, y - 0.6, '#c9d6e3', 1, 3, 0.35, 0.6, { dir: Math.PI / 2 + (Math.random() - 0.5), spread: 0.5, op: 0.4, grav: 0 });
+      }
       for (let i = 0; i < 3 + L; i++) {
         const a = Math.random() * Math.PI * 2, r = w.r * (0.55 + Math.random() * 0.45), wp = toWorld(x + Math.cos(a) * r, y + Math.sin(a) * r, 0.2, this.v);
-        const P = F.particle(wp, Math.random() < 0.3 ? '#ffffff' : GOLD, 0.14, 0.4);
+        const P = F.particle(wp, Math.random() < 0.3 ? '#ffffff' : tint, 0.14, 0.4);
         const s = r * 2.4; planeDir(x, -Math.cos(a) * s - Math.sin(a) * s * 0.8, -Math.sin(a) * s + Math.cos(a) * s * 0.8, P.v); P.drag = 0.97;
       }
     }
@@ -197,7 +226,7 @@ export class SubFX {
     for (const b of this.bolts) {
       if (b.life <= 0) { b.glow.mesh.visible = b.core.mesh.visible = false; continue; }
       b.life -= dt;
-      const k = Math.max(0, b.life / b.max), fl = 0.55 + Math.random() * 0.45, pts = this.jag(b), c = this.chainTint;
+      const k = Math.max(0, b.life / b.max), fl = 0.55 + Math.random() * 0.45, pts = this.jag(b), c = b.tint || this.chainTint;
       if (pts.length < 2) continue;
       b.glow.build(pts, cam, () => (0.14 + 0.035 * b.level) * (0.6 + 0.4 * k), () => [c.r * 1.3, c.g * 1.15, c.b * 0.7, 0.5 * k * fl]);
       b.core.build(pts, cam, () => 0.035 + 0.01 * b.level, () => [1.9, 1.85, 1.6, k * fl]);
@@ -209,9 +238,9 @@ export class SubFX {
       if (e.dead) continue;
       if (e.shockT > 0 && Math.random() < 0.55) {
         const w = toWorld(e.x + (Math.random() - 0.5) * e.w, e.y + Math.random() * e.h, 0.3, this.v);
-        const P = F.particle(w, Math.random() < 0.5 ? '#ffffff' : SUB_LOOK.chain.tint, 0.14, 0.12); P.v.set((Math.random() - 0.5) * 6, (Math.random() - 0.5) * 6, 0); P.drag = 0.8;
+        const P = F.particle(w, Math.random() < 0.5 ? '#ffffff' : this.lastChain || SUB_LOOK.chain.tint, 0.14, 0.12); P.v.set((Math.random() - 0.5) * 6, (Math.random() - 0.5) * 6, 0); P.drag = 0.8;
       }
-      if (e.wellT > 0 && Math.random() < 0.5) F.burst(e.x, e.y + e.h * 0.5, GOLD, 1, 2.5, 0.16, 0.3);
+      if (e.wellT > 0 && Math.random() < 0.5) F.burst(e.x, e.y + e.h * 0.5, e.wellTint || '#ffb547', 1, 2.5, 0.16, 0.3);
       if (e.slowT > 0) {
         seen.add(e);
         let s = this.auras.get(e);
@@ -233,13 +262,14 @@ export class SubFX {
       const last = this.lastSt.get(p); this.lastSt.set(p, rising ? p.st : -1);
       if (!rising) continue;
       if (p.st >= m.su && last !== undefined && last < m.su) {
-        F.sprite(p.x, p.y + 1.6, 'glow', '#ffd27a', 3.6, 0.3, 1.1, 0.2, 0.22);   // a column of gold light where he took off
-        F.groundRing(p.x, p.y, '#fff1c9', 0.3, 1.8, 0.3, 0.9); F.dust(p.x, p.y, 0.5, [0, Math.PI], { noRing: true });
+        const P0 = fxPal(p);
+        F.sprite(p.x, p.y + 1.6, 'glow', P0.energy, 3.6, 0.3, 1.1, 0.2, 0.22);   // a column of light where they took off
+        F.groundRing(p.x, p.y, P0.hot, 0.3, 1.8, 0.3, 0.9); F.dust(p.x, p.y, 0.5, [0, Math.PI], { noRing: true });
       }
       if (p.st >= m.su && p.st < m.su + m.ac) {
         for (const dz of [-0.13, 0.13]) {
           const w = toWorld(p.x + (Math.random() - 0.5) * 0.12, p.y - 0.05, dz, this.v2);
-          const P = F.particle(w, Math.random() < 0.5 ? '#fff1c9' : GOLD, 0.34, 0.2); P.v.set((Math.random() - 0.5) * 0.8, -7 - Math.random() * 4, (Math.random() - 0.5) * 0.8); P.drag = 0.86;
+          const P0 = fxPal(p), P = F.particle(w, Math.random() < 0.5 ? P0.hot : P0.energy, 0.34, 0.2); P.v.set((Math.random() - 0.5) * 0.8, -7 - Math.random() * 4, (Math.random() - 0.5) * 0.8); P.drag = 0.86;
         }
         if (Math.random() < 0.5) F.smoke(p.x, p.y - 0.2, '#8e97a3', 1, 0.8, 0.4, 0.5, { dir: -Math.PI / 2, spread: 1, op: 0.35 });
       }
@@ -251,12 +281,13 @@ export class SubFX {
     const b = this.bolts[0], pts = [at.clone(), at.clone().add(new THREE.Vector3(1, 0.3, 0)), at.clone().add(new THREE.Vector3(2, 0, 0))];
     b.glow.build(pts, cam, () => 0.1, () => [1, 1, 1, 1]); b.core.build(pts, cam, () => 0.05, () => [1, 1, 1, 1]);
     const M = this.makeWell({}); M.g.position.copy(at); this.warmWell = M;
+    for (const id of ['storm', 'jean']) { const X = this.makeWell({ owner: { char: id } }); X.g.position.copy(at); X.rings.forEach(r => { r.visible = true; }); this.warmExtra = [...(this.warmExtra || []), X]; }
     const a = new THREE.Sprite(this.auraMat); a.position.copy(at); this.scene.add(a); this.warmAura = a;
     return [b.glow.mesh, b.core.mesh, M.g, a];
   }
   warmDone() {
     const b = this.bolts[0]; b.glow.mesh.visible = b.core.mesh.visible = false;
-    if (this.warmWell) { this.warmWell.g.visible = false; for (const [w, M] of this.wells) if (M === this.warmWell) this.wells.delete(w); }
+    if (this.warmWell) { this.warmWell.g.visible = false; for (const [w, M] of this.wells) if (M === this.warmWell || (this.warmExtra || []).includes(M)) { M.g.visible = false; this.wells.delete(w); } }
     if (this.warmAura) this.warmAura.visible = false;
   }
 }

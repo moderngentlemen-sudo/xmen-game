@@ -1,7 +1,7 @@
 // Visual effects: particles, glints, telegraph markers, projectiles, barriers, lasers, scarf.
 import * as THREE from 'three';
 import { pathFrame, groundBelow } from './level.js';
-import { CHARS, HOSTILE, NOVA, SETTINGS, ATTACH_LOOK, DASH_CHARGE, DASH_SLASH, POUND, MARKSMAN, SUB_LOOK } from './config.js';
+import { CHARS, HOSTILE, NOVA, SETTINGS, ATTACH_LOOK, DASH_CHARGE, DASH_SLASH, POUND, MARKSMAN, SUB_LOOK, attachLook, subLook, fxPal, kitOf, FXPAL } from './config.js';
 import { toWorld, planeDir } from './space.js';
 import { Ghosts } from './ghosts.js';
 import { buildPlayerRig } from './rigs.js';
@@ -36,6 +36,15 @@ const starTex = () => canvasTex(128, (g, s) => {
 const ringTex = () => canvasTex(128, (g, s) => {
   g.strokeStyle = '#fff'; g.lineWidth = s * 0.07; g.beginPath(); g.arc(s / 2, s / 2, s * 0.4, 0, Math.PI * 2); g.stroke();
 });
+// A butterfly (Psylocke's psychic sign): two pairs of wings and a thin body, white so it can be tinted
+const flyTex = () => canvasTex(128, (g, s) => {
+  g.translate(s / 2, s / 2); g.fillStyle = '#fff';
+  for (const k of [1, -1]) {
+    g.beginPath(); g.ellipse(k * s * 0.2, -s * 0.12, s * 0.2, s * 0.15, k * -0.5, 0, Math.PI * 2); g.fill();
+    g.beginPath(); g.ellipse(k * s * 0.15, s * 0.14, s * 0.12, s * 0.1, k * 0.45, 0, Math.PI * 2); g.fill();
+  }
+  g.fillRect(-s * 0.02, -s * 0.2, s * 0.04, s * 0.4);
+});
 const jagTex = () => canvasTex(128, (g, s) => {
   g.fillStyle = 'rgba(255,255,255,0)'; g.fillRect(0, 0, s, s); g.fillStyle = '#fff';
   for (let i = 0; i < 4; i++) { const x = i * s / 4; g.beginPath(); g.moveTo(x, s); g.lineTo(x + s / 8, s * 0.25); g.lineTo(x + s / 4, s); g.closePath(); g.fill(); }
@@ -58,7 +67,7 @@ void main(){ vec4 t = texture2D(map, gl_PointCoord); gl_FragColor = vec4(vC, t.a
 export class FX {
   constructor(scene, rigs = new Map()) {
     this.scene = scene; this.rigs = rigs;
-    this.tex = { glow: glowTex(), star: starTex(), ring: ringTex(), jag: jagTex() };
+    this.tex = { glow: glowTex(), star: starTex(), ring: ringTex(), jag: jagTex(), fly: flyTex() };
     this.tex.jag.wrapS = THREE.RepeatWrapping;
     // Particles (one draw call)
     const N = 1600; this.N = N; this.pi = 0;
@@ -311,7 +320,7 @@ export class FX {
 
   // ---- Event reactions ----
   onEvent(ev, world) {
-    const pc = ev.p ? CHARS[ev.p.char].energy : '#ffffff';
+    const pc = ev.p ? CHARS[ev.p.char].energy : '#ffffff', pal = fxPal(ev.p || (ev.owner && ev.owner.kind === 'player' ? ev.owner : null));
     switch (ev.type) {
       case 'hit': {
         const col = ev.owner && ev.owner.kind === 'player' ? CHARS[ev.owner.char].energy : '#ffffff', d = ev.dmg || 1;
@@ -321,11 +330,16 @@ export class FX {
         // Echo's blades and glaive leave a slash mark across what they cut; Nova's fists a hard-light flash
         const o = ev.owner;
         if (o && o.kind === 'player' && ev.source === 'melee') {
-          if (o.char === 'echo') {
+          const P = fxPal(o);
+          if (o.arch === 'echo') {
             const ds = o.state === 'dashslash' && o.slash, rot = ds ? Math.atan2(ds.dy, ds.dx) : (Math.random() - 0.5) * 1.2 + (Math.random() < 0.5 ? 0 : 0.5);
-            this.slashMark(ev.x, ev.y, '#fff1d6', 1.2 + Math.min(1.4, d * 0.18), rot, ds ? 0.2 : 0.14);
+            if (kitOf(o).fire === 'drill') {
+              // Three parallel claw marks across what he cuts
+              const nx = -Math.sin(rot) * 0.22, ny = Math.cos(rot) * 0.22;
+              for (const k of [-1, 0, 1]) this.slashMark(ev.x + nx * k, ev.y + ny * k, k ? P.soft : P.hot, 1.1 + Math.min(1.2, d * 0.16), rot, ds ? 0.2 : 0.15);
+            } else this.slashMark(ev.x, ev.y, P.hot, 1.2 + Math.min(1.4, d * 0.18), rot, ds ? 0.2 : 0.14);
             if (d >= 4) this.slashMark(ev.x, ev.y, col, 1.6 + d * 0.12, rot + 1.2, 0.16);
-          } else this.sprite(ev.x, ev.y, 'star', '#fff4d6', 0.7 + Math.min(1, d * 0.15), 0.12, 1.5);
+          } else this.sprite(ev.x, ev.y, 'star', P.hot, 0.7 + Math.min(1, d * 0.15), 0.12, 1.5);
         }
         break;
       }
@@ -353,13 +367,13 @@ export class FX {
       case 'erase': this.burst(ev.x, ev.y, '#ffe2a8', 8, 5, 0.3, 0.25); break;
       case 'amplify': this.sprite(ev.x, ev.y, 'ring', '#ffe2a8', 0.5, 0.15, 2); break;
       case 'bulwark': {
-        this.sprite(ev.x + ev.ax * 1.2, ev.y + ev.ay * 1.2, 'ring', NOVA_GOLD, 1.4, 0.3, 3);
-        this.burst(ev.x + ev.ax * 1.5, ev.y + ev.ay * 1.5, NOVA_GOLD, 26, 10, 0.4, 0.35, { dir: Math.atan2(ev.ay, ev.ax), spread: 1.6 });
+        this.sprite(ev.x + ev.ax * 1.2, ev.y + ev.ay * 1.2, 'ring', pal.energy, 1.4, 0.3, 3);
+        this.burst(ev.x + ev.ax * 1.5, ev.y + ev.ay * 1.5, pal.energy, 26, 10, 0.4, 0.35, { dir: Math.atan2(ev.ay, ev.ax), spread: 1.6 });
         break;
       }
       case 'boost': this.sprite(ev.x, ev.y, 'ring', '#ffe2a8', 1.2, 0.25, 2.5); this.burst(ev.x, ev.y, '#ffe2a8', 14, 8, 0.35, 0.3); break;
       case 'vbStart': this.burst(ev.p.x, ev.p.y + 0.8, pc, 6 + ev.tier * 6, 4 + ev.tier * 3, 0.35, 0.25); break;
-      case 'lashPull': case 'lashZip': this.burst(ev.e.x, ev.e.y + ev.e.h / 2, CHARS.echo.energy, 14, 6, 0.35, 0.3); break;
+      case 'lashPull': case 'lashZip': this.burst(ev.e.x, ev.e.y + ev.e.h / 2, pc, 14, 6, 0.35, 0.3); break;
       case 'tag': this.sprite(ev.x, ev.y + 0.3, 'star', '#ffb347', 0.7, 0.4, 1.2); break;
       case 'land':
         if (!ev.p) break;
@@ -375,7 +389,7 @@ export class FX {
         // Kick-off puff where the boot left the wall; Nova's skate blades throw sparks
         const wx = ev.p.x - ev.dir * ev.p.w / 2;
         this.smoke(wx, ev.p.y + 0.3, '#a3abb5', ev.climb ? 4 : 6, 2.5, 0.35, 0.4, { dir: ev.dir > 0 ? 0 : Math.PI, spread: 1.6, op: 0.5 });
-        if (ev.p.char === 'nova') this.burst(wx, ev.p.y + 0.1, '#ffe2a8', 8, 5, 0.16, 0.25, { dir: ev.dir > 0 ? -0.6 : Math.PI + 0.6, spread: 1, grav: 8 });
+        if (ev.p.arch === 'nova' && kitOf(ev.p).skate) this.burst(wx, ev.p.y + 0.1, pal.soft, 8, 5, 0.16, 0.25, { dir: ev.dir > 0 ? -0.6 : Math.PI + 0.6, spread: 1, grav: 8 });
         this.sprite(wx, ev.p.y + 0.5, 'ring', '#ffffff', 0.35, 0.14, 2.4);
         break;
       }
@@ -402,7 +416,7 @@ export class FX {
       case 'crit': this.popText(ev.x, ev.y + 0.5, 'CRIT', '#ffd27a', 0.75); this.sprite(ev.x, ev.y, 'star', '#ffffff', 1.5, 0.16, 1.5); break;
       case 'deflect': {
         // The staff knocks the shot back: a sharp spark flash, a ring, and sparks along its new path
-        const c = ev.perfect ? '#fff6d8' : ECHO_ORANGE;
+        const c = ev.perfect ? pal.hot : pal.energy;
         this.sprite(ev.x, ev.y, 'star', '#ffffff', ev.perfect ? 1.8 : 1.1, 0.14, 1.4);
         this.sprite(ev.x, ev.y, 'ring', c, ev.perfect ? 1.1 : 0.7, 0.22, 2.8);
         this.burst(ev.x, ev.y, c, ev.perfect ? 24 : 14, ev.perfect ? 11 : 8, 0.26, 0.28, { grav: 6 });
@@ -410,7 +424,7 @@ export class FX {
         break;
       }
       case 'dashSlash': {
-        const p = ev.p, a = Math.atan2(ev.dy, ev.dx), col = ev.tier >= 3 ? '#fff1d6' : ECHO_ORANGE;
+        const p = ev.p, a = Math.atan2(ev.dy, ev.dx), col = ev.tier >= 3 ? pal.hot : pal.energy;
         this.slashes.set(p, { x0: p.x, y0: p.y + 0.95, tier: ev.tier, drawn: false });
         this.sprite(p.x, p.y + 0.9, 'ring', col, 0.6 + ev.tier * 0.15, 0.18, 2.4);
         this.burst(p.x, p.y + 0.9, col, 10 + ev.tier * 6, 8 + ev.tier * 2, 0.3, 0.25, { dir: a + Math.PI, spread: 1 });
@@ -419,15 +433,15 @@ export class FX {
       }
       case 'crescent': {
         const p = ev.p;
-        this.sprite(ev.x, ev.y, 'star', '#ffffff', 1.5, 0.14, 1.4); this.sprite(ev.x, ev.y, 'ring', ECHO_ORANGE, 0.9, 0.2, 2.6);
-        this.burst(ev.x, ev.y, ECHO_ORANGE, 18, 9, 0.3, 0.3, { dir: p.facing > 0 ? 0 : Math.PI, spread: 1.2 });
+        this.sprite(ev.x, ev.y, 'star', '#ffffff', 1.5, 0.14, 1.4); this.sprite(ev.x, ev.y, 'ring', pal.energy, 0.9, 0.2, 2.6);
+        this.burst(ev.x, ev.y, pal.energy, 18, 9, 0.3, 0.3, { dir: p.facing > 0 ? 0 : Math.PI, spread: 1.2 });
         break;
       }
 
       case 'pogo': {
         const p = ev.p;
-        this.sprite(p.x, p.y, 'ring', '#fff1d6', 0.9, 0.2, 2.6); this.sprite(p.x, p.y + 0.9, 'ring', ECHO_ORANGE, 0.7, 0.25, 2.4);
-        this.burst(p.x, p.y - 0.1, ECHO_ORANGE, 16, 8, 0.28, 0.25, { dir: -Math.PI / 2, spread: 1.6 });
+        this.sprite(p.x, p.y, 'ring', pal.hot, 0.9, 0.2, 2.6); this.sprite(p.x, p.y + 0.9, 'ring', pal.energy, 0.7, 0.25, 2.4);
+        this.burst(p.x, p.y - 0.1, pal.energy, 16, 8, 0.28, 0.25, { dir: -Math.PI / 2, spread: 1.6 });
         break;
       }
       case 'swing':
@@ -491,33 +505,33 @@ export class FX {
       case 'slam': this.burst(ev.e.x, ev.e.y + 0.2, HOSTILE, 24, 9, 0.5, 0.45, { dir: Math.PI / 2, spread: 3 }); this.dust(ev.e.x, ev.e.y, 0.9); break;
       case 'telegraph': this.telegraphs.push({ e: ev.e, cat: ev.cat, ticks: ev.ticks, t: 0 }); break;
       case 'lock': this.sprite(ev.e.x + ev.e.facing * 1.3, ev.e.y + 1.35, 'star', '#ffffff', 0.9, 0.2, 1.3); break;
-      case 'snareThrow': this.burst(ev.x, ev.y, ECHO_ORANGE, 6, 3, 0.25, 0.2); break;
-      case 'snarePlant': this.sprite(ev.x, ev.y + 0.1, 'ring', ECHO_ORANGE, 0.9, 0.3, 2); break;
-      case 'snareTrigger': this.sprite(ev.x, ev.y + 0.3, 'ring', ECHO_ORANGE, 1.4, 0.3, 2.6); this.burst(ev.x, ev.y + 0.3, ECHO_ORANGE, 20, 7, 0.35, 0.35); break;
-      case 'snared': this.burst(ev.x, ev.y, ECHO_ORANGE, ev.weak ? 6 : 14, 5, 0.3, 0.35); break;
-      case 'leash': this.sprite(ev.e.x, ev.e.y + ev.e.h / 2, 'ring', ECHO_ORANGE, 0.8, 0.25, 2); break;
-      case 'yank': this.burst(ev.e.x, ev.e.y + ev.e.h / 2, ECHO_ORANGE, 18, 8, 0.4, 0.35); this.sprite(ev.e.x, ev.e.y + ev.e.h / 2, 'ring', '#ffffff', 1.3, 0.25, 2.8); break;
+      case 'snareThrow': this.burst(ev.x, ev.y, pal.energy, 6, 3, 0.25, 0.2); break;
+      case 'snarePlant': this.sprite(ev.x, ev.y + 0.1, 'ring', pal.energy, 0.9, 0.3, 2); break;
+      case 'snareTrigger': { const c = fxPal(ev.owner).energy; this.sprite(ev.x, ev.y + 0.3, 'ring', c, 1.4, 0.3, 2.6); this.burst(ev.x, ev.y + 0.3, c, 20, 7, 0.35, 0.35); break; }
+      case 'snared': this.burst(ev.x, ev.y, pal.energy, ev.weak ? 6 : 14, 5, 0.3, 0.35); break;
+      case 'leash': this.sprite(ev.e.x, ev.e.y + ev.e.h / 2, 'ring', pal.energy, 0.8, 0.25, 2); break;
+      case 'yank': this.burst(ev.e.x, ev.e.y + ev.e.h / 2, pal.energy, 18, 8, 0.4, 0.35); this.sprite(ev.e.x, ev.e.y + ev.e.h / 2, 'ring', '#ffffff', 1.3, 0.25, 2.8); break;
       // Scarf modes
-      case 'scarfMode': this.burst(ev.p.x, ev.p.y + 1.4, ev.mode === 'veil' ? VEIL_PALE : ECHO_ORANGE, ev.mode === 'flare' ? 18 : 12, 3, 0.3, 0.3); break;
+      case 'scarfMode': this.burst(ev.p.x, ev.p.y + 1.4, ev.mode === 'veil' ? VEIL_PALE : pal.energy, ev.mode === 'flare' ? 18 : 12, 3, 0.3, 0.3); break;
       case 'veilOn': this.burst(ev.p.x, ev.p.y + 1, VEIL_PALE, 14, 2.5, 0.35, 0.45); break;
       case 'veilBreak': if (ev.wasHidden) this.burst(ev.p.x, ev.p.y + 1, VEIL_PALE, 12, 5, 0.3, 0.3); break;
       case 'vanish': this.sprite(ev.p.x, ev.p.y + 1, 'ring', VEIL_PALE, 1.2, 0.3, 2.4); this.burst(ev.p.x, ev.p.y + 1, VEIL_PALE, 20, 6, 0.35, 0.4); break;
-      case 'ambush': this.sprite(ev.x, ev.y, 'star', '#ffffff', 2.0, 0.28, 1.6); this.burst(ev.x, ev.y, ECHO_ORANGE, 26, 10, 0.45, 0.45); break;
-      case 'challenge': this.sprite(ev.x, ev.y, 'ring', ECHO_ORANGE, 2.2, 0.45, 4.2); this.burst(ev.x, ev.y, ECHO_ORANGE, 30, 9, 0.4, 0.45); break;
+      case 'ambush': this.sprite(ev.x, ev.y, 'star', '#ffffff', 2.0, 0.28, 1.6); this.burst(ev.x, ev.y, pal.energy, 26, 10, 0.45, 0.45); break;
+      case 'challenge': this.sprite(ev.x, ev.y, 'ring', pal.energy, 2.2, 0.45, 4.2); this.burst(ev.x, ev.y, pal.energy, 30, 9, 0.4, 0.45); break;
       case 'lostTrack': this.glyph(ev.e, '?', '#ffffff', 1.0); break;
-      case 'taunted': this.glyph(ev.e, '!', ECHO_ORANGE, 0.9); break;
+      case 'taunted': this.glyph(ev.e, '!', fxPal(ev.e.taunter).energy, 0.9); break;
       // Nova, Marksman kit
       case 'attach': {
-        const c = ATTACH_LOOK[ev.attach].tint, x = ev.p.x + ev.p.facing * 0.35, y = ev.p.y + 1.05;
+        const c = attachLook(ev.p, ev.attach).tint, x = ev.p.x + ev.p.facing * 0.35, y = ev.p.y + 1.05;
         this.sprite(x, y, 'ring', c, 0.5, 0.2, 2); this.burst(x, y, c, 6, 2.5, 0.25, 0.25);
         break;
       }
       case 'chargeLevel': case 'burstLevel':
-        if (ev.p.char === 'nova') this.charge.levelUp(ev.p, this.rigs.get(ev.p), ev.level, ev.type === 'burstLevel' ? 'burst' : 'shot');
+        if (ev.p.arch === 'nova') this.charge.levelUp(ev.p, this.rigs.get(ev.p), ev.level, ev.type === 'burstLevel' ? 'burst' : 'shot');
         break;
       case 'splash': if (ev.r > 1.2) this.dust(ev.x, ev.y, 0.15 + 0.1 * (ev.level || 0), [0, Math.PI], { reach: ev.r * 0.6, noRing: true });
-        this.sprite(ev.x, ev.y, 'ring', NOVA_GOLD, 0.35 + ev.r * 0.7, 0.2, 2.2);
-        this.burst(ev.x, ev.y, NOVA_GOLD, 5 + Math.round(ev.r * 6), 3 + ev.r * 3, 0.28, 0.25, { grav: 5 });
+        this.sprite(ev.x, ev.y, 'ring', pal.energy, 0.35 + ev.r * 0.7, 0.2, 2.2);
+        this.burst(ev.x, ev.y, pal.energy, 5 + Math.round(ev.r * 6), 3 + ev.r * 3, 0.28, 0.25, { grav: 5 });
         break;
       case 'rocketJump': this.rocketBlast(ev); break;
       case 'mortarShot': this.addLandingMark(ev.x, ev.y, ev.r, ev.ticks / 60); break;
@@ -531,24 +545,24 @@ export class FX {
         this.burst(ev.e.x + ev.e.facing * 0.8, ev.e.y + 0.9, '#e6e9f0', 20, 8, 0.4, 0.45, { grav: 10 });
         break;
       case 'perfectRelease':
-        this.sprite(ev.x, ev.y, 'star', '#ffffff', 1.8, 0.22, 1.5); this.sprite(ev.x, ev.y, 'ring', NOVA_GOLD, 1.0, 0.3, 3);
-        this.burst(ev.x, ev.y, '#fff1c9', 14, 7, 0.35, 0.3);
+        this.sprite(ev.x, ev.y, 'star', '#ffffff', 1.8, 0.22, 1.5); this.sprite(ev.x, ev.y, 'ring', pal.energy, 1.0, 0.3, 3);
+        this.burst(ev.x, ev.y, pal.hot, 14, 7, 0.35, 0.3);
         break;
       case 'blast': {
         this.dust(ev.x, ev.y, 0.35 + 0.15 * (ev.level || 1), [0, Math.PI], { reach: 1 + (ev.r || 1) * 0.6 });
-        const c = ATTACH_LOOK.arc.tint;
-        this.sprite(ev.x, ev.y, 'ring', c, ev.r * 0.9, 0.3, 2.4); this.sprite(ev.x, ev.y, 'star', '#fff1d0', ev.r * 0.8, 0.18, 1.3);
+        const c = ev.p && ev.p.kind === 'player' ? attachLook(ev.p, 'arc').tint : ATTACH_LOOK.arc.tint;
+        this.sprite(ev.x, ev.y, 'ring', c, ev.r * 0.9, 0.3, 2.4); this.sprite(ev.x, ev.y, 'star', pal.hot, ev.r * 0.8, 0.18, 1.3);
         this.burst(ev.x, ev.y, c, 22 + ev.level * 6, 7 + ev.r * 2, 0.45, 0.4, { grav: 6 }); this.burst(ev.x, ev.y, '#ffffff', 8, 4, 0.3, 0.25);
         break;
       }
-      case 'split': this.sprite(ev.x, ev.y, 'star', ATTACH_LOOK.prism.tint, 1.1, 0.18, 1.4); this.burst(ev.x, ev.y, ATTACH_LOOK.prism.tint, 10, 6, 0.3, 0.25); break;
-      case 'ricochet': this.burst(ev.x, ev.y, ATTACH_LOOK.prism.tint, 4, 4, 0.22, 0.18); break;
+      case 'split': { const c = ev.p ? attachLook(ev.p, 'prism').tint : ATTACH_LOOK.prism.tint; this.sprite(ev.x, ev.y, 'star', c, 1.1, 0.18, 1.4); this.burst(ev.x, ev.y, c, 10, 6, 0.3, 0.25); break; }
+      case 'ricochet': { const o = ev.pr && ev.pr.owner; this.burst(ev.x, ev.y, o && o.kind === 'player' ? fxPal(o).energy : ATTACH_LOOK.prism.tint, 4, 4, 0.22, 0.18); break; }
       case 'burst':
-        this.burst(ev.x, ev.y, '#ffcf7a', ev.charged ? 22 : 14, ev.charged ? 14 : 11, 0.32, 0.16, { dir: Math.atan2(ev.ay, ev.ax), spread: ev.charged ? 0.9 : 0.7 });
-        this.sprite(ev.x, ev.y, 'ring', NOVA_GOLD, ev.charged ? 0.8 : 0.5, 0.14, 2.2);
+        this.burst(ev.x, ev.y, subLook(ev.p, 'scatter').tint, ev.charged ? 22 : 14, ev.charged ? 14 : 11, 0.32, 0.16, { dir: Math.atan2(ev.ay, ev.ax), spread: ev.charged ? 0.9 : 0.7 });
+        this.sprite(ev.x, ev.y, 'ring', pal.energy, ev.charged ? 0.8 : 0.5, 0.14, 2.2);
         break;
-      case 'carve': this.dust(ev.p.x, ev.p.y, 0.25, [ev.p.vx > 0 ? 0 : Math.PI], { noRing: true }); this.burst(ev.p.x + Math.sign(ev.p.vx) * 0.2, ev.p.y + 0.05, '#ffe2a8', 8, 4, 0.22, 0.25, { dir: ev.p.vx > 0 ? 0.5 : Math.PI - 0.5, spread: 0.9, grav: 8 }); break;
-      case 'focusUp': this.sprite(ev.p.x, ev.p.y + ev.p.h + 0.35, 'star', NOVA_GOLD, 0.45 + ev.level * 0.08, 0.3, 1.3); break;
+      case 'carve': this.dust(ev.p.x, ev.p.y, 0.25, [ev.p.vx > 0 ? 0 : Math.PI], { noRing: true }); this.burst(ev.p.x + Math.sign(ev.p.vx) * 0.2, ev.p.y + 0.05, pal.soft, 8, 4, 0.22, 0.25, { dir: ev.p.vx > 0 ? 0.5 : Math.PI - 0.5, spread: 0.9, grav: 8 }); break;
+      case 'focusUp': this.sprite(ev.p.x, ev.p.y + ev.p.h + 0.35, 'star', pal.energy, 0.45 + ev.level * 0.08, 0.3, 1.3); break;
       case 'focusLost': this.burst(ev.p.x, ev.p.y + 1.2, '#9aa6b8', 8, 3, 0.25, 0.3); break;
       // Nova: the hard-light Aegis and the Level 4 beam
       case 'aegisOn': case 'aegisHit': case 'aegisOff': this.aegis.onEvent(ev); break;
@@ -556,7 +570,7 @@ export class FX {
         this.beam.onEvent(ev);
         const p = ev.p, rig = this.rigs.get(p);
         this.charge.release({ level: 4, attach: ev.attach, perfect: true, ax: p.aimX, ay: p.aimY, beam: true }, p, rig);
-        this.fireball(p.x + p.aimX * 0.8, p.y + p.h * 0.62 + p.aimY * 0.8, '#ffd27a', 1.4, 0.2);
+        this.fireball(p.x + p.aimX * 0.8, p.y + p.h * (kitOf(p).eyes ? 0.9 : 0.62) + p.aimY * 0.8, pal.energy, 1.4, 0.2);
         break;
       }
       // Version 9: secondary weapons, the dodge, the Solar Uppercut, and the ultimates
@@ -565,12 +579,42 @@ export class FX {
         this.sub.onEvent(ev); break;
       case 'ultCast': case 'ultJoin': case 'ultRun': case 'ultBegin': case 'ultNova': case 'ultCut': case 'ultFinisher': case 'ultEnd': case 'teamFinisher':
         this.ult.onEvent(ev); break;
+      // The X-Men's Signatures
+      case 'visor': {
+        // Visor Overdrive: a red flare off the visor, a ring of concussive force, a streak of light across his eyes
+        const p = ev.p;
+        this.sprite(ev.x, ev.y, 'star', '#ffffff', 1.6, 0.16, 1.4); this.slashMark(ev.x, ev.y, pal.energy, 4.2, 0, 0.22); this.slashMark(ev.x, ev.y, pal.hot, 2.6, 0, 0.16);
+        this.sprite(p.x, p.y + 1, 'ring', pal.energy, ev.r * 0.9, 0.3, 3); this.groundRing(p.x, p.y, pal.energy, 0.4, ev.r + 0.6, 0.35, 0.8);
+        this.burst(p.x, p.y + 1, pal.energy, 34, 11, 0.36, 0.4); this.burst(ev.x, ev.y, pal.hot, 12, 6, 0.24, 0.25);
+        this.dust(p.x, p.y, 0.5, [0, Math.PI], { noRing: true });
+        break;
+      }
+      case 'squall': {
+        // Squall: rings of wind blow outward, a swirl of white and blue around her, dust kicked off the floor
+        for (const [sz, life] of [[1.2, 0.3], [ev.r * 0.9, 0.4], [ev.r * 1.25, 0.5]]) this.sprite(ev.x, ev.y, 'ring', pal.soft, sz, life, 2.6);
+        for (let i = 0; i < 3; i++) this.burst(ev.x, ev.y, i ? pal.energy : '#ffffff', 22, 13, 0.3, 0.45, { drag: 0.86 });
+        this.smoke(ev.x, ev.y, '#d9e6f2', 12, 6, 0.7, 0.6, { op: 0.35, grow: 2.4, drag: 0.85, grav: 0 });
+        this.dust(ev.x, ev.p.y, 0.8, [0, Math.PI], { reach: 2.5 });
+        break;
+      }
+      case 'berserk': {
+        const p = ev.p;
+        this.popText(p.x, p.y + p.h + 0.5, 'BERSERK', '#ffcf3a', 0.9);
+        this.sprite(p.x, p.y + 1, 'ring', '#ff6a2a', 1.6, 0.35, 3); this.sprite(p.x, p.y + 1, 'star', '#ffffff', 1.8, 0.18, 1.5);
+        this.burst(p.x, p.y + 1, '#ff7a2a', 30, 10, 0.4, 0.45); this.burst(p.x, p.y + 1, pal.energy, 20, 7, 0.3, 0.4);
+        this.dust(p.x, p.y, 0.7);
+        break;
+      }
+      case 'berserkEnd': this.smoke(ev.p.x, ev.p.y + 1, '#c9a27a', 6, 1.5, 0.5, 0.6, { op: 0.35 }); break;
+      case 'drillLevel': this.charge.levelUp(ev.p, this.rigs.get(ev.p), ev.level, 'dash'); break;
+      case 'healed': this.sprite(ev.p.x, ev.p.y + 1.1, 'ring', '#bff7d4', 0.9, 0.3, 2.2); break;
+      case 'ultBolt': case 'ultThunder': this.ult.onEvent(ev); break;
       case 'ultReady': this.sprite(ev.p.x, ev.p.y + 1, 'ring', '#7fe3ff', 1, 0.4, 3); this.burst(ev.p.x, ev.p.y + 1, '#7fe3ff', 20, 5, 0.28, 0.45); break;
       case 'beamEnd': {
         this.beam.onEvent(ev);
         const p = ev.p, c = { x: p.x + p.facing * 0.5, y: p.y + p.h * 0.62 };
         this.smoke(c.x, c.y, '#8e97a3', 6, 1.6, 0.5, 0.7, { dir: Math.PI / 2, spread: 1.4, op: 0.4 });
-        this.burst(c.x, c.y, '#fff1c9', 10, 4, 0.2, 0.3);
+        this.burst(c.x, c.y, pal.hot, 10, 4, 0.2, 0.3);
         break;
       }
     }
@@ -607,9 +651,9 @@ export class FX {
   // floor, and sparks (Nova's in hard-light gold, Echo's in orange with a cross of slash marks). All of it
   // grows with the charge level.
   poundLand(ev) {
-    const p = ev.p, x = ev.x, y = ev.y, L = ev.level, r = ev.r, c = CHARS[p.char].energy, k = 0.4 + 0.2 * L;
+    const p = ev.p, x = ev.x, y = ev.y, L = ev.level, r = ev.r, c = CHARS[p.char].energy, k = 0.4 + 0.2 * L, pal = fxPal(p);
     this.sprite(x, y + 0.4, 'star', '#ffffff', 1.8 + 0.6 * L, 0.16 + 0.02 * L, 1.5);
-    this.fireball(x, y + 0.3, p.char === 'nova' ? '#ffd27a' : '#ff9a1f', 0.9 + 0.35 * L, 0.2 + 0.04 * L);
+    this.fireball(x, y + 0.3, pal.energy, 0.9 + 0.35 * L, 0.2 + 0.04 * L);
     this.groundRing(x, y, '#fff6e0', 0.3, r * 1.1, 0.32 + 0.05 * L, 0.95); this.groundRing(x, y, c, 0.2, r * 0.8, 0.28, 0.9);
     if (L >= 2) this.groundRing(x, y, '#ffffff', 0.5, r * 1.35, 0.45, 0.7);
     this.dust(x, y, 0.7 + 0.25 * L, [0, Math.PI], { noRing: true, spread: 0.3 });
@@ -617,8 +661,8 @@ export class FX {
     for (const dir of [0.1, Math.PI - 0.1]) this.burst(x, y + 0.15, c, 10 + 6 * L, 9 + 3 * L, 0.3, 0.32, { dir, spread: 0.35, grav: 5 });
     this.burst(x, y + 0.2, '#5d6674', 8 + 5 * L, 6 + 2 * L, 0.3, 0.6, { dir: Math.PI / 2, spread: 1.9, grav: 18 });
     this.burst(x, y + 0.3, '#ffffff', 10 + 4 * L, 6 + 2 * L, 0.22, 0.25);
-    if (p.char === 'echo') { this.slashMark(x, y + 0.5, '#fff1d6', 1.6 + 0.4 * L, 0.6, 0.18); this.slashMark(x, y + 0.5, c, 1.6 + 0.4 * L, -0.6, 0.18); }
-    else this.sprite(x, y + 0.5, 'ring', '#fff1c9', 0.8 + 0.3 * L, 0.3, 3);
+    if (p.arch === 'echo') { this.slashMark(x, y + 0.5, pal.hot, 1.6 + 0.4 * L, 0.6, 0.18); this.slashMark(x, y + 0.5, c, 1.6 + 0.4 * L, -0.6, 0.18); }
+    else this.sprite(x, y + 0.5, 'ring', pal.hot, 0.8 + 0.3 * L, 0.3, 3);
     this.poundT.delete(p);
   }
 
@@ -662,13 +706,13 @@ export class FX {
       const rig = view.rigs.get(p); if (!rig || !rig.root.visible) continue;
       if (p.onGround) {
         const dl = p.state === 'dashCharge' ? (p.dashChargeT >= DASH_CHARGE.charge[2] ? 3 : p.dashChargeT >= DASH_CHARGE.charge[1] ? 2 : p.dashChargeT >= DASH_CHARGE.charge[0] ? 1 : 0.3) : 0;
-        const cl = p.char === 'nova' && SETTINGS.novaKit === 'marksman' && p.chargeT > MARKSMAN.charge[1] ? (p.chargeT >= MARKSMAN.beam.at ? 3 : p.chargeT >= MARKSMAN.charge[2] ? 2 : 1) : 0;
+        const cl = p.arch === 'nova' && SETTINGS.novaKit === 'marksman' && p.chargeT > MARKSMAN.charge[1] ? (p.chargeT >= MARKSMAN.beam.at ? 3 : p.chargeT >= MARKSMAN.charge[2] ? 2 : 1) : 0;
         const k = Math.max(dl, cl);
         if (k && Math.random() < 0.25 + 0.2 * k) this.dustSwirl(p.x, p.y, 0.25 * k);
         // Sprint footfalls and skids
         const pv = this.prevVx.get(p) ?? p.vx; this.prevVx.set(p, p.vx);
         if (p.state === 'normal' && Math.abs(pv) > 6 && Math.sign(p.vx) !== Math.sign(pv) && Math.abs(p.vx) > 0.5) this.dust(p.x, p.y, 0.35, [pv > 0 ? 0 : Math.PI], { noRing: true });
-        if (p.char === 'echo' && p.state === 'normal' && Math.abs(p.vx) > 7.5) {
+        if (p.arch === 'echo' && p.state === 'normal' && Math.abs(p.vx) > 7.5) {
           const t = (this.stepT.get(p) || 0) + dt; this.stepT.set(p, t);
           if (t > 0.19) { this.stepT.set(p, 0); this.smoke(p.x - Math.sign(p.vx) * 0.2, p.y + 0.08, DUST, 1, 1.4, 0.3, 0.4, { dir: p.vx > 0 ? Math.PI - 0.4 : 0.4, spread: 0.5, grav: -0.4, op: 0.4 }); }
         }
@@ -772,11 +816,11 @@ export class FX {
       const x1 = p.x, y1 = p.y + 0.95, len = Math.hypot(x1 - S.x0, y1 - S.y0);
       if (len < 1) continue;
       const a = toWorld(S.x0, S.y0, 0.3, new THREE.Vector3()), b = toWorld(x1, y1, 0.3, new THREE.Vector3());
-      const core = this.charge.line('#ffffff', 0.03 + S.tier * 0.012), glow = this.charge.line(ECHO_ORANGE, 0.09 + S.tier * 0.03);
+      const col = fxPal(p).energy, core = this.charge.line('#ffffff', 0.03 + S.tier * 0.012), glow = this.charge.line(col, 0.09 + S.tier * 0.03);
       this.charge.span(core, a, b); this.charge.span(glow, a, b);
       this.charge.flashes.push({ m: core, life: 0.26, max: 0.26, base: 1, dispose: true }, { m: glow, life: 0.3, max: 0.3, base: 0.75, dispose: true });
       for (let d = 0; d < len; d += 0.4) {
-        const u = d / len; this.burst(S.x0 + (x1 - S.x0) * u, S.y0 + (y1 - S.y0) * u, Math.random() < 0.4 ? '#ffffff' : ECHO_ORANGE, 1, 2, 0.2, 0.3);
+        const u = d / len; this.burst(S.x0 + (x1 - S.x0) * u, S.y0 + (y1 - S.y0) * u, Math.random() < 0.4 ? '#ffffff' : col, 1, 2, 0.2, 0.3);
       }
     }
   }
@@ -787,10 +831,11 @@ export class FX {
       if (p.state !== 'slide' || !p.onGround) continue;
       const rig = view.rigs.get(p); if (!rig || !rig.root.visible) continue;
       const back = p.vx > 0 ? Math.PI - 0.35 : 0.35, sp = Math.min(1, Math.abs(p.vx) / 10);
-      if (p.char === 'echo') {
+      const pal = fxPal(p);
+      if (p.arch === 'echo') {
         const hand = rig.armF.end.getWorldPosition(this.tmp2);
-        if (Math.random() < 0.7) { const P = this.particle(hand, Math.random() < 0.5 ? '#ffe2a8' : ECHO_ORANGE, 0.14, 0.2); planeDir(p.x, Math.cos(back) * 5 * sp, Math.sin(back) * 5 * sp + 1.5, P.v); P.grav = 10; P.drag = 0.9; }
-      } else if (Math.random() < 0.8) this.burst(p.x + Math.sign(p.vx) * 0.3, p.y + 0.04, '#ffe2a8', 2, 4 * sp + 1, 0.15, 0.22, { dir: back, spread: 0.5, grav: 8 });
+        if (Math.random() < 0.7) { const P = this.particle(hand, Math.random() < 0.5 ? pal.soft : pal.energy, 0.14, 0.2); planeDir(p.x, Math.cos(back) * 5 * sp, Math.sin(back) * 5 * sp + 1.5, P.v); P.grav = 10; P.drag = 0.9; }
+      } else if (Math.random() < 0.8) this.burst(p.x + Math.sign(p.vx) * 0.3, p.y + 0.04, pal.soft, 2, 4 * sp + 1, 0.15, 0.22, { dir: back, spread: 0.5, grav: 8 });
       if (Math.random() < 0.5) this.smoke(p.x - Math.sign(p.vx) * 0.2, p.y + 0.1, '#a3abb5', 1, 1.2, 0.35, 0.45, { dir: back, spread: 0.6, op: 0.4 });
     }
   }
@@ -799,14 +844,14 @@ export class FX {
   // out along the ground both ways, sparks and debris, and a column of smoke. Everything scales with the
   // launch power, so a Perfect Release reads as the biggest blast.
   rocketBlast(ev) {
-    const k = ev.power || 0.5, x = ev.x, y = ev.y, gold = NOVA_GOLD;
+    const pal = fxPal(ev.p), k = ev.power || 0.5, x = ev.x, y = ev.y, gold = pal.energy;
     const vertical = (ev.dy ?? 1) > 0.6;
     this.sprite(x, y + 0.1, 'star', '#ffffff', 1.4 + k * 2.2, 0.16, 1.6);
-    this.sprite(x, y + 0.1, 'glow', ev.perfect ? '#ffffff' : '#ffe2a8', 2 + k * 3, 0.22, 1.8);
-    this.fireball(x, y + 0.25, ev.perfect ? '#ffd27a' : '#ff9a2e', 0.9 + k * 1.4, 0.3 + k * 0.1);
-    this.sprite(x, y + 0.2, 'ring', '#fff1c9', 0.9 + k * 1.2, 0.28, 3.4);
+    this.sprite(x, y + 0.1, 'glow', ev.perfect ? '#ffffff' : pal.soft, 2 + k * 3, 0.22, 1.8);
+    this.fireball(x, y + 0.25, ev.perfect ? pal.energy : pal.deep, 0.9 + k * 1.4, 0.3 + k * 0.1);
+    this.sprite(x, y + 0.2, 'ring', pal.hot, 0.9 + k * 1.2, 0.28, 3.4);
     if (vertical) {
-      this.groundRing(x, y, '#fff1c9', 0.3, 2.4 + k * 3.2, 0.42 + k * 0.1, 0.95);
+      this.groundRing(x, y, pal.hot, 0.3, 2.4 + k * 3.2, 0.42 + k * 0.1, 0.95);
       this.groundRing(x, y, gold, 0.2, 1.4 + k * 2, 0.3, 0.8);
       // Dust thrown out low along the ground in both directions
       for (const dir of [0.12, Math.PI - 0.12]) {
@@ -859,7 +904,7 @@ export class FX {
         this.ghosts.spawn(rig, col, 0.2, 0.14);
       } else if (p.rocketT > 0 && p.vy > 8 && (p.rocketPow || 0) > 0.55 && dt >= 3) {
         this.ghostTick.set(p, world.tick);
-        this.ghosts.spawn(rig, new THREE.Color('#ffb547').multiplyScalar(1 + p.rocketPow), 0.2 + 0.25 * p.rocketPow, 0.3);
+        this.ghosts.spawn(rig, new THREE.Color(fxPal(p).energy).multiplyScalar(1 + p.rocketPow), 0.2 + 0.25 * p.rocketPow, 0.3);
       }
     }
   }
@@ -868,9 +913,9 @@ export class FX {
   rocketTrails(world) {
     for (const p of world.players) {
       if (!(p.rocketT > 0 && p.vy > 6 && !p.onGround)) continue;
-      const k = Math.min(1, p.vy / 30) * (p.rocketPow || 0.5);
+      const k = Math.min(1, p.vy / 30) * (p.rocketPow || 0.5), pal = fxPal(p);
       for (let i = 0; i < 1 + k * 3; i++) {
-        this.burst(p.x + (Math.random() - 0.5) * 0.25, p.y - 0.05, Math.random() < 0.5 ? '#fff1c9' : NOVA_GOLD, 1, 2, 0.3 + k * 0.2, 0.22, { dir: -Math.PI / 2, spread: 0.6 });
+        this.burst(p.x + (Math.random() - 0.5) * 0.25, p.y - 0.05, Math.random() < 0.5 ? pal.hot : pal.energy, 1, 2, 0.3 + k * 0.2, 0.22, { dir: -Math.PI / 2, spread: 0.6 });
       }
       if (Math.random() < 0.7) this.smoke(p.x, p.y - 0.2, '#8e97a3', 1, 0.8, 0.45 + k * 0.35, 0.7, { dir: -Math.PI / 2, spread: 1, drag: 0.93, grav: -0.4, op: 0.4 });
     }
@@ -883,8 +928,8 @@ export class FX {
       const wx = p.x + p.wallDir * p.w / 2, speed = Math.min(1, -p.vy / 6);
       if (Math.random() < 0.2 + speed * 0.4) this.smoke(wx, p.y + p.h * 0.85, '#aab2bc', 1, 1.0, 0.22, 0.35, { dir: Math.PI / 2, spread: 1, op: 0.45 });
       if (Math.random() < 0.3 + speed * 0.5) this.smoke(wx, p.y + 0.08, '#a3abb5', 1, 1.4, 0.28, 0.4, { dir: Math.PI / 2 + p.wallDir * 0.6, spread: 0.8, op: 0.5 });
-      if (p.char === 'nova' && SETTINGS.novaKit === 'marksman' && Math.random() < 0.35 + speed * 0.5) {
-        this.burst(wx, p.y + 0.05, '#ffe2a8', 1, 3 + speed * 2, 0.15, 0.22, { dir: p.wallDir > 0 ? Math.PI - 0.5 : 0.5, spread: 0.8, grav: 10 });
+      if (p.arch === 'nova' && SETTINGS.novaKit === 'marksman' && kitOf(p).skate && Math.random() < 0.35 + speed * 0.5) {
+        this.burst(wx, p.y + 0.05, fxPal(p).soft, 1, 3 + speed * 2, 0.15, 0.22, { dir: p.wallDir > 0 ? Math.PI - 0.5 : 0.5, spread: 0.8, grav: 10 });
       }
     }
   }
@@ -933,7 +978,7 @@ export class FX {
         const v = toWorld(p.x + (Math.random() - 0.5) * 0.1, p.y - 0.05, dz, this.tmp2);
         const P = this.parts[this.pi], idx = this.pi; this.pi = (this.pi + 1) % this.N;
         P.v.set((Math.random() - 0.5) * 0.6, -5 - Math.random() * 3, (Math.random() - 0.5) * 0.6);
-        this.pPos.set([v.x, v.y, v.z], idx * 3); const c = new THREE.Color(Math.random() < 0.5 ? '#fff1c9' : NOVA_GOLD); this.pCol.set([c.r, c.g, c.b], idx * 3);
+        const pal = fxPal(p); this.pPos.set([v.x, v.y, v.z], idx * 3); const c = new THREE.Color(Math.random() < 0.5 ? pal.hot : pal.energy); this.pCol.set([c.r, c.g, c.b], idx * 3);
         P.life = P.max = 0.16 + Math.random() * 0.08; P.size = 0.26; P.drag = 0.86; P.grav = 0;
       }
     }
@@ -942,8 +987,8 @@ export class FX {
   skateSparks(world) {
     if (SETTINGS.novaKit !== 'marksman') return;
     for (const p of world.players) {
-      if (p.char !== 'nova' || !p.onGround || Math.abs(p.vx) < 6 || Math.random() > 0.35) continue;
-      this.burst(p.x - Math.sign(p.vx) * 0.15, p.y + 0.03, '#ffe2a8', 1, 1.5, 0.16, 0.2, { dir: p.vx > 0 ? Math.PI - 0.3 : 0.3, spread: 0.6, grav: 4 });
+      if (p.arch !== 'nova' || !kitOf(p).skate || !p.onGround || Math.abs(p.vx) < 6 || Math.random() > 0.35) continue;
+      this.burst(p.x - Math.sign(p.vx) * 0.15, p.y + 0.03, fxPal(p).soft, 1, 1.5, 0.16, 0.2, { dir: p.vx > 0 ? Math.PI - 0.3 : 0.3, spread: 0.6, grav: 4 });
     }
   }
   updateParticles(dt) {
@@ -1013,51 +1058,133 @@ export class FX {
   // ---- Projectiles ----
   buildProjectileTemplates() {
     const em = (c, i = 3) => new THREE.MeshStandardMaterial({ color: c, emissive: c, emissiveIntensity: i, roughness: 0.3 });
-    const nova = CHARS.nova.energy, echo = CHARS.echo.energy;
-    this.tmpl = {
-      shot: () => new THREE.Mesh(new THREE.CapsuleGeometry(0.08, 0.34, 3, 8), em(nova, 4)),
-      lance: () => new THREE.Mesh(new THREE.CapsuleGeometry(0.13, 0.9, 3, 8), em(nova, 5)),
-      rail: () => new THREE.Mesh(new THREE.CapsuleGeometry(0.15, 1.9, 3, 8), em('#fff1d0', 6)),
-      bolt: () => new THREE.Mesh(new THREE.CapsuleGeometry(0.07, 0.4, 3, 8), em(echo, 4)),
-      tracer: () => { const g = new THREE.Group(); g.add(new THREE.Mesh(new THREE.TorusGeometry(0.16, 0.04, 6, 14), em(echo, 5))); g.add(new THREE.Mesh(new THREE.CapsuleGeometry(0.05, 0.3, 3, 8), em(echo, 5))); return g; },
-      snare: () => { const g = new THREE.Group(); g.add(new THREE.Mesh(new THREE.TorusGeometry(0.22, 0.05, 6, 16), em(echo, 4))); for (let i = 0; i < 3; i++) { const b = new THREE.Mesh(new THREE.SphereGeometry(0.07, 8, 6), em('#fff1d0', 4)); b.position.set(Math.cos(i * 2.1) * 0.22, Math.sin(i * 2.1) * 0.22, 0); g.add(b); } return g; },
-      std: () => new THREE.Mesh(new THREE.OctahedronGeometry(0.2), em(HOSTILE, 3)),
-      heavy: () => { const g = new THREE.Group(); g.add(new THREE.Mesh(new THREE.OctahedronGeometry(0.34), em(HOSTILE, 3))); g.add(new THREE.Mesh(new THREE.SphereGeometry(0.14, 10, 8), em('#ffffff', 4))); return g; },
-      // Nova, Marksman kit: each attachment has its own shape
-      dart: () => new THREE.Mesh(new THREE.CapsuleGeometry(0.05, 0.3, 3, 6), em(ATTACH_LOOK.volley.tint, 5)),
-      shell: () => { const g = new THREE.Group(); g.add(new THREE.Mesh(new THREE.SphereGeometry(0.17, 14, 10), em(ATTACH_LOOK.arc.tint, 3.5))); g.add(new THREE.Mesh(new THREE.TorusGeometry(0.23, 0.03, 6, 18), em('#fff1d0', 4))); return g; },
-      prism: () => new THREE.Mesh(new THREE.OctahedronGeometry(0.22), em(ATTACH_LOOK.prism.tint, 4)),
-      shard: () => new THREE.Mesh(new THREE.TetrahedronGeometry(0.12), em(ATTACH_LOOK.prism.tint, 5)),
-      pellet: () => new THREE.Mesh(new THREE.SphereGeometry(0.07, 8, 6), em('#ffcf7a', 5)),
-      // Echo's staff-rifle rounds: a slim orange slug, and a brighter, heavier marking shot
-      rifle: () => new THREE.Mesh(new THREE.CapsuleGeometry(0.045, 0.5, 3, 6), em(echo, 5)),
-      markShot: () => { const g = new THREE.Group(); g.add(new THREE.Mesh(new THREE.CapsuleGeometry(0.07, 0.8, 3, 8), em('#ffe0b0', 6))); g.add(new THREE.Mesh(new THREE.TorusGeometry(0.16, 0.025, 6, 16), em(echo, 5))); return g; },
-      mortar: () => { const g = new THREE.Group(); g.add(new THREE.Mesh(new THREE.SphereGeometry(0.28, 14, 10), em('#2b2f3a', 0.2))); g.add(new THREE.Mesh(new THREE.TorusGeometry(0.29, 0.05, 6, 18), em(HOSTILE, 4))); return g; },
-      // Echo's crescent wave: a curved blade of energy, white-hot along its leading edge (it bulges forward)
-      wave: () => {
-        const g = new THREE.Group(), glow = (c, k, op) => new THREE.MeshBasicMaterial({ color: new THREE.Color(c).multiplyScalar(k), transparent: true, opacity: op, side: THREE.DoubleSide, depthWrite: false, toneMapped: false });
-        const outer = new THREE.RingGeometry(0.5, 0.86, 28, 1, Math.PI / 2 - 1.15, 2.3); outer.translate(0, -0.72, 0);
-        const edge = new THREE.RingGeometry(0.74, 0.86, 28, 1, Math.PI / 2 - 1.05, 2.1); edge.translate(0, -0.72, 0);
-        g.add(new THREE.Mesh(outer, glow(echo, 2.2, 0.8))); g.add(new THREE.Mesh(edge, glow('#fff6e0', 3, 1))); return g;
-      },
-      // A boss missile: a magenta rocket with a white-hot nose (it trails smoke)
-      missile: () => { const g = new THREE.Group(); g.add(new THREE.Mesh(new THREE.CapsuleGeometry(0.1, 0.42, 3, 8), em(HOSTILE, 3))); const n = new THREE.Mesh(new THREE.SphereGeometry(0.09, 8, 6), em('#ffffff', 4)); n.position.y = 0.28; g.add(n); return g; },
-      // Nova's secondary weapons: a frag grenade (a dark shell banded in orange light), its bomblets, and the
-      // hard-light disc (a bright rim round a glowing face, spun edge-on to the camera in syncProjectiles)
-      grenade: () => { const g = new THREE.Group(); g.add(new THREE.Mesh(new THREE.SphereGeometry(0.17, 14, 10), new THREE.MeshStandardMaterial({ color: '#2d3240', roughness: 0.45, metalness: 0.4 }))); const b = new THREE.Mesh(new THREE.TorusGeometry(0.175, 0.035, 6, 18), em(SUB_LOOK.grenade.tint, 4)); b.rotation.x = Math.PI / 2; g.add(b); return g; },
-      bomblet: () => new THREE.Mesh(new THREE.SphereGeometry(0.1, 10, 8), em(SUB_LOOK.grenade.tint, 4)),
-      disc: () => {
-        const g = new THREE.Group(), face = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.4, 0.04, 28), new THREE.MeshBasicMaterial({ color: new THREE.Color(SUB_LOOK.disc.tint).multiplyScalar(1.1), transparent: true, opacity: 0.4, depthWrite: false, toneMapped: false }));
-        const rim = new THREE.Mesh(new THREE.TorusGeometry(0.4, 0.045, 6, 28), em(SUB_LOOK.disc.tint, 2.6)); rim.rotation.x = Math.PI / 2;
-        const hub = new THREE.Mesh(new THREE.TorusGeometry(0.16, 0.03, 6, 18), em('#fff1c9', 2.4)); hub.rotation.x = Math.PI / 2;
-        g.add(face, rim, hub); return g;
-      },
-      // A shot Echo's staff knocked back: now his, orange with a white-hot core
-      deflected: () => { const g = new THREE.Group(); g.add(new THREE.Mesh(new THREE.OctahedronGeometry(0.24), em(echo, 4))); g.add(new THREE.Mesh(new THREE.SphereGeometry(0.11, 8, 6), em('#ffffff', 4))); return g; },
+    const glowB = (c, k, op) => new THREE.MeshBasicMaterial({ color: new THREE.Color(c).multiplyScalar(k), transparent: true, opacity: op, side: THREE.DoubleSide, depthWrite: false, toneMapped: false });
+    const grp = (...ms) => { const g = new THREE.Group(); for (const m of ms) g.add(m); return g; };
+    const at = (m, x = 0, y = 0, z = 0, rz = 0) => { m.position.set(x, y, z); m.rotation.z = rz; return m; };
+    const capsule = (r, len, c, k) => new THREE.Mesh(new THREE.CapsuleGeometry(r, len, 3, 8), em(c, k));
+    // A beam of light: a hot core inside a coloured sheath (Cyclops's optic blasts)
+    const beam = (r, len, c, hot, k = 4) => grp(capsule(r, len, c, k), capsule(r * 0.45, len * 1.02, hot, k + 2));
+    // A jagged bolt of lightning (Storm): three offset segments along the flight line
+    const bolt = (len, c, hot) => {
+      const g = new THREE.Group(), seg = len / 3;
+      for (let i = 0; i < 3; i++) {
+        const m = capsule(0.045 * (len > 1 ? 1.4 : 1), seg, i === 1 ? hot : c, 5); m.position.set(i === 1 ? 0.09 : -0.06 * (i - 1), (i - 1) * seg * 0.9, 0); m.rotation.z = i === 1 ? -0.45 : 0.4; g.add(m);
+      }
+      g.add(capsule(0.03, len * 0.95, '#ffffff', 6)); return g;
     };
-    // Each look is built once; projectiles are clones that share its geometry and materials
-    const build = this.tmpl; this.tmpl = {}; this.protos = {};
-    for (const k in build) this.tmpl[k] = () => (this.protos[k] || (this.protos[k] = build[k]())).clone();
+    const crescent = (c, hot) => {
+      const g = new THREE.Group();
+      const outer = new THREE.RingGeometry(0.5, 0.86, 28, 1, Math.PI / 2 - 1.15, 2.3); outer.translate(0, -0.72, 0);
+      const edge = new THREE.RingGeometry(0.74, 0.86, 28, 1, Math.PI / 2 - 1.05, 2.1); edge.translate(0, -0.72, 0);
+      g.add(new THREE.Mesh(outer, glowB(c, 2.2, 0.8))); g.add(new THREE.Mesh(edge, glowB(hot, 3, 1))); return g;
+    };
+    // Enemy shots and the villains' pieces: Juggernaut throws rubble, Magneto hurls steel and drops scrap
+    const enemy = {
+      std: () => new THREE.Mesh(new THREE.OctahedronGeometry(0.2), em(HOSTILE, 3)),
+      heavy: () => grp(new THREE.Mesh(new THREE.OctahedronGeometry(0.34), em(HOSTILE, 3)), new THREE.Mesh(new THREE.SphereGeometry(0.14, 10, 8), em('#ffffff', 4))),
+      mortar: () => { const r = new THREE.Mesh(new THREE.TorusGeometry(0.29, 0.05, 6, 18), em(HOSTILE, 4)); return grp(new THREE.Mesh(new THREE.SphereGeometry(0.28, 14, 10), em('#2b2f3a', 0.2)), r); },
+      missile: () => { const n = new THREE.Mesh(new THREE.SphereGeometry(0.09, 8, 6), em('#ffffff', 4)); n.position.y = 0.28; return grp(capsule(0.1, 0.42, HOSTILE, 3), n); },
+      rubble: () => {
+        const rock = new THREE.Mesh(new THREE.DodecahedronGeometry(0.32, 0), new THREE.MeshStandardMaterial({ color: '#8d877f', roughness: 0.95, flatShading: true }));
+        rock.scale.set(1.2, 0.85, 1); const rebar = capsule(0.025, 0.5, '#5a4636', 0.2); rebar.rotation.z = 0.9;
+        return grp(rock, rebar, new THREE.Mesh(new THREE.SphereGeometry(0.06, 8, 6), em(HOSTILE, 3)));
+      },
+      steel: () => {
+        const blade = new THREE.Mesh(new THREE.ConeGeometry(0.11, 0.62, 4), new THREE.MeshStandardMaterial({ color: '#c8ced8', roughness: 0.25, metalness: 0.9, emissive: HOSTILE, emissiveIntensity: 0.6 }));
+        blade.scale.z = 0.3; return grp(blade);
+      },
+      scrap: () => {
+        const beamM = new THREE.MeshStandardMaterial({ color: '#7c838e', roughness: 0.5, metalness: 0.8, emissive: HOSTILE, emissiveIntensity: 0.35 });
+        const a = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.14, 0.2), beamM), b = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.5, 0.2), beamM);
+        b.position.x = 0.25; return grp(a, b, new THREE.Mesh(new THREE.TorusGeometry(0.34, 0.03, 6, 18), em(HOSTILE, 3.5)));
+      },
+    };
+    // A hero's shots, in their colours (the frame decides which kinds they fire)
+    const hero = id => {
+      const P = FXPAL[id] || FXPAL.nova, who = { char: id }, A = k => attachLook(who, k).tint, S = k => subLook(who, k).tint;
+      const T = {
+        shot: () => capsule(0.08, 0.34, P.energy, 4),
+        lance: () => capsule(0.13, 0.9, A('lance'), 5),
+        rail: () => capsule(0.15, 1.9, P.hot, 6),
+        bolt: () => capsule(0.07, 0.4, P.energy, 4),
+        tracer: () => grp(new THREE.Mesh(new THREE.TorusGeometry(0.16, 0.04, 6, 14), em(P.energy, 5)), capsule(0.05, 0.3, P.energy, 5)),
+        snare: () => { const g = grp(new THREE.Mesh(new THREE.TorusGeometry(0.22, 0.05, 6, 16), em(P.energy, 4))); for (let i = 0; i < 3; i++) g.add(at(new THREE.Mesh(new THREE.SphereGeometry(0.07, 8, 6), em(P.hot, 4)), Math.cos(i * 2.1) * 0.22, Math.sin(i * 2.1) * 0.22)); return g; },
+        dart: () => capsule(0.05, 0.3, A('volley'), 5),
+        shell: () => { const r = new THREE.Mesh(new THREE.TorusGeometry(0.23, 0.03, 6, 18), em(P.hot, 4)); return grp(new THREE.Mesh(new THREE.SphereGeometry(0.17, 14, 10), em(A('arc'), 3.5)), r); },
+        prism: () => new THREE.Mesh(new THREE.OctahedronGeometry(0.22), em(A('prism'), 4)),
+        shard: () => new THREE.Mesh(new THREE.TetrahedronGeometry(0.12), em(A('prism'), 5)),
+        pellet: () => new THREE.Mesh(new THREE.SphereGeometry(0.07, 8, 6), em(S('scatter'), 5)),
+        rifle: () => capsule(0.045, 0.5, P.energy, 5),
+        markShot: () => grp(capsule(0.07, 0.8, P.hot, 6), new THREE.Mesh(new THREE.TorusGeometry(0.16, 0.025, 6, 16), em(P.energy, 5))),
+        wave: () => crescent(P.energy, P.hot),
+        grenade: () => { const b = new THREE.Mesh(new THREE.TorusGeometry(0.175, 0.035, 6, 18), em(S('grenade'), 4)); b.rotation.x = Math.PI / 2; return grp(new THREE.Mesh(new THREE.SphereGeometry(0.17, 14, 10), new THREE.MeshStandardMaterial({ color: '#2d3240', roughness: 0.45, metalness: 0.4 })), b); },
+        bomblet: () => new THREE.Mesh(new THREE.SphereGeometry(0.1, 10, 8), em(S('grenade'), 4)),
+        disc: () => {
+          const face = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.4, 0.04, 28), new THREE.MeshBasicMaterial({ color: new THREE.Color(S('disc')).multiplyScalar(1.1), transparent: true, opacity: 0.4, depthWrite: false, toneMapped: false }));
+          const rim = new THREE.Mesh(new THREE.TorusGeometry(0.4, 0.045, 6, 28), em(S('disc'), 2.6)); rim.rotation.x = Math.PI / 2;
+          const hub = new THREE.Mesh(new THREE.TorusGeometry(0.16, 0.03, 6, 18), em(P.hot, 2.4)); hub.rotation.x = Math.PI / 2;
+          return grp(face, rim, hub);
+        },
+        deflected: () => grp(new THREE.Mesh(new THREE.OctahedronGeometry(0.24), em(P.energy, 4)), new THREE.Mesh(new THREE.SphereGeometry(0.11, 8, 6), em('#ffffff', 4))),
+      };
+      if (id === 'cyclops') Object.assign(T, {
+        // Optic blasts: every shot is a ruby beam with a white-hot core; the Optic Mine is a dark puck banded red
+        shot: () => beam(0.07, 0.42, P.energy, P.hot), lance: () => beam(0.12, 1.0, P.energy, P.hot, 5), rail: () => beam(0.16, 2.2, P.energy, '#ffffff', 6),
+        dart: () => beam(0.05, 0.36, A('volley'), P.hot), prism: () => beam(0.1, 0.55, A('prism'), '#ffffff'), shard: () => beam(0.05, 0.3, A('prism'), P.hot),
+        pellet: () => beam(0.05, 0.16, S('scatter'), P.hot),
+      });
+      if (id === 'storm') Object.assign(T, {
+        // Lightning bolts; hailstones of ice; a thunderhead that bursts; a ball of hail for the Hailstorm
+        shot: () => bolt(0.4, P.energy, P.hot), lance: () => bolt(1.0, P.energy, P.hot), rail: () => bolt(2.0, P.hot, '#ffffff'),
+        dart: () => new THREE.Mesh(new THREE.OctahedronGeometry(0.1), new THREE.MeshStandardMaterial({ color: '#eaf8ff', emissive: '#bfeaff', emissiveIntensity: 1.2, roughness: 0.1, flatShading: true })),
+        shell: () => {
+          const cloud = new THREE.MeshStandardMaterial({ color: '#5d6878', roughness: 1, emissive: '#2a3a52', emissiveIntensity: 0.4 });
+          const g = grp(at(new THREE.Mesh(new THREE.SphereGeometry(0.17, 12, 8), cloud)), at(new THREE.Mesh(new THREE.SphereGeometry(0.13, 12, 8), cloud), 0.15, -0.03), at(new THREE.Mesh(new THREE.SphereGeometry(0.12, 12, 8), cloud), -0.15, -0.04));
+          g.add(at(capsule(0.03, 0.25, P.hot, 6), 0.02, -0.2, 0, 0.3)); return g;
+        },
+        grenade: () => new THREE.Mesh(new THREE.IcosahedronGeometry(0.21, 0), new THREE.MeshStandardMaterial({ color: '#e6f6ff', emissive: '#a6dcff', emissiveIntensity: 0.9, roughness: 0.15, flatShading: true })),
+        bomblet: () => new THREE.Mesh(new THREE.OctahedronGeometry(0.11), new THREE.MeshStandardMaterial({ color: '#eaf8ff', emissive: '#bfeaff', emissiveIntensity: 1.2, roughness: 0.1, flatShading: true })),
+        pellet: () => new THREE.Mesh(new THREE.SphereGeometry(0.07, 8, 6), em(P.soft, 3)),
+      });
+      if (id === 'jean') Object.assign(T, {
+        // Telekinesis: a pulse of force; a spear of it; thrown chunks of the street wrapped in her glow
+        shot: () => grp(new THREE.Mesh(new THREE.SphereGeometry(0.1, 10, 8), em(P.energy, 4)), new THREE.Mesh(new THREE.TorusGeometry(0.16, 0.025, 6, 16), em(P.soft, 3))),
+        lance: () => beam(0.1, 0.95, A('lance'), P.hot, 5),
+        shell: () => {
+          const rock = new THREE.Mesh(new THREE.DodecahedronGeometry(0.2, 0), new THREE.MeshStandardMaterial({ color: '#8e8880', roughness: 0.9, flatShading: true }));
+          const aura = new THREE.Mesh(new THREE.DodecahedronGeometry(0.26, 0), glowB(P.energy, 1.6, 0.35)); return grp(rock, aura);
+        },
+        disc: () => {
+          const plate = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.4, 0.06, 24), new THREE.MeshStandardMaterial({ color: '#7d828a', roughness: 0.45, metalness: 0.8 }));
+          const rim = new THREE.Mesh(new THREE.TorusGeometry(0.42, 0.045, 6, 28), em(P.energy, 2.6)); rim.rotation.x = Math.PI / 2;
+          return grp(plate, rim);
+        },
+      });
+      if (id === 'wolverine') Object.assign(T, {
+        // A charged claw swipe flies on as three parallel cuts
+        wave: () => { const g = new THREE.Group(); for (const dy of [-0.26, 0, 0.26]) { const c = crescent(P.energy, P.hot); c.position.y = dy; c.scale.setScalar(0.8); g.add(c); } return g; },
+      });
+      return T;
+    };
+    this.enemyLooks = enemy; this.heroLooks = hero; this.protos = {}; this.heroTmpl = {};
+    // Templates are built once per look; projectiles are clones that share geometry and materials
+    this.tmpl = {};
+    for (const k in enemy) this.tmpl[k] = () => (this.protos[k] || (this.protos[k] = enemy[k]())).clone();
+    const nova = hero('nova');
+    for (const k in nova) if (!this.tmpl[k]) this.tmpl[k] = () => (this.protos['nova:' + k] || (this.protos['nova:' + k] = nova[k]())).clone();
+  }
+  // The look for one projectile: its owner's (a hero's colours, a villain's pieces)
+  projMesh(pr) {
+    const o = pr.owner;
+    let key, make;
+    if (pr.team === 'e' && !pr.deflected) {
+      const t = o && o.type, k = t === 'warden' && pr.kind === 'missile' ? 'rubble' : t === 'stormcaller' && pr.kind === 'std' ? 'steel' : t === 'stormcaller' && pr.kind === 'mortar' ? 'scrap' : pr.kind;
+      key = this.enemyLooks[k] ? k : 'std'; make = this.enemyLooks[key];
+    } else {
+      const id = o && o.kind === 'player' ? o.char : 'nova', T = this.heroTmpl[id] || (this.heroTmpl[id] = this.heroLooks(id)), k = pr.deflected ? 'deflected' : pr.kind;
+      key = id + ':' + (T[k] ? k : 'shot'); make = T[T[k] ? k : 'shot'];
+    }
+    return (this.protos[key] || (this.protos[key] = make())).clone();
   }
   syncProjectiles(world, alpha) {
     const seen = new Set();
@@ -1067,7 +1194,7 @@ export class FX {
       let m = this.projMeshes.get(pr);
       // A deflected enemy shot changes hands: swap its look for Echo's
       if (m && pr.deflected && !m.userData.defl) { this.scene.remove(m); m = null; }
-      if (!m) { m = (pr.deflected ? this.tmpl.deflected : this.tmpl[pr.kind] || this.tmpl.std)(); m.userData.defl = !!pr.deflected; this.scene.add(m); this.projMeshes.set(pr, m); }
+      if (!m) { m = this.projMesh(pr); m.userData.defl = !!pr.deflected; this.scene.add(m); this.projMeshes.set(pr, m); }
       const x = pr.px + (pr.x - pr.px) * alpha, y = pr.py + (pr.y - pr.py) * alpha;
       toWorld(x, y, 0.1, m.position);
       const d = planeDir(x, pr.vx, pr.vy, this.tmp).normalize();
@@ -1082,8 +1209,8 @@ export class FX {
       }
       if (pr.amplified) m.scale.setScalar(1.35);
       if (this.charge.wantsTrail(pr)) this.charge.trail(pr, m.position);
-      if (pr.kind === 'missile' && Math.random() < 0.8) this.smoke(x - pr.vx * 0.012, y - pr.vy * 0.012, '#8e97a3', 1, 0.4, 0.35, 0.5, { op: 0.45, grav: -0.3 });
-      if (pr.kind === 'wave') { for (let i = 0; i < 3; i++) this.burst(x - Math.sign(pr.vx) * 0.2, y + (Math.random() - 0.5) * 1.3, Math.random() < 0.4 ? '#ffffff' : ECHO_ORANGE, 1, 1.5, 0.24, 0.2); }
+      if (pr.kind === 'missile' && Math.random() < 0.8) this.smoke(x - pr.vx * 0.012, y - pr.vy * 0.012, pr.owner && pr.owner.type === 'warden' ? '#a39b90' : '#8e97a3', 1, 0.4, 0.35, 0.5, { op: 0.45, grav: -0.3 });
+      if (pr.kind === 'wave') { const c = fxPal(pr.owner).energy; for (let i = 0; i < 3; i++) this.burst(x - Math.sign(pr.vx) * 0.2, y + (Math.random() - 0.5) * 1.3, Math.random() < 0.4 ? '#ffffff' : c, 1, 1.5, 0.24, 0.2); }
       else if (Math.random() < (pr.kind === 'pellet' ? 0.25 : 0.6)) this.burst(x, y, trailColor(pr), 1, 0.6, pr.kind === 'rail' ? 0.5 : 0.22, 0.18);
     }
     for (const [pr, m] of this.projMeshes) if (!seen.has(pr)) { this.scene.remove(m); this.projMeshes.delete(pr); }
@@ -1146,19 +1273,21 @@ export class FX {
     for (const [s, m] of this.shockMeshes) if (!seen.has(s)) { this.scene.remove(m); this.shockMeshes.delete(s); }
   }
 
-  // ---- Echo's nano-scarf: a spring chain that becomes the lash ----
+  // ---- Cloth: Echo's nano-scarf (a spring chain that becomes the lash), Psylocke's sash (the same, tied at her
+  // waist, showing her modes), Storm's cape and Jean's sash ----
   syncScarves(dt, world, view) {
     const seen = new Set();
     for (const p of world.players) {
-      if (p.char !== 'echo') continue;
+      const C = CLOTH[p.char]; if (!C) continue;
       const rig = view.rigs.get(p); if (!rig) continue;
       seen.add(p);
       let S = this.scarves.get(p);
-      if (!S) S = this.makeScarf(p, rig);
+      if (S && S.char !== p.char) { this.scene.remove(S.mesh); this.scarves.delete(p); S = null; }
+      if (!S) S = this.makeScarf(p, rig, C);
       const anchor = rig.collar.getWorldPosition(this.tmp2);
       const pts = S.pts, n = pts.length;
       const fast = Math.hypot(p.vx, p.vy) > 10 || p.state === 'dash' || p.state === 'zip';
-      const seg = fast ? 0.16 : 0.12;
+      const seg = (fast ? 1.33 : 1) * C.seg;
       pts[0].copy(anchor);
       const reel = p.leash && !p.leash.e.dead ? p.leash.e : null;
       if (((p.state === 'lash' || p.state === 'zip') && p.lash) || reel) {
@@ -1166,13 +1295,13 @@ export class FX {
         const k = p.state === 'zip' || reel ? 1 : L.len;
         for (let i = 1; i < n; i++) { const u = i / (n - 1) * k; S.prev[i].copy(pts[i]); pts[i].copy(anchor).lerp(tgt, u); }
       } else {
-        const g = fast ? -2 : -9.5;
+        const g = fast ? -2 : C.cape ? -12 : -9.5;
         const back = planeDir(p.x, -p.facing, 0, new THREE.Vector3());
         const sway = Math.sin(view.camera.position.x * 0.2 + performance.now() * 0.003) * 0.0012;
         for (let i = 1; i < n; i++) {
           const v = this.tmp.copy(pts[i]).sub(S.prev[i]).multiplyScalar(0.92);
           S.prev[i].copy(pts[i]); pts[i].add(v); pts[i].y += g * dt * dt;
-          pts[i].addScaledVector(back, 0.0016 * i); pts[i].y += sway * i;
+          pts[i].addScaledVector(back, (C.cape ? 0.0024 : 0.0016) * i); pts[i].y += sway * i;
         }
         for (let it = 0; it < 3; it++) for (let i = 1; i < n; i++) {
           const a = pts[i - 1], b = pts[i], d = b.distanceTo(a) || 1e-4;
@@ -1185,19 +1314,19 @@ export class FX {
         const a = pts[Math.max(0, i - 1)], b = pts[Math.min(n - 1, i + 1)];
         const dir = this.tmp.copy(b).sub(a).normalize();
         const toCam = new THREE.Vector3().copy(cam).sub(pts[i]).normalize();
-        const side = new THREE.Vector3().crossVectors(dir, toCam).normalize().multiplyScalar(0.09 * (1 - i / n * 0.55));
+        const side = new THREE.Vector3().crossVectors(dir, toCam).normalize().multiplyScalar(C.w * (1 - i / n * C.taper));
         pos.set([pts[i].x + side.x, pts[i].y + side.y, pts[i].z + side.z, pts[i].x - side.x, pts[i].y - side.y, pts[i].z - side.z], i * 6);
       }
       S.geo.attributes.position.needsUpdate = true; S.geo.computeVertexNormals();
       // The scarf shows its mode to everyone: off-white with orange edges (Tether), slate and
       // fading with the body (Veil), glowing along its whole length with rising embers (Flare)
-      const mode = p.scarfMode || 'tether';
+      const mode = C.modes ? p.scarfMode || 'tether' : 'tether';
       if (S.mode !== mode) { S.mode = mode; S.mesh.material = S.mats[mode]; }
       if (mode === 'flare') {
         S.mats.flare.emissiveIntensity = 1.2 + Math.sin(performance.now() * 0.009) * 0.35;
-        if (Math.random() < 0.45) this.burstAt(pts[1 + Math.floor(Math.random() * (n - 1))], ECHO_ORANGE, 1, 1.2, 0.18, 0.45);
+        if (Math.random() < 0.45) this.burstAt(pts[1 + Math.floor(Math.random() * (n - 1))], C.flareEm, 1, 1.2, 0.18, 0.45);
       } else if (mode === 'veil') S.mats.veil.opacity = 1 - 0.8 * (rig.cloak || 0);
-      else S.mat.emissiveIntensity = fast || p.state === 'lash' || reel ? 1.6 : 0.5;
+      else S.mat.emissiveIntensity = C.modes ? (fast || p.state === 'lash' || reel ? 1.6 : 0.5) : C.glow;
       S.mesh.visible = rig.root.visible;   // it goes with him (he vanishes during Thousand Cuts)
     }
     for (const [p, S] of this.scarves) if (!seen.has(p)) { this.scene.remove(S.mesh); this.scarves.delete(p); }
@@ -1211,7 +1340,7 @@ export class FX {
       if (!m) {
         m = new THREE.Group();
         m.add(new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.46, 0.08, 20), new THREE.MeshStandardMaterial({ color: '#2a2a31', roughness: 0.5 })));
-        const ring = new THREE.Mesh(new THREE.TorusGeometry(0.42, 0.04, 6, 24), new THREE.MeshStandardMaterial({ color: ECHO_ORANGE, emissive: ECHO_ORANGE, emissiveIntensity: 2 }));
+        const sc = fxPal(s.owner).energy, ring = new THREE.Mesh(new THREE.TorusGeometry(0.42, 0.04, 6, 24), new THREE.MeshStandardMaterial({ color: sc, emissive: sc, emissiveIntensity: 2 }));
         ring.rotation.x = Math.PI / 2; ring.position.y = 0.06; m.add(ring); m.userData.ring = ring;
         toWorld(s.x, s.y + 0.04, 0.35, m.position); this.scene.add(m); this.snareMeshes.set(s, m);
       }
@@ -1229,7 +1358,7 @@ export class FX {
       let g = this.bands.get(e);
       if (!g) {
         g = new THREE.Group();
-        const mat = new THREE.MeshStandardMaterial({ color: ECHO_ORANGE, emissive: ECHO_ORANGE, emissiveIntensity: 2.4, transparent: true, opacity: 0.85 });
+        const bc = fxPal(e.snaredBy).energy, mat = new THREE.MeshStandardMaterial({ color: bc, emissive: bc, emissiveIntensity: 2.4, transparent: true, opacity: 0.85 });
         for (const f of [0.25, 0.55]) { const r = new THREE.Mesh(new THREE.TorusGeometry(e.w * 0.75, 0.04, 6, 24), mat); r.rotation.x = Math.PI / 2; r.position.y = e.h * f; g.add(r); }
         this.scene.add(g); this.bands.set(e, g);
       }
@@ -1239,42 +1368,53 @@ export class FX {
     for (const [e, g] of this.bands) if (!seen.has(e)) { this.scene.remove(g); this.bands.delete(e); }
   }
 
-  makeScarf(p, rig) {
-    const n = 14, geo = new THREE.BufferGeometry();
+  makeScarf(p, rig, C) {
+    const n = C.n, geo = new THREE.BufferGeometry();
     geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(n * 6), 3));
     const uv = [], idx = [];
     for (let i = 0; i < n; i++) { uv.push(0, i / (n - 1), 1, i / (n - 1)); if (i < n - 1) { const a = i * 2; idx.push(a, a + 1, a + 2, a + 1, a + 3, a + 2); } }
     geo.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(uv), 2)); geo.setIndex(idx);
-    const tex = canvasTex(64, (g, s) => { g.fillStyle = '#ecebe6'; g.fillRect(0, 0, s, s); g.fillStyle = '#ff9a1f'; g.fillRect(0, 0, s * 0.12, s); g.fillRect(s * 0.88, 0, s * 0.12, s); });
+    const tex = canvasTex(64, (g, s) => { g.fillStyle = C.fabric; g.fillRect(0, 0, s, s); g.fillStyle = C.edge; g.fillRect(0, 0, s * 0.12, s); g.fillRect(s * 0.88, 0, s * 0.12, s); });
     // Only the edges glow; the off-white fabric stays unlit
     const edges = canvasTex(64, (g, s) => { g.fillStyle = '#000'; g.fillRect(0, 0, s, s); g.fillStyle = '#fff'; g.fillRect(0, 0, s * 0.12, s); g.fillRect(s * 0.88, 0, s * 0.12, s); });
-    const mat = new THREE.MeshStandardMaterial({ map: tex, emissive: '#ff9a1f', emissiveMap: edges, emissiveIntensity: 1.2, side: THREE.DoubleSide, roughness: 0.6 });
-    const veilTex = canvasTex(64, (g, s) => { g.fillStyle = '#7d8896'; g.fillRect(0, 0, s, s); g.fillStyle = '#e4f1ff'; g.fillRect(0, 0, s * 0.1, s); g.fillRect(s * 0.9, 0, s * 0.1, s); });
+    const mat = new THREE.MeshStandardMaterial({ map: tex, emissive: C.edge, emissiveMap: edges, emissiveIntensity: C.modes ? 1.2 : C.glow, side: THREE.DoubleSide, roughness: 0.6 });
+    const veilTex = canvasTex(64, (g, s) => { g.fillStyle = C.veil || '#7d8896'; g.fillRect(0, 0, s, s); g.fillStyle = C.veilEdge || '#e4f1ff'; g.fillRect(0, 0, s * 0.1, s); g.fillRect(s * 0.9, 0, s * 0.1, s); });
     const mats = {
       tether: mat,
-      veil: new THREE.MeshStandardMaterial({ map: veilTex, emissive: '#cde8ff', emissiveMap: edges, emissiveIntensity: 0.8, side: THREE.DoubleSide, roughness: 0.4, transparent: true }),
-      flare: new THREE.MeshStandardMaterial({ color: '#ff9f3a', emissive: '#ff7a00', emissiveIntensity: 1.3, side: THREE.DoubleSide, roughness: 0.5 }),
+      veil: new THREE.MeshStandardMaterial({ map: veilTex, emissive: C.veilEdge || '#cde8ff', emissiveMap: edges, emissiveIntensity: 0.8, side: THREE.DoubleSide, roughness: 0.4, transparent: true }),
+      flare: new THREE.MeshStandardMaterial({ color: C.flare || '#ff9f3a', emissive: C.flareEm || '#ff7a00', emissiveIntensity: 1.3, side: THREE.DoubleSide, roughness: 0.5 }),
     };
     const mesh = new THREE.Mesh(geo, mat); mesh.frustumCulled = false; mesh.castShadow = true; this.scene.add(mesh);
     const a = rig.collar.getWorldPosition(new THREE.Vector3());
     const pts = Array.from({ length: n }, (_, i) => a.clone().add(new THREE.Vector3(0, -i * 0.1, 0)));
-    const S = { geo, mat, mats, mode: 'tether', mesh, pts, prev: pts.map(v => v.clone()) };
+    const S = { geo, mat, mats, mode: 'tether', mesh, pts, prev: pts.map(v => v.clone()), char: p.char };
     this.scarves.set(p, S); return S;
   }
 }
 
 const NOVA_GOLD = CHARS.nova.energy;
+// Who wears cloth, and how it hangs: n points `seg` m apart, half-width `w` narrowing by `taper` to the end (a
+// negative taper widens it, for a cape); `modes` shows the scarf modes; `glow` is the edge glow otherwise
+const CLOTH = {
+  echo: { n: 14, seg: 0.12, w: 0.09, taper: 0.55, modes: true, fabric: '#ecebe6', edge: '#ff9a1f', flareEm: '#ff7a00' },
+  psylocke: { n: 15, seg: 0.12, w: 0.08, taper: 0.45, modes: true, fabric: '#c8203c', edge: '#c08cff', veil: '#2c2548', veilEdge: '#d9c6ff', flare: '#d77bff', flareEm: '#a64dff' },
+  storm: { n: 10, seg: 0.125, w: 0.24, taper: -0.5, cape: true, modes: false, fabric: '#17171f', edge: '#e9edf5', glow: 0.12 },
+  jean: { n: 7, seg: 0.1, w: 0.055, taper: 0.3, modes: false, fabric: '#f0c23a', edge: '#ffe08a', glow: 0.35 },
+};
 const DUST = '#b9c1cb';
 const ECHO_ORANGE = CHARS.echo.energy;
 const VEIL_PALE = '#dcecff';
-const SPIN = new Set(['std', 'heavy', 'snare', 'shell', 'prism', 'mortar', 'grenade', 'bomblet']);
+const SPIN = new Set(['std', 'heavy', 'snare', 'shell', 'prism', 'mortar', 'grenade', 'bomblet', 'missile']);
 const KIND_TINT = { dart: ATTACH_LOOK.volley.tint, shell: ATTACH_LOOK.arc.tint, prism: ATTACH_LOOK.prism.tint, shard: ATTACH_LOOK.prism.tint, pellet: '#ffcf7a',
   grenade: SUB_LOOK.grenade.tint, bomblet: SUB_LOOK.grenade.tint, disc: SUB_LOOK.disc.tint };
 function trailColor(pr) {
-  if (pr.deflected || pr.kind === 'wave') return ECHO_ORANGE;
-  if (pr.team === 'e') return HOSTILE;
-  if (pr.kind === 'bolt' || pr.kind === 'tracer' || pr.kind === 'rifle' || pr.kind === 'markShot') return ECHO_ORANGE;
-  return KIND_TINT[pr.kind] || NOVA_GOLD;
+  if (pr.team === 'e' && !pr.deflected) return pr.owner && pr.owner.type === 'warden' ? '#b3aa9e' : HOSTILE;
+  const o = pr.owner && pr.owner.kind === 'player' ? pr.owner : null, P = fxPal(o);
+  if (pr.deflected || pr.kind === 'wave' || pr.kind === 'bolt' || pr.kind === 'tracer' || pr.kind === 'rifle' || pr.kind === 'markShot') return P.energy;
+  const who = o || { char: 'nova' };
+  const tint = { dart: attachLook(who, 'volley').tint, shell: attachLook(who, 'arc').tint, prism: attachLook(who, 'prism').tint, shard: attachLook(who, 'prism').tint,
+    lance: attachLook(who, 'lance').tint, pellet: subLook(who, 'scatter').tint, grenade: subLook(who, 'grenade').tint, bomblet: subLook(who, 'grenade').tint, disc: subLook(who, 'disc').tint }[pr.kind];
+  return tint || P.energy;
 }
 
 // Impact frame (Q-C test), sci-fi look since Version 9, phased: `invert` is the opening flash, a cyan

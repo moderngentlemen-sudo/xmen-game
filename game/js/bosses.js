@@ -12,7 +12,7 @@ import { rayCast, groundBelow } from './level.js';
 
 export const BOSS = {
   warden: {
-    name: 'Lockwarden', title: 'The lock’s last guard',
+    name: 'Juggernaut', title: 'Nothing stops him but a wall',
     hp: 240, armor: 4, rearm: 2, poise: 420, poiseDecay: 0.6, stagger: 150, staggerCd: 420, daze: 110, walk: 2.4, cd: [46, 28],
     sweep: { wind: 22, active: 8, rec: 30, reach: 3.6, dmg: 14, kb: [9, 4] },
     hammer: { wind: 34, active: 6, rec: 44, reach: 3.9, dmg: 24, kb: [12, 6] },
@@ -22,7 +22,7 @@ export const BOSS = {
     laser: { wind: 50, ticks: 42, dmg: 20, low: [0.3, 0.8], high: [1.15, 1.55], range: 40, rec: 36 },
   },
   stormcaller: {
-    name: 'Stormcaller', title: 'It keeps the relay beacon',
+    name: 'Magneto', title: 'Master of Magnetism',
     hp: 260, armor: 0, rearm: 2, poise: 380, poiseDecay: 0.6, stagger: 140, staggerCd: 420, hover: 6.6, speed: 7, cd: [40, 26],
     padX: [300.5, 313.5], floor: 18.6,
     volley: { wind: 24, bursts: [3, 4], every: 10, speed: 14, dmg: 8, spread: 0.12, rec: 26 },

@@ -1,11 +1,13 @@
-// Procedural character rigs for Nova and Echo (placeholder art that keeps each silhouette's
-// defining features: Nova's Sentinel Bracer and visor helmet; Echo's scarf, collar, gauntlets, staff).
+// Procedural character rigs. Nova and Echo (the two body frames' reference builds) keep their original
+// placeholder art; the X-Men are built on the same skeleton by buildHeroRig (rigs_xmen.js), with the same
+// attachment points (muzzle, blades, staff, edges) so animation and effects drive every hero alike.
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { CHARS, ATTACH_LOOK } from './config.js';
+import { buildHeroRig } from './rigs_xmen.js';
 
-const rbox = (w, h, d, r = 0.05) => new RoundedBoxGeometry(w, h, d, 3, Math.min(r, w / 2 - 1e-3, h / 2 - 1e-3, d / 2 - 1e-3));
-const cap = (r, len) => new THREE.CapsuleGeometry(r, len, 4, 12);
+export const rbox = (w, h, d, r = 0.05) => new RoundedBoxGeometry(w, h, d, 3, Math.min(r, w / 2 - 1e-3, h / 2 - 1e-3, d / 2 - 1e-3));
+export const cap = (r, len) => new THREE.CapsuleGeometry(r, len, 4, 12);
 
 // Fresnel rim so characters separate from bright backgrounds (readability, especially in 4P)
 // The uniforms persist on mat.userData.rim so Echo's Veil can turn the rim into a shimmering outline;
@@ -26,7 +28,7 @@ export function addRim(mat, color, strength = 0.45, power = 2.4) {
   mat.customProgramCacheKey = () => 'rim-' + power.toFixed(2);
 }
 
-function mats(c) {
+export function mats(c) {
   const std = (color, rough, metal = 0.08) => new THREE.MeshStandardMaterial({ color, roughness: rough, metalness: metal });
   return {
     base: std(c.base, 0.36), trim: std(c.trim, 0.42, 0.18), under: std(c.under, 0.72),
@@ -35,14 +37,14 @@ function mats(c) {
     amber: new THREE.MeshStandardMaterial({ color: 0xffa53a, emissive: 0xff8a1a, emissiveIntensity: 0.6, roughness: 0.1, transparent: true, opacity: 0.72 }),
   };
 }
-function rimAll(M) { for (const k of ['base', 'trim', 'under']) addRim(M[k], '#d6ecff', k === 'under' ? 0.35 : 0.5); return M; }
+export function rimAll(M) { for (const k of ['base', 'trim', 'under']) addRim(M[k], '#d6ecff', k === 'under' ? 0.35 : 0.5); return M; }
 
-function mesh(geo, mat, x = 0, y = 0, z = 0) {
+export function mesh(geo, mat, x = 0, y = 0, z = 0) {
   const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); m.castShadow = true; return m;
 }
-function group(x = 0, y = 0, z = 0) { const g = new THREE.Group(); g.position.set(x, y, z); return g; }
+export function group(x = 0, y = 0, z = 0) { const g = new THREE.Group(); g.position.set(x, y, z); return g; }
 
-function limb(parent, M, upperLen, lowerLen, r, z, isArm) {
+export function limb(parent, M, upperLen, lowerLen, r, z, isArm) {
   const top = group(0, 0, z); parent.add(top);
   top.add(mesh(cap(r, upperLen - r), isArm ? M.under : M.under, 0, -upperLen / 2));
   const joint = group(0, -upperLen, 0); top.add(joint);
@@ -52,6 +54,7 @@ function limb(parent, M, upperLen, lowerLen, r, z, isArm) {
 }
 
 export function buildPlayerRig(charId) {
+  if (charId !== 'nova' && charId !== 'echo') return buildHeroRig(charId);
   const c = CHARS[charId], M = rimAll(mats(c)), nova = charId === 'nova';
   const root = group(), flip = group(), body = group();
   root.add(flip); flip.add(body);
@@ -216,10 +219,15 @@ export function buildPlayerRig(charId) {
   };
   rig.setHead('helmet');
 
-  // Veil (Echo): the body turns glassy and a pale rim outlines it. Collected before render.js adds the
-  // player-colour ring, so the ring stays solid for teammates.
+  addCloak(rig, M);
+  return rig;
+}
+
+// Veil: the body turns glassy and a pale rim outlines it. Collected before render.js adds the player-colour
+// ring, so the ring stays solid for teammates.
+export function addCloak(rig, M) {
   const SHIMMER = new THREE.Color('#e6f4ff');
-  const cloakMats = new Set(); root.traverse(o => { if (o.isMesh) cloakMats.add(o.material); });
+  const cloakMats = new Set(); rig.root.traverse(o => { if (o.isMesh) cloakMats.add(o.material); });
   const cloakBase = [...cloakMats].map(m => ({ m, op: m.opacity, tr: m.transparent, energy: m === M.energy }));
   rig.cloak = 0;
   rig.setCloak = k => {
@@ -236,5 +244,4 @@ export function buildPlayerRig(charId) {
       }
     }
   };
-  return rig;
 }

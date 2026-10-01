@@ -12,7 +12,7 @@ const WHITE = new THREE.Color('#ffffff');
 function activeEdges(p, rig) {
   const st = p.state, m = p.move, E = rig.extra.edges;
   if (!E) return null;
-  if (p.char === 'echo') {
+  if (p.arch === 'echo') {
     const hunter = SETTINGS.echoKit === 'hunter';
     if (st === 'dashslash') return p.st >= 1 && p.st <= DASH_SLASH.ticks ? [['bladeN', 0.17, 1.3], ['bladeF', 0.17, 1.3]] : null;
     if (st === 'parry' && hunter && !p.parryResult) return [['glaiveA', 0.09, 0.7], ['glaiveB', 0.09, 0.7]];

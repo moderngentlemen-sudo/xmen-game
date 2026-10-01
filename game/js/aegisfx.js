@@ -6,7 +6,7 @@
 // visibly streams into his bracer (Overcharge). The whole dome and all its shards are one mesh: the vertex
 // shader flies detached panels on their own in world space. Presentation only: reads the sim, never changes it.
 import * as THREE from 'three';
-import { AEGIS, CHARS } from './config.js';
+import { AEGIS, CHARS, fxPal } from './config.js';
 import { toWorld, planeDir } from './space.js';
 import { pathFrame } from './level.js';
 
@@ -169,7 +169,13 @@ export class AegisFX {
     this.fx = fx; this.scene = fx.scene; this.tex = crackTexture(); this.domes = new Map(); this.t = 0;
     this.v = new THREE.Vector3(); this.v2 = new THREE.Vector3(); this.q = new THREE.Quaternion();
   }
-  of(p) { let d = this.domes.get(p); if (!d) { d = new Dome(this.scene, this.tex); this.domes.set(p, d); } return d; }
+  of(p) {
+    let d = this.domes.get(p);
+    // The dome takes its owner's colours (Nova's hard-light gold, Jean's telekinetic orange), reset if they swap
+    if (!d) { d = new Dome(this.scene, this.tex); this.domes.set(p, d); }
+    if (d.char !== p.char) { const P = fxPal(p); d.char = p.char; d.u.uColor.value.set(P.energy); d.u.uHot.value.set(P.hot); }
+    return d;
+  }
 
   // The shield's centre (his chest) in world space
   place(p, d) {
@@ -183,15 +189,15 @@ export class AegisFX {
   }
 
   onEvent(ev) {
-    const p = ev.p;
+    const p = ev.p, PAL = fxPal(p);
     switch (ev.type) {
       case 'aegisOn': {
         const d = this.of(p); d.reset(); d.state = 'up'; d.formT = 0; d.stage = 0; d.mesh.visible = true; d.u.uAlpha.value = 0; d.u.uWeak.value = 0;
         this.place(p, d);
-        const c = { x: p.x, y: p.y + p.h * 0.62 };
-        this.fx.sprite(c.x, c.y, 'ring', '#fff1c9', AEGIS.radius * 1.4, 0.3, 1.6);
-        this.fx.sprite(c.x, c.y, 'glow', GOLD, AEGIS.radius * 2.2, 0.22, 1.2);
-        this.fx.burst(c.x, c.y, '#fff1c9', 22, 5, 0.26, 0.3);
+        const c = { x: p.x, y: p.y + p.h * 0.62 }, P = fxPal(p);
+        this.fx.sprite(c.x, c.y, 'ring', P.hot, AEGIS.radius * 1.4, 0.3, 1.6);
+        this.fx.sprite(c.x, c.y, 'glow', P.energy, AEGIS.radius * 2.2, 0.22, 1.2);
+        this.fx.burst(c.x, c.y, P.hot, 22, 5, 0.26, 0.3);
         break;
       }
       case 'aegisHit': {
@@ -222,8 +228,8 @@ export class AegisFX {
         d.u.uWeak.value = ev.frac < 0.3 ? 1 : ev.frac < 0.5 ? 0.4 : 0;
         // Impact: sparks thrown off the surface, and energy streaming from the impact into his bracer
         const ax = Math.atan2(ev.dy, ev.dx);
-        this.fx.burst(ev.x, ev.y, '#fff6e0', 10 + Math.round(ev.dmg), 6 + ev.dmg * 0.3, 0.22, 0.28, { dir: ax, spread: 2.2, grav: 6 });
-        this.fx.sprite(ev.x, ev.y, 'star', '#fff1c9', 0.6 + ev.dmg * 0.04, 0.14, 1.5);
+        this.fx.burst(ev.x, ev.y, PAL.hot, 10 + Math.round(ev.dmg), 6 + ev.dmg * 0.3, 0.22, 0.28, { dir: ax, spread: 2.2, grav: 6 });
+        this.fx.sprite(ev.x, ev.y, 'star', PAL.hot, 0.6 + ev.dmg * 0.04, 0.14, 1.5);
         this.absorb(p, ev.x, ev.y, 8 + Math.round(ev.dmg * 0.8));
         break;
       }
@@ -237,19 +243,19 @@ export class AegisFX {
           for (let f = 0; f < d.faces; f++) d.detach(f, now, 3 + Math.random() * 4, 0.85, 2.5, 1.5);
           d.fadeT = 0.9;
           this.fx.sprite(c.x, c.y, 'star', '#ffffff', AEGIS.radius * 2.4, 0.2, 1.5);
-          this.fx.sprite(c.x, c.y, 'ring', '#fff1c9', AEGIS.radius * 1.2, 0.35, 3.2);
-          this.fx.burst(c.x, c.y, '#fff6e0', 40, 11, 0.24, 0.45, { grav: 9 });
-          this.fx.burst(c.x, c.y, GOLD, 26, 8, 0.3, 0.5, { grav: 7 });
+          this.fx.sprite(c.x, c.y, 'ring', PAL.hot, AEGIS.radius * 1.2, 0.35, 3.2);
+          this.fx.burst(c.x, c.y, PAL.hot, 40, 11, 0.24, 0.45, { grav: 9 });
+          this.fx.burst(c.x, c.y, PAL.energy, 26, 8, 0.3, 0.5, { grav: 7 });
         } else if (ev.why === 'detonate') {
           // Detonated: the panels blast outward fast, with a shock ring
           d.u.uGrav.value = 2;
           for (let f = 0; f < d.faces; f++) d.detach(f, now, 9 + Math.random() * 5, 0.42, 1.5, 0.5);
           d.fadeT = 0.5;
           this.fx.sprite(c.x, c.y, 'ring', '#ffffff', AEGIS.radius * 1.1, 0.32, 3.6);
-          this.fx.sprite(c.x, c.y, 'glow', GOLD, AEGIS.radius * 3.2, 0.25, 1.6);
+          this.fx.sprite(c.x, c.y, 'glow', PAL.energy, AEGIS.radius * 3.2, 0.25, 1.6);
           this.fx.sprite(c.x, c.y, 'star', '#ffffff', AEGIS.radius * 2.8, 0.18, 1.4);
-          this.fx.groundRing(p.x, p.y, '#fff1c9', 0.4, AEGIS.detonate.r * 1.3, 0.35, 0.9);
-          this.fx.burst(c.x, c.y, '#fff1c9', 36, 14, 0.3, 0.35);
+          this.fx.groundRing(p.x, p.y, PAL.hot, 0.4, AEGIS.detonate.r * 1.3, 0.35, 0.9);
+          this.fx.burst(c.x, c.y, PAL.hot, 36, 14, 0.3, 0.35);
           this.absorb(p, c.x, c.y, 16);
         } else {
           // Time ran out: the panels come loose and dissolve upward
@@ -265,11 +271,12 @@ export class AegisFX {
 
   // Energy absorbed by the shield flows into the bracer: sparks that fly from (x, y) to his muzzle
   absorb(p, x, y, n) {
+    const PAL = fxPal(p);
     const rig = this.fx.rigs.get(p), to = rig && rig.extra.muzzle ? rig.extra.muzzle.getWorldPosition(this.v2) : toWorld(p.x, p.y + 1.1, 0.25, this.v2);
     const from = toWorld(x, y, 0.2, this.v);
     for (let i = 0; i < n; i++) {
       const life = 0.16 + Math.random() * 0.14, o = new THREE.Vector3((Math.random() - 0.5) * 0.5, (Math.random() - 0.5) * 0.5, (Math.random() - 0.5) * 0.3);
-      const P = this.fx.particle(from.clone().add(o), Math.random() < 0.5 ? '#ffffff' : '#ffe2a8', 0.17, life);
+      const P = this.fx.particle(from.clone().add(o), Math.random() < 0.5 ? '#ffffff' : PAL.soft, 0.17, life);
       P.v.copy(to).sub(from).sub(o).divideScalar(life); P.drag = 1; P.grav = 0;
     }
   }
@@ -292,11 +299,12 @@ export class AegisFX {
         // Removed without an event (swap, reset): just hide it
         d.state = 'off'; d.mesh.visible = false;
       }
-      // Overcharged: gold-white sparks crackle off the bracer
+      // Overcharged: sparks in the owner's colours crackle off the muzzle (bracer, visor, hand)
       if (p.overcharge > 0 && p.state !== 'dead' && p.state !== 'downed') {
+        const PAL = fxPal(p);
         const rig = this.fx.rigs.get(p);
         if (rig && rig.root.visible && rig.extra.muzzle && Math.random() < 0.25 + p.overcharge / 160) {
-          const at = rig.extra.muzzle.getWorldPosition(this.v), P = this.fx.particle(at, Math.random() < 0.5 ? '#ffffff' : '#ffe2a8', 0.12 + Math.random() * 0.08, 0.14 + Math.random() * 0.1);
+          const at = rig.extra.muzzle.getWorldPosition(this.v), P = this.fx.particle(at, Math.random() < 0.5 ? '#ffffff' : PAL.soft, 0.12 + Math.random() * 0.08, 0.14 + Math.random() * 0.1);
           P.v.set((Math.random() - 0.5) * 4, Math.random() * 3, (Math.random() - 0.5) * 2); P.drag = 0.86; P.grav = 4;
         }
       }

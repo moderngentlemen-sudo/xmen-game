@@ -8,7 +8,7 @@
 import * as THREE from 'three';
 import { toWorld, planeDir } from './space.js';
 import { pointInSolid, rayCast, rayBoxT } from './level.js';
-import { MARKSMAN, ATTACH_LOOK, CHARS, HUNTER, DASH_CHARGE, NOVA, SUB_LOOK } from './config.js';
+import { MARKSMAN, ATTACH_LOOK, CHARS, HUNTER, DASH_CHARGE, NOVA, SUB_LOOK, attachLook, subLook, fxPal } from './config.js';
 import { chargeStage, burstStage, marksman, rocketHeight, rifleFocus, chest } from './player.js';
 import { hurtbox } from './combat.js';
 
@@ -88,38 +88,39 @@ export class ChargeFX {
       // The orb is solid colour (reads on bright scenes) with an additive white-hot core on top
       orb: this.sprite('glow', THREE.NormalBlending), core: this.sprite('glow'), halo: this.sprite('ring'),
       motes: Array.from({ length: 9 }, () => this.sprite('glow', THREE.NormalBlending)),
-      crystal: new THREE.Mesh(new THREE.OctahedronGeometry(0.15), new THREE.MeshStandardMaterial({ color: '#fff0c8', emissive: '#ffd889', emissiveIntensity: 1.6, roughness: 0.15, metalness: 0.3, flatShading: true })),
-      sight: this.line('#fff1c9', 0.018), laser: this.line('#ff9a1f', 0.016), laserDot: this.sprite('glow'),
+      crystal: new THREE.Mesh(new THREE.OctahedronGeometry(0.15), new THREE.MeshStandardMaterial({ color: fxPal(p).hot, emissive: attachLook(p, 'prism').tint, emissiveIntensity: 1.6, roughness: 0.15, metalness: 0.3, flatShading: true })),
+      sight: this.line(fxPal(p).hot, 0.018), laser: this.line(fxPal(p).energy, 0.016), laserDot: this.sprite('glow'),
       dots: null, aura: null, apex: null, spin: 0, land: null,
     };
     S.crystal.visible = false; S.crystal.renderOrder = 6; this.scene.add(S.crystal);
     // Arc trajectory preview: a row of dots
     const n = 22, g = new THREE.BufferGeometry();
     g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(n * 3), 3));
-    S.dots = new THREE.Points(g, new THREE.PointsMaterial({ color: ATTACH_LOOK.arc.tint, size: 0.2, map: this.tex.glow, transparent: true, opacity: 0.95, depthWrite: false }));
+    S.dots = new THREE.Points(g, new THREE.PointsMaterial({ color: attachLook(p, 'arc').tint, size: 0.2, map: this.tex.glow, transparent: true, opacity: 0.95, depthWrite: false }));
     S.dots.frustumCulled = false; S.dots.visible = false; this.scene.add(S.dots); S.dotN = n;
     // Charged-dash aura: a ring on the ground
     S.aura = new THREE.Mesh(new THREE.PlaneGeometry(2.4, 2.4), new THREE.MeshBasicMaterial({ map: this.tex.ring, transparent: true, opacity: 0.6, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
     S.aura.rotation.x = -Math.PI / 2; S.aura.visible = false; this.scene.add(S.aura);
     // Arc: where the shell would burst, its blast radius on the surface
-    S.land = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), new THREE.MeshBasicMaterial({ map: this.tex.ring, color: ATTACH_LOOK.arc.tint, transparent: true, opacity: 0.55, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
+    S.land = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), new THREE.MeshBasicMaterial({ map: this.tex.ring, color: attachLook(p, 'arc').tint, transparent: true, opacity: 0.55, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
     S.land.rotation.x = -Math.PI / 2; S.land.visible = false; this.scene.add(S.land);
     // Rocket apex marker: a line at the height he will reach, ticks for each level, and a thin beam up to it
     const apex = new THREE.Group(); apex.visible = false; this.scene.add(apex);
-    const lineMat = new THREE.MeshBasicMaterial({ color: '#ffe2a8', transparent: true, opacity: 0.85, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
+    const lineMat = new THREE.MeshBasicMaterial({ color: fxPal(p).soft, transparent: true, opacity: 0.85, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
     const bar = new THREE.Mesh(new THREE.PlaneGeometry(1.1, 0.06), lineMat); apex.add(bar);
-    const star = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.tex.star, color: '#fff1c9', transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
+    const star = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.tex.star, color: fxPal(p).hot, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
     star.scale.setScalar(0.55); apex.add(star);
     const ticks = Array.from({ length: 4 }, () => { const m = new THREE.Mesh(new THREE.PlaneGeometry(0.45, 0.035), lineMat.clone()); this.scene.add(m); m.visible = false; return m; });
-    S.apex = { group: apex, bar, star, ticks, beam: this.line('#ffe2a8', 0.012), mat: lineMat };
+    S.apex = { group: apex, bar, star, ticks, beam: this.line(fxPal(p).soft, 0.012), mat: lineMat };
     this.state.set(p, S);
     return S;
   }
 
-  // Where the charge gathers: Nova's bracer muzzle, the tip of Echo's rifle, or in front of the chest
+  // Where the charge gathers: the muzzle (Nova's bracer, Cyclops's visor, Storm's and Jean's hand), the tip of
+  // the Echo frame's rifle staff, or in front of the chest
   muzzle(p, rig, out) {
-    if (rig && p.char === 'nova' && rig.extra.muzzle) return rig.extra.muzzle.getWorldPosition(out);
-    if (rig && p.char === 'echo' && rig.extra.staffTip && rig.extra.handStaff.visible) return rig.extra.staffTip.getWorldPosition(out);
+    if (rig && p.arch === 'nova' && rig.extra.muzzle) return rig.extra.muzzle.getWorldPosition(out);
+    if (rig && p.arch === 'echo' && rig.extra.staffTip && rig.extra.handStaff.visible) return rig.extra.staffTip.getWorldPosition(out);
     return toWorld(p.x + p.facing * 0.45, p.y + p.h * 0.62, 0.25, out);
   }
 
@@ -146,7 +147,7 @@ export class ChargeFX {
       const S = this.of(p), rig = view.rigs.get(p);
       this.hide(S);
       if (!rig || p.state === 'downed' || p.state === 'dead' || !rig.root.visible) continue;
-      if (p.char === 'nova') this.novaCharge(p, S, rig, world, view);
+      if (p.arch === 'nova') this.novaCharge(p, S, rig, world, view);
       else this.echoRifle(p, S, rig, world);
       if (p.state === 'dashCharge') this.dashAura(p, S, rig);
     }
@@ -167,13 +168,14 @@ export class ChargeFX {
     if (f <= 0 && fb <= 0) return;
     const burst = fb > f, k = Math.max(f, fb) + (burst ? 0 : 0.45 * f4), perfect = stage === 'perfect' || bstage === 'perfect';
     const attach = mk ? p.attachment : 'lance', over = p.overcharge > 0;
-    let tint = burst ? (SUB_LOOK[p.sub] || SUB_LOOK.scatter).tint : mk ? ATTACH_LOOK[attach].tint : CHARS.nova.energy;
+    const pal = fxPal(p);
+    let tint = burst ? subLook(p, p.sub).tint : mk ? attachLook(p, attach).tint : pal.energy;
     if (over || l4) tint = '#' + new THREE.Color(tint).lerp(WHITE, l4 ? 0.55 : 0.3).getHexString();   // Overcharge and Level 4 burn whiter
     const at = this.muzzle(p, rig, this.v);
     const t = this.t, pulse = 1 + Math.sin(t * (perfect || l4 ? 55 : 18)) * (perfect ? 0.22 : l4 ? 0.14 : 0.06 * k);
     const big = !burst && attach === 'arc' ? 1.3 : !burst && attach === 'prism' && !l4 ? 0.6 : 1;   // the Prism's crystal is the show
     // The orb and its white-hot core grow with the charge (and keep swelling on the way to Level 4)
-    S.orb.position.copy(at); S.orb.material.color.set(perfect || l4 ? '#fff4d6' : burst ? (p.sub === 'scatter' ? '#ff9f40' : tint) : attach === 'prism' ? '#ffd889' : tint);
+    S.orb.position.copy(at); S.orb.material.color.set(perfect || l4 ? pal.hot : tint);
     S.orb.scale.setScalar((0.16 + 0.55 * k) * big * pulse); S.orb.material.opacity = 0.65 + 0.3 * Math.min(1, k); S.orb.visible = true;
     S.core.position.copy(at); S.core.material.color.set('#ffffff'); S.core.scale.setScalar((0.1 + 0.3 * k) * big * pulse); S.core.visible = true;
     if (level >= 2 || perfect || (burst && fb >= B[1] / B[2])) {
@@ -209,21 +211,21 @@ export class ChargeFX {
     if (attach === 'lance' && level >= 3) {
       // Level 3 Lance: a sight line down the aim
       const end = this.v3.copy(at).addScaledVector(dir, 6);
-      this.span(S.sight, at, end); S.sight.material.opacity = perfect ? 0.85 : 0.35; S.sight.material.color.set(perfect ? '#ffffff' : '#fff1c9'); S.sight.scale.x = S.sight.scale.z = 1;
+      this.span(S.sight, at, end); S.sight.material.opacity = perfect ? 0.85 : 0.35; S.sight.material.color.set(perfect ? '#ffffff' : pal.hot); S.sight.scale.x = S.sight.scale.z = 1;
     } else if (attach === 'volley') {
       // Volley: one orbiting mote per dart the release would fire
       const n = MARKSMAN.volley.darts[perfect ? 'perfect' : Math.max(1, level)], r = 0.28 + 0.12 * k;
       for (let i = 0; i < n; i++) {
         const a = t * 7 + i * Math.PI * 2 / n, m = S.motes[i];
         const o = planeDir(p.x, Math.cos(a) * r, Math.sin(a) * r, this.v3);
-        m.position.copy(at).add(o); m.material.color.set(level ? '#ffc04d' : '#9aa6b8'); m.scale.setScalar(level ? 0.2 : 0.12); m.visible = true;
+        m.position.copy(at).add(o); m.material.color.set(level ? pal.energy : '#9aa6b8'); m.scale.setScalar(level ? 0.2 : 0.12); m.visible = true;
       }
     } else if (attach === 'arc' && level >= 1) {
       this.arcPreview(p, S, level, perfect);
     } else if (attach === 'prism') {
       S.spin += 0.12 + 0.2 * k;
       S.crystal.position.copy(at).addScaledVector(dir, 0.25); S.crystal.rotation.set(S.spin * 0.7, S.spin, 0); S.crystal.scale.setScalar(0.7 + 1.6 * k); S.crystal.visible = true;
-      if (Math.random() < 0.08 + 0.2 * k) this.flash(this.v3.copy(at).add(this.v2.set((Math.random() - 0.5) * 0.4, (Math.random() - 0.5) * 0.4, 0.05)), 'star', ATTACH_LOOK.prism.tint, 0.25 + 0.3 * k, 0.12, 1.2);
+      if (Math.random() < 0.08 + 0.2 * k) this.flash(this.v3.copy(at).add(this.v2.set((Math.random() - 0.5) * 0.4, (Math.random() - 0.5) * 0.4, 0.05)), 'star', attachLook(p, 'prism').tint, 0.25 + 0.3 * k, 0.12, 1.2);
     }
   }
 
@@ -255,12 +257,12 @@ export class ChargeFX {
     }
     for (let j = i; j < S.dotN; j++) { pos[j * 3] = pos[(i - 1) * 3]; pos[j * 3 + 1] = pos[(i - 1) * 3 + 1]; pos[j * 3 + 2] = pos[(i - 1) * 3 + 2]; }
     S.dots.geometry.attributes.position.needsUpdate = true;
-    S.dots.material.color.set(perfect ? '#fff1c9' : '#ff8a1f'); S.dots.material.size = 0.18 + 0.04 * level; S.dots.visible = true;
+    S.dots.material.color.set(perfect ? fxPal(p).hot : attachLook(p, 'arc').tint); S.dots.material.size = 0.18 + 0.04 * level; S.dots.visible = true;
     if (hit) {
       // Where it will burst: the blast radius for this level
       const r = A[level].r * (perfect ? A.perfectRadius : 1);
       toWorld(x, y + 0.05, 0, S.land.position); S.land.scale.setScalar(r * (1 + Math.sin(this.t * 12) * 0.04));
-      S.land.material.color.set(perfect ? '#ffffff' : ATTACH_LOOK.arc.tint); S.land.visible = true;
+      S.land.material.color.set(perfect ? '#ffffff' : attachLook(p, 'arc').tint); S.land.visible = true;
     }
   }
 
@@ -271,7 +273,7 @@ export class ChargeFX {
     if (!pv) return;
     const A = S.apex, cam = view.camera, r = (pv.apex - p.y) / Math.max(0.01, pv.h);
     toWorld(pv.x, pv.apex + 0.02, 0.3, A.group.position); A.group.quaternion.copy(cam.quaternion);
-    const col = pv.perfect ? '#ffffff' : ATTACH_LOOK[p.attachment].tint;
+    const col = pv.perfect ? '#ffffff' : attachLook(p, p.attachment).tint;
     A.mat.color.set(col); A.mat.opacity = pv.perfect ? 0.95 : 0.7 + 0.2 * Math.sin(this.t * 10);
     A.star.material.color.set(col); A.star.scale.setScalar(pv.perfect ? 0.8 + Math.sin(this.t * 40) * 0.15 : 0.5);
     A.group.visible = true;
@@ -281,7 +283,7 @@ export class ChargeFX {
     hs.forEach((h, i) => {
       const m = A.ticks[i], y = p.y + h * r;
       toWorld(pv.x, y, 0.3, m.position); m.quaternion.copy(cam.quaternion);
-      m.material.color.set(i === 3 ? '#ffffff' : '#ffe2a8'); m.material.opacity = y <= pv.apex + 0.05 ? 0.55 : 0.22; m.visible = true;
+      m.material.color.set(i === 3 ? '#ffffff' : fxPal(p).soft); m.material.opacity = y <= pv.apex + 0.05 ? 0.55 : 0.22; m.visible = true;
     });
   }
 
@@ -304,7 +306,7 @@ export class ChargeFX {
     const crit = hitE && y0 + p.aimY * (tEnd + 0.15) > hitE.y + hitE.h * R.critZone;
     const end = toWorld(x0 + p.aimX * tEnd, y0 + p.aimY * tEnd, 0.25, this.v2);
     this.span(S.laser, at, end);
-    const red = '#ff2414', col = full ? red : '#ff9a1f';
+    const red = '#ff2414', mine = fxPal(p).energy, col = full ? red : mine;
     // Searching: a nervous flicker with dropouts. On a target: steady.
     const search = !hitE, flick = search ? (Math.random() < 0.18 ? 0.15 : 0.55 + Math.random() * 0.45) : 1;
     S.laser.material.color.set(col);
@@ -313,16 +315,16 @@ export class ChargeFX {
     S.laserDot.position.copy(end);
     const dotTex = crit ? this.tex.star : this.tex.glow;
     if (S.laserDot.material.map !== dotTex) { S.laserDot.material.map = dotTex; S.laserDot.material.needsUpdate = true; }
-    S.laserDot.material.color.set(full ? red : hitE ? '#ffffff' : '#ff9a1f'); S.laserDot.material.opacity = flick;
+    S.laserDot.material.color.set(full ? red : hitE ? '#ffffff' : mine); S.laserDot.material.opacity = flick;
     S.laserDot.material.rotation = crit ? this.t * 4 : 0;
     S.laserDot.scale.setScalar((hitE ? 0.45 : 0.25) * (full ? 1.4 : 1) * (crit ? 1.9 : 1)); S.laserDot.visible = ready;
     // Charge glint at the tip; a red scope flare when fully charged
-    S.orb.position.copy(at); S.orb.material.color.set(full ? red : CHARS.echo.energy);
+    S.orb.position.copy(at); S.orb.material.color.set(full ? red : mine);
     S.orb.scale.setScalar((0.12 + 0.3 * k) * (full ? 1.2 + Math.sin(this.t * 30) * 0.15 : 1)); S.orb.material.opacity = ready ? 0.9 : 0.35; S.orb.visible = true;
     if (full && ready) { S.halo.position.copy(at); S.halo.material.color.set(red); S.halo.scale.setScalar(0.55 + Math.sin(this.t * 18) * 0.08); S.halo.material.rotation = this.t * 2; S.halo.material.opacity = 0.8; S.halo.visible = true; }
     if (ready && Math.random() < 0.3 + 0.5 * k) {
       const a = Math.random() * Math.PI * 2, r = 0.5 + Math.random() * 0.4, tv = planeDir(p.x, Math.cos(a) * r, Math.sin(a) * r, this.v3);
-      this.inward(at, tv.x, tv.y, tv.z, full ? red : CHARS.echo.energy, 0.12, 0.16);
+      this.inward(at, tv.x, tv.y, tv.z, full ? red : mine, 0.12, 0.16);
     }
   }
 
@@ -346,12 +348,12 @@ export class ChargeFX {
   // ---- Events ----
   levelUp(p, rig, level, kind) {
     const at = kind === 'dash' ? toWorld(p.x, p.y + 0.8, 0.2, this.v) : this.muzzle(p, rig, this.v);
-    const tint = kind === 'burst' ? (SUB_LOOK[p.sub] || SUB_LOOK.scatter).tint : kind === 'dash' || kind === 'pound' ? CHARS[p.char].energy : kind === 'rifle' ? CHARS.echo.energy
-      : marksman(p) ? ATTACH_LOOK[p.attachment].tint : CHARS.nova.energy;
+    const pal = fxPal(p), tint = kind === 'burst' ? subLook(p, p.sub).tint : kind === 'dash' || kind === 'pound' || kind === 'rifle' ? pal.energy
+      : marksman(p) ? attachLook(p, p.attachment).tint : pal.energy;
     const top = level >= 3;
     this.flash(at, 'ring', top ? '#ffffff' : tint, 0.35 + level * 0.18, 0.18, 3.2);
     this.flash(at, 'star', '#ffffff', 0.35 + level * 0.25, 0.14, 1.5);
-    if (level >= 4) { this.flash(at, 'glow', '#fff1c9', 1.6, 0.2, 1.8); this.shockRing(at.clone(), new THREE.Vector3(0, 0, 1), '#ffffff', 0.3, 1.4, 0.25, 0); }
+    if (level >= 4) { this.flash(at, 'glow', pal.hot, 1.6, 0.2, 1.8); this.shockRing(at.clone(), new THREE.Vector3(0, 0, 1), '#ffffff', 0.3, 1.4, 0.25, 0); }
     for (let i = 0; i < 8 + level * 5; i++) {
       const a = Math.random() * Math.PI * 2, sp = 3 + level * 1.5, P = this.fx.particle(at, Math.random() < 0.4 ? '#ffffff' : tint, 0.16, 0.22);
       planeDir(p.x, Math.cos(a) * sp, Math.sin(a) * sp, P.v); P.drag = 0.88; P.grav = 0;
@@ -363,7 +365,7 @@ export class ChargeFX {
   release(ev, p, rig) {
     const L = ev.level || 0, perfect = !!ev.perfect, attach = ev.attach || 'lance';
     const at = this.muzzle(p, rig, this.v).clone();
-    const tint = ev.rifle ? CHARS.echo.energy : ATTACH_LOOK[attach] ? ATTACH_LOOK[attach].tint : CHARS.nova.energy;
+    const pal = fxPal(p), tint = ev.rifle || p.arch !== 'nova' ? pal.energy : attachLook(p, attach).tint;
     const dir = planeDir(p.x, ev.ax ?? p.aimX, ev.ay ?? p.aimY, new THREE.Vector3()).normalize();
     const s = (perfect ? 1.5 : 1) * (0.7 + L * 0.35);
     this.flash(at, 'star', '#ffffff', 0.9 * s, 0.12, 1.4);
@@ -376,7 +378,7 @@ export class ChargeFX {
       P.drag = 0.86; P.grav = 3;
     }
     if (!ev.beam && ((attach === 'lance' && (L >= 3 || perfect)) || ev.mark)) {
-      const m = this.line(perfect ? '#ffffff' : ev.mark ? '#ffe0b0' : '#fff1c9', perfect ? 0.06 : 0.04);
+      const m = this.line(perfect ? '#ffffff' : ev.mark ? pal.soft : pal.hot, perfect ? 0.06 : 0.04);
       this.span(m, at, this.v3.copy(at).addScaledVector(dir, ev.mark ? 22 : 16));
       this.flashes.push({ m, life: 0.14, max: 0.14, base: 0.9, dispose: true });
     }
@@ -414,8 +416,9 @@ export class ChargeFX {
     let r = this.trails.get(pr);
     if (!r) {
       const [n, w] = TRAIL[pr.deflected ? 'deflected' : pr.kind], lv = pr.deflected ? 1 : pr.level || 1;
-      const col = pr.deflected ? CHARS.echo.energy : pr.perfect ? '#fff4d6' : pr.kind === 'rifle' || pr.kind === 'markShot' ? (pr.kind === 'markShot' ? '#ffc070' : CHARS.echo.energy)
-        : pr.kind === 'dart' ? ATTACH_LOOK.volley.tint : pr.kind === 'shell' ? ATTACH_LOOK.arc.tint : pr.kind === 'prism' || pr.kind === 'shard' ? ATTACH_LOOK.prism.tint : ATTACH_LOOK.lance.tint;
+      const o = pr.owner && pr.owner.kind === 'player' ? pr.owner : { char: 'nova' }, P = fxPal(o);
+      const col = pr.deflected ? P.energy : pr.perfect ? P.hot : pr.kind === 'rifle' || pr.kind === 'markShot' ? (pr.kind === 'markShot' ? P.soft : P.energy)
+        : pr.kind === 'dart' ? attachLook(o, 'volley').tint : pr.kind === 'shell' ? attachLook(o, 'arc').tint : pr.kind === 'prism' || pr.kind === 'shard' ? attachLook(o, 'prism').tint : attachLook(o, 'lance').tint;
       r = new Ribbon(this.scene, n, w * (0.8 + 0.15 * lv) * (pr.perfect ? 1.3 : 1), col);
       this.trails.set(pr, r);
     }

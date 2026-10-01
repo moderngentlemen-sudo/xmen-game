@@ -3,7 +3,7 @@
 // after it, the torso twisting into blows, and secondary motion (breathing, bob, head counter-motion).
 // Attacks are keyframed per move (windup, a snapping strike, follow-through); everything eases toward its
 // target at a rate set per state, independent of frame rate.
-import { MOVES, SCARF, SETTINGS, ATTACH_LOOK, DASH_CHARGE, HUNTER, MARKSMAN, DASH_SLASH, ULT } from './config.js';
+import { MOVES, SCARF, SETTINGS, ATTACH_LOOK, DASH_CHARGE, HUNTER, MARKSMAN, DASH_SLASH, ULT, kitOf } from './config.js';
 import { chargeStage, burstStage } from './player.js';
 
 // Joints: spine pitch (+ leans forward), twist (torso turn), shoulders/elbows (near = weapon arm, far),
@@ -83,12 +83,12 @@ const SPIN = { echo_b4: [1, 'y'], echo_rise: [2, 'y'], echo_spin: [2, 'z'] };
 
 const keyCache = new Map();
 function attackPose(p, out) {
-  const id = p.moveId, m = MOVES[id];
-  let ks = keyCache.get(id);
+  const id = p.moveId, m = p.move || MOVES[id], key = m.fast ? id + ':fast' : id;
+  let ks = keyCache.get(key);
   if (!ks) {
     const base = m.air ? { ...FIGHT, ...AIR } : FIGHT;
     ks = (KEYS[id] || KEYS.echo_b1)(m).map(q => ({ t: q.t, snap: q.snap, pose: { ...base, ...q.pose } }));
-    keyCache.set(id, ks);
+    keyCache.set(key, ks);
   }
   const u = p.st;
   if (u <= ks[0].t) return Object.assign(out, ks[0].pose);
@@ -105,7 +105,8 @@ const dashLevelOf = p => (p.state !== 'dashCharge' ? 0 : p.dashChargeT >= DASH_C
 // ---- The pose for this frame -----------------------------------------------------------------
 export function animatePlayer(rig, p, dt, t) {
   const P = { ...REST };
-  const speed = Math.abs(p.vx), st = p.state, echo = p.char === 'echo', mk = !echo && SETTINGS.novaKit === 'marksman';
+  const speed = Math.abs(p.vx), st = p.state, echo = p.arch === 'echo', mk = !echo && SETTINGS.novaKit === 'marksman';
+  const kit = kitOf(p), skate = mk && !!kit.skate, hero = p.char;
   const aimAng = Math.atan2(p.aimY, Math.abs(p.aimX) < 1e-3 ? 1e-3 : p.aimX * p.facing);
   let rate = 18, yaw = 0, roll = 0;   // rate: how fast joints ease toward the pose (per second)
   const breathe = Math.sin(t * 2.2 + (echo ? 1 : 0));
@@ -115,7 +116,7 @@ export function animatePlayer(rig, p, dt, t) {
   } else if (st === 'slide') {
     // Low slide: lead leg out straight, trailing leg folded, leaning back, the far hand dragging on the floor
     Object.assign(P, { hipY: 0.46, spine: -0.45, hipN: 1.38, knN: -0.08, hipF: -0.38, knF: -1.95, shN: 0.95, elN: 0.7, shF: -0.55, elF: 0.2, bodyZ: -0.06, head: 0.3 });
-    if (mk) Object.assign(P, { hipY: 0.52, spine: 0.1, hipN: 1.05, knN: -1.0, hipF: -0.9, knF: -0.35, shN: -0.8, shF: -1.1, elN: 0.3, elF: 0.3, head: -0.05 });   // skate power slide
+    if (skate) Object.assign(P, { hipY: 0.52, spine: 0.1, hipN: 1.05, knN: -1.0, hipF: -0.9, knF: -0.35, shN: -0.8, shF: -1.1, elN: 0.3, elF: 0.3, head: -0.05 });   // power slide on the glide
     rate = 30;
   } else if (st === 'dashCharge') {
     const f = Math.min(1, p.dashChargeT / DASH_CHARGE.charge[0]);
@@ -127,6 +128,13 @@ export function animatePlayer(rig, p, dt, t) {
     Object.assign(P, { spine: 0.58, hipN: -0.35, knN: -0.95, hipF: -0.95, knF: -0.45, shN: -1.05, shF: -1.25, elN: 0.25, elF: 0.3, head: -0.3 });
     const dy = st === 'dash' && p.dash ? p.dash.dy : Math.sign(p.vy) * 0.4;
     P.bodyZ = Math.atan2(dy, 1) * 0.8; rate = 34;
+  } else if (st === 'dashslash' && p.slash && p.slash.drill && p.st <= DASH_SLASH.ticks) {
+    // Wolverine's Drill Claw: both fists driven out ahead, the body laid along the drill, corkscrewing
+    const a = Math.atan2(p.slash.dy, Math.abs(p.slash.dx) < 1e-3 ? 1e-3 : p.slash.dx * p.facing);
+    Object.assign(P, { spine: 0.1, shN: Math.PI - 0.08, elN: 0.05, shF: Math.PI + 0.08, elF: 0.05, hipN: 0.5, knN: -0.9, hipF: 0.2, knF: -0.7, hipY: 0.95, head: -0.2,
+      bodyZ: a - Math.PI / 2 });
+    yaw = Math.PI * 2 * 2.5 * snapEase(Math.min(1, p.st / DASH_SLASH.ticks)) * (p.facing > 0 ? 1 : -1);
+    rate = 60;
   } else if (st === 'dashslash') {
     // Echo's Dash Slash: arms thrown back, then one long horizontal cut as he lunges through
     const u = p.st, s = u < 2 ? 0 : u < 6 ? snapEase((u - 2) / 4) : 1;
@@ -179,7 +187,13 @@ export function animatePlayer(rig, p, dt, t) {
     rate = 34;
   } else if (st === 'ult') {
     const R = p.ultRun;
-    if (echo) {
+    if (kit.ult === 'storm') {
+      // Storm: arms flung up to the sky as she rises into the eye; each bolt jolts her; the last one throws her arms wide
+      const fin = R && R.t >= R.fin;
+      Object.assign(P, fin ? { spine: -0.3, shN: 2.0, elN: 0.15, shF: 2.2, elF: 0.15, hipN: 0.25, knN: -0.5, hipF: -0.2, knF: -0.6, hipY: 0.95, head: 0.35 }
+        : { spine: -0.25, shN: 2.95, elN: 0.2, shF: 3.05, elF: 0.25, hipN: 0.3, knN: -0.75, hipF: 0.05, knF: -0.9, hipY: 0.95, head: 0.5 });
+      if (R && !fin) { const j = (Math.random() - 0.5) * 0.05; P.spine += j; P.shN += j * 2; }
+    } else if (echo) {
       // Echo: crouched to spring while it is called; the follow-through of a great cut when he reappears
       if (!R) Object.assign(P, { spine: 0.45, hipN: 1.15, knN: -1.7, hipF: -0.55, knF: -0.65, shN: -0.9, elN: 0.4, shF: -1.1, elF: 0.4, hipY: 0.7, head: -0.2, twist: -0.3 });
       else Object.assign(P, { spine: 0.5, twist: 0.55, shN: 1.62, elN: 0.05, shF: 1.35, elF: 0.2, hipN: 0.95, knN: -0.9, hipF: -0.8, knF: -0.2, hipY: 0.8, head: -0.1 });
@@ -192,6 +206,7 @@ export function animatePlayer(rig, p, dt, t) {
       else if (R.segs) {
         const j = (Math.random() - 0.5) * 0.04, a = Math.atan2(R.dy, Math.abs(R.dx) < 1e-3 ? 1e-3 : R.dx * p.facing);
         Object.assign(P, { spine: -0.18 + j, shN: a + Math.PI / 2, elN: 0.02, shF: a + Math.PI / 2 - 0.15, elF: 0.1, hipN: 0.7, knN: -1.0, hipF: -0.5, knF: -0.6, hipY: 0.95 + j, head: -0.1 });
+        if (kit.eyes) Object.assign(P, { shN: 2.55, elN: 2.35, shF: 2.45, elF: 2.25, head: -a * 0.85 - 0.1 });   // Optic Overload: hands to the open visor
       } else Object.assign(P, { spine: -0.35, shN: 2.2, elN: 0.1, shF: 2.0, elF: 0.1, hipN: 0.4, knN: -0.7, hipF: -0.2, knF: -0.5, hipY: 0.95, head: 0.3 });
     }
     rate = 26;
@@ -206,8 +221,10 @@ export function animatePlayer(rig, p, dt, t) {
     Object.assign(P, { spine: 0.15, shN: aimAng + Math.PI / 2 + 0.15, elN: 0.02, shF: 0.7, elF: 1.1, hipN: 0.5, knN: -0.4, hipF: -0.4 }); rate = 40;
   } else if (st === 'beam') {
     // Braced against the beam's push: wide stance, leaning into it, the free hand steadying the bracer
+    // (Cyclops holds his visor with both hands, his head along the beam)
     const j = (Math.random() - 0.5) * 0.03;
     Object.assign(P, { spine: -0.12 + j, shN: aimAng + Math.PI / 2 - 0.12, elN: 0.02, shF: aimAng + Math.PI / 2 - 0.3, elF: 0.7, hipN: 0.85, knN: -0.95, hipF: -0.65, knF: -0.35, hipY: 0.8 + j, head: -0.1 });
+    if (kit.eyes) Object.assign(P, { shN: 2.55, elN: 2.35, shF: 2.4, elF: 2.2, head: -aimAng * 0.8 - 0.12 });
     if (!p.onGround) Object.assign(P, { hipN: 0.6, knN: -0.9, hipF: -0.2, knF: -0.7, hipY: 0.95 });
     rate = 30;
   } else if (st === 'lash') {
@@ -229,8 +246,8 @@ export function animatePlayer(rig, p, dt, t) {
     rate = 20;
   } else if (speed > 0.6) {
     const back = p.vx * p.facing < 0, amp = Math.min(1, speed / 7);
-    if (mk) {
-      // Skate stride: long, low pushes with arms swinging wide; at full glide both feet come together
+    if (skate) {
+      // Skate stride (Storm and Jean glide the same way: long, low pushes): long, low pushes with arms swinging wide; at full glide both feet come together
       rig.phase += dt * speed * 0.95 * (back ? -1 : 1);
       const s = Math.sin(rig.phase), c = Math.cos(rig.phase), coast = Math.max(0, 1 - Math.abs(p.vx - p.prevVx || 0) * 20) * (speed > 7 ? 1 : 0);
       Object.assign(P, { hipN: 0.25 + s * 0.35 * amp, knN: -0.75 - Math.max(0, c) * 0.4, hipF: -0.3 - s * 0.45 * amp, knF: -0.55 - Math.max(0, -c) * 0.3,
@@ -254,8 +271,11 @@ export function animatePlayer(rig, p, dt, t) {
 
   // Aiming layer: Nova's bracer arm and Echo's rifle follow the aim while shooting
   const rifle = echo && (p.rifleT >= HUNTER.rifle.raise || (p.rifleCd > 0 && (p.rifleCdMax || 0) - p.rifleCd < 14));
-  const shooting = (p.chargeT > 0 || p.fireCd > 0 || p.shootT > 0 || rifle || (p.aimFree && !echo)) && ['normal', 'dash', 'slide'].includes(st);
-  if (shooting) {
+  const shooting = (p.chargeT > 0 || p.fireCd > 0 || p.shootT > 0 || rifle || (p.aimFree && !echo)) && ['normal', 'dash', 'slide'].includes(st) && kit.fire !== 'drill';
+  if (shooting && kit.eyes) {
+    // Cyclops fires from the visor: his near hand goes to it and his head turns to the aim
+    P.shN = 2.55 + P.spine * 0.5; P.elN = 2.35; P.head = -aimAng * 0.8;
+  } else if (shooting) {
     P.shN = aimAng + Math.PI / 2 + P.spine; P.elN = 0.02;
     if (echo) {
       P.shF = aimAng + Math.PI / 2 + P.spine - 0.28; P.elF = 0.75;
@@ -325,11 +345,20 @@ export function animatePlayer(rig, p, dt, t) {
     ex.gauntlets.forEach(g => { g.visible = rig.hard > 0.04 && !kick; g.scale.set(1.1 * hs, 1.3 * hs, hs); });
     ex.greave.visible = rig.hard > 0.04 && kick; ex.greave.scale.set(1.7 * hs, 0.9 * hs, hs);
     ex.hardMat.emissiveIntensity = strike ? 5.5 : 2.6; ex.hardMat.opacity = 0.35 + 0.5 * rig.hard;
+  } else if (kit.fire === 'drill') {
+    // Wolverine: the claws come out whenever he fights (and while he coils a Drill Claw), and go back in after
+    const ex = rig.extra;
+    const out = ['attack', 'dashslash', 'vb', 'dive', 'pound', 'parry', 'ult'].includes(st) || p.drillT > 0 || p.berserkT > 0;
+    rig.claws = (rig.claws || 0) + ((out ? 1 : 0) - (rig.claws || 0)) * (1 - Math.exp(-dt * (out ? 40 : 12)));
+    const k = rig.claws, show = k > 0.05;
+    ex.blade.visible = ex.bladeF.visible = show; ex.blade.scale.set(1, k, 1); ex.bladeF.scale.set(1, k, 1);
+    rig.mats.energy.emissiveIntensity = 2.0 + p.resolve / 50 + dashLevelOf(p) * 1.1 + (st === 'pound' && p.pound ? p.pound.level * 1.1 : 0)
+      + (p.berserkT > 0 ? 2.2 + Math.sin(t * 22) * 0.9 : 0) + (st === 'ult' ? 4 + Math.sin(t * 36) * 0.8 : 0);
   } else {
     const ex = rig.extra, hunter = SETTINGS.echoKit === 'hunter';
     const staffOut = (st === 'attack' && staffMove(p.moveId)) || st === 'vb' || st === 'dive' || st === 'pound' || st === 'ult' || (st === 'parry' && hunter) ||
       ((p.fireCd > 0 || p.chargeT > 0 || p.tracerCd > 60 || rifle) && ['normal', 'dash', 'slide'].includes(st));
-    ex.handStaff.visible = staffOut; ex.backStaff.visible = !staffOut;
+    ex.handStaff.visible = staffOut; ex.backStaff.visible = !staffOut && !rig.hero;
     // Rifle hold: the staff turns to lie along the forearm like a rifle barrel; parry: it twirls in the hand
     const rifleHold = rifle && staffOut && !(st === 'attack' || st === 'vb' || st === 'dive' || st === 'parry' || st === 'pound');
     // Pound: the glaive hangs point-down from his raised hands, then leads the drop point-first
