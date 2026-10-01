@@ -111,7 +111,7 @@ function playRandom(seed, players, ticks, every) {
 }
 {
   // The cell block: break the door, the kid comes out, a Collector comes for her
-  const { S, p, run, log } = setup({ heroes: ['wolverine'], x: 85.6, mission: true });
+  const { S, p, run, log } = setup({ heroes: ['wolverine'], x: 87.6, mission: true });
   S.mission.sec = 1; S.mission.secId = 'cells'; S.mission.phase = 'test'; S.gates.G1 = false;
   p.facing = 1;
   run((i) => ({ b: i % 8 < 3 ? bits('attack') : 0 }), 400, () => !S.gates.cell);

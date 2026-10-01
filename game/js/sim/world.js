@@ -88,6 +88,8 @@ export function step(S, cmds = {}) {
   // Anything that falls out of the level comes back to safety (players) or is gone (enemies, props)
   for (const p of S.players) if (p.y < KILL_Y) { const cp = S.mission.spawn; p.x = cp.x; p.y = cp.y + 1; p.vx = p.vy = 0; p.mercy = 60; }
   for (const e of S.enemies) if (e.y < KILL_Y && !e.dead) { e.dead = true; e.deathT = 0; }
+  const k = S.kid, lead = S.players.find(p => p.state !== 'downed');
+  if (k && k.y < KILL_Y && lead) { k.x = lead.x - lead.facing; k.y = lead.y + 1; k.vx = k.vy = 0; k.carriedBy = 0; if (k.state === 'carried') k.state = 'follow'; }
 }
 
 // The shared camera frames every living hero (and the kid), within the level

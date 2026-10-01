@@ -197,15 +197,15 @@ export function buildSet(scene, fxTex) {
   // The low security barrier
   box(2, 1, 1.4, M.hazard, 80, 0.5, 0);
   // The kid's cell: back wall, roof and the barred door (the door is dynamic: it breaks)
-  box(0.6, 3.4, 3, M.steel, 93.3, 1.7, 0); box(6.4, 0.3, 3, M.steel, 90.4, 3.55, 0);
-  box(6.2, 3.3, 0.2, toon('#39404f'), 90.2, 1.7, -1.5, false);
-  const doorG = new THREE.Group(); doorG.position.set(86.85, 0, 0);
+  box(7, 0.3, 3, M.steel, 92.5, 3.55, 0);
+  box(7, 3.3, 0.2, toon('#39404f'), 92.5, 1.7, -1.5, false);
+  const doorG = new THREE.Group(); doorG.position.set(88.7, 0, 0);
   const frameMat = toon('#7d8698'); addRim(frameMat, '#ffffff', 0.2);
   for (const y of [0.1, 3.3]) { const f = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.2, 3), frameMat); f.position.y = y; doorG.add(f); }
   for (let z = -1.3; z <= 1.31; z += 0.37) { const bar = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.055, 3.2, 8), frameMat); bar.position.set(0, 1.7, z); bar.castShadow = true; doorG.add(bar); }
   const lock = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.4, 0.4), glow(HOSTILE, 1.6)); lock.position.set(0.1, 1.6, 0.6); doorG.add(lock);
   scene.add(doorG); dyn.door = { group: doorG, lock };
-  sprite('#ffd27a', 2.4, 90.2, 3.1, 0.5, 0.35);   // a dim lamp inside the cell
+  sprite('#ffd27a', 2.4, 92.5, 3.1, 0.5, 0.35);   // a dim lamp inside the cell
 
   // ---- The assembly hall ----
   const backHall = toon('#3a2f4a');
@@ -282,7 +282,7 @@ export function updateSet(dyn, S, dt, t) {
     // A hit shakes the door; the lock flickers as it weakens
     const hpK = D ? Math.max(0, D.hp / CELL.door.hp) : 0;
     dyn.door.shake = Math.max(0, (dyn.door.shake || 0) - dt * 3);
-    dyn.door.group.position.x = 86.85 + (Math.random() - 0.5) * 0.08 * dyn.door.shake;
+    dyn.door.group.position.x = 88.7 + (Math.random() - 0.5) * 0.08 * dyn.door.shake;
     dyn.door.lock.material.emissiveIntensity = hpK > 0.35 ? 1.6 : (Math.sin(t * 30) > 0 ? 2 : 0.2);
   }
   for (const L of dyn.lamps) L.material.opacity = L.userData.base === undefined ? (L.userData.base = L.material.opacity) : L.userData.base * (0.8 + 0.2 * Math.sin(t * 3 + L.position.x));

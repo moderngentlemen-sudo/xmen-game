@@ -69,6 +69,7 @@ function physics(S, e, friction = 1) {
   if (!T.flier || e.state === 'stagger' || e.state === 'launched' || e.state === 'thrown') e.vy = Math.max(e.vy - GRAVITY * DT * (e.state === 'launched' ? 0.8 : 1), -MAX_FALL);
   if (e.onGround && friction < 1) e.vx *= friction;
   const want = e.vx;
+  if (e.dropT > 0) e.dropT--;
   moveBody(e, DT, S.gates);
   // Walkers hop over knee-high obstacles in their way (vents, barriers, crate stacks)
   if (e.hitWall && e.onGround && Math.abs(want) > 0.5 && !T.flier && !T.boss && e.state === 'idle') { e.vy = 12.5; e.onGround = false; }
@@ -120,6 +121,7 @@ const AI = {
     if (e.state === 'windup' || e.state === 'attack' || e.state === 'recover') { meleeAttack(S, e, T[e.atk.kind]); return; }
     if (!p) { e.vx *= 0.8; physics(S, e); return; }
     const dx = p.x - e.x; e.facing = dx >= 0 ? 1 : -1;
+    dropToward(e, p);
     const reach = T.swing.reach + p.w / 2;
     if (Math.abs(dx) > reach * 0.85) e.vx = e.facing * T.speed; else e.vx *= 0.6;
     if (Math.abs(dx) < reach && Math.abs(p.y - e.y) < 1.6 && e.cd === 0 && takeToken(S, e, 'melee')) {
@@ -135,6 +137,7 @@ const AI = {
     if (e.state === 'recover') { e.vx *= 0.8; physics(S, e); if (e.st >= T.burst.rec) { releaseToken(S, e); setE(e, 'idle'); e.cd = 70 + Math.floor(rand(S) * 60); } return; }
     if (!p) { e.vx *= 0.8; physics(S, e); return; }
     const dx = p.x - e.x, d = Math.abs(dx); e.facing = dx >= 0 ? 1 : -1;
+    dropToward(e, p);
     e.vx = d < T.keep[0] ? -e.facing * T.speed : d > T.keep[1] ? e.facing * T.speed : e.vx * 0.7;
     if (d < 18 && e.cd === 0 && !segmentBlocked(e.x, e.y + 1.5, p.x, p.y + 1, S.gates) && takeToken(S, e, 'ranged')) {
       e.atk = { kind: 'burst', inst: newId(S), n: 0, target: p.id }; setE(e, 'windup');
@@ -148,8 +151,12 @@ const AI = {
     const prey = ent(S, e.target);
     const quarry = prey && !isDown(prey) ? prey : pickPrey(S, e);
     if (quarry) e.target = quarry.id;
-    const ground = groundBelow(e.x, e.y + 1, S.gates), hoverY = Math.max(ground > -Infinity ? ground : 0, quarry ? quarry.y : 0) + 4.6;
-    const side = quarry ? (e.x >= quarry.x ? 1 : -1) : 1, tx = quarry ? quarry.x + side * 9 : e.x;
+    const ground = groundBelow(e.x, e.y + 1, S.gates), hoverY = Math.min(7, Math.max(ground > -Infinity ? ground : 0, quarry ? quarry.y : 0) + 4.6);   // below the gates' tops
+    let side = quarry ? (e.x >= quarry.x ? 1 : -1) : 1;
+    const room = S.mission && S.mission.x0 !== undefined ? [S.mission.x0 + 1.5, S.mission.x1 - 1.5] : [-Infinity, Infinity];
+    const inRoom = x => x > room[0] && x < room[1];
+    if (quarry && !inRoom(quarry.x + side * 9) && inRoom(quarry.x - side * 9)) side = -side;   // the other side, inside the room
+    const tx = quarry ? Math.max(room[0], Math.min(room[1], quarry.x + side * 9)) : e.x;
     e.vx += Math.sign(tx - e.x) * Math.min(Math.abs(tx - e.x), 1) * 6 * DT * 6; e.vx *= 0.9;
     e.vy = (hoverY - e.y) * 2.4;
     if (quarry) e.facing = quarry.x >= e.x ? 1 : -1;
@@ -193,6 +200,7 @@ const AI = {
     }
     const goal = kidFree(k) ? k : nearestHero(S, e);
     if (!goal) { e.vx *= 0.8; physics(S, e); return; }
+    dropToward(e, goal);
     const dx = goal.x - e.x; e.facing = dx >= 0 ? 1 : -1;
     e.vx = Math.abs(dx) > 1.0 ? e.facing * T.speed : e.vx * 0.6;
     if (goal === k && Math.abs(dx) < G.reach + 0.4 && Math.abs(k.y - e.y) < 1.4 && e.cd === 0 && takeToken(S, e, 'melee')) {
@@ -209,6 +217,10 @@ const AI = {
   mk2(S, e) { mk2(S, e); },
 };
 
+// A walker on a walkway drops through it when what it wants is below
+function dropToward(e, goal) {
+  if (goal && e.onGround && e.y > 0.5 && goal.y < e.y - 1.5 && Math.abs(goal.x - e.x) < 6 && !(e.dropT > 0)) { e.dropT = 14; e.vy = -2; e.onGround = false; }
+}
 function targetFor(S, e) {
   // Mostly the nearest hero; a free kid close by is fair game too
   const p = nearestHero(S, e), k = S.kid;

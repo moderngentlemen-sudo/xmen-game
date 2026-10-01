@@ -2,7 +2,7 @@
 // the renderer. Collision is Version 9's (AABB bodies, one-way platforms, gates), changed so that gate state
 // is part of the world state and travels with snapshots.
 //
-//   rooftop entry ─ G1 ─ cell block (the kid's cell) ─ G2 ─ assembly hall ─ G3 ─ freight stairs ─ hangar and the X-Jet
+//   rooftop entry ─ G1 ─ cell block (the kid's cell, against G2) ─ G2 ─ assembly hall ─ G3 ─ freight stairs ─ hangar and the X-Jet
 //
 // Boxes: [x0, x1, y0, y1, type, tag]. type 's' solid, 'o' one-way (stand on it, pass up through it), 'g' a gate
 // (solid while its gate is closed).
@@ -13,15 +13,16 @@ const RAW = [
   [13, 15.5, 0, 1.2, 's', 'vent'],
   [23, 30, 3.0, 3.3, 'o', 'catwalk'],
   [40, 41, 0, 9, 'g', 'G1'],
+  [40, 41, -6, 0, 's', 'sill'],          // the floor under each gate, so an open gate leaves no hole
   // Cell block: Hunter perches, the cell at the end
   [41, 96, -6, 0, 's', 'floor'],
   [52, 58, 4.2, 4.5, 'o', 'perch'],
   [68, 74, 4.2, 4.5, 'o', 'perch'],
   [79, 81, 0, 1.0, 's', 'barrier'],
-  [86.5, 87.2, 0, 3.4, 'g', 'cell'],
-  [87.2, 93.6, 3.4, 3.7, 's', 'cellroof'],
-  [93, 93.6, 0, 3.4, 's', 'cellwall'],
+  [88.4, 89, 0, 3.4, 'g', 'cell'],          // the cell door; the cell runs back to G2, so nobody can hide behind it,
+  [89, 96, 3.4, 3.7, 's', 'cellroof'],      // and once the way is open the team walks on through it into the hall
   [96, 97, 0, 9, 'g', 'G2'],
+  [96, 97, -6, 0, 's', 'sill'],
   // Assembly hall: conveyor walkways overhead
   [97, 176, -6, 0, 's', 'floor'],
   [110, 118, 3.4, 3.7, 'o', 'walkway'],
@@ -29,6 +30,7 @@ const RAW = [
   [150, 158, 3.4, 3.7, 'o', 'walkway'],
   [143, 145.5, 0, 1.1, 's', 'crate-stack'],
   [176, 177, 0, 9, 'g', 'G3'],
+  [176, 177, -6, 0, 's', 'sill'],
   // Freight stairs up to the hangar
   [177, 184, -6, 0, 's', 'floor'],
   [184, 189, -6, 1.2, 's', 'step'],
@@ -43,7 +45,7 @@ export const LEVEL_X0 = -12, LEVEL_X1 = 264, KILL_Y = -10;
 export const GATE_IDS = ['G1', 'G2', 'G3', 'cell'];
 // Where the young mutant is held, where Collectors carry a captive out (each section has its own way out), and
 // the X-Jet's ramp
-export const CELL = { x: 90, y: 0, door: { x0: 86.5, x1: 87.2, y0: 0, y1: 3.4, hp: 30 } };
+export const CELL = { x: 92.5, y: 0, door: { x0: 88.4, x1: 89, y0: 0, y1: 3.4, hp: 30 } };
 export const EXITS = [{ x: 42.5, y: 0, sec: 'cells' }, { x: 175.2, y: 0, sec: 'hall' }, { x: 262.5, y: 3.6, sec: 'hangar' }];
 export const JET = { x0: 244, x1: 262, y: 3.6, ramp: 246 };
 // Crates Jean can throw (and anyone can break), placed at the start of the mission

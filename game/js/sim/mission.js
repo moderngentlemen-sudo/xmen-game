@@ -9,7 +9,7 @@ import { CELL, JET, CRATES, BOXES, groundBelow } from './level.js';
 import { emit } from './world.js';
 import { createEnemy } from './enemies.js';
 import { makeKid } from './kid.js';
-import { makeCrate } from './combat.js';
+import { makeCrate, killEnemy } from './combat.js';
 import { resetAdapt } from './adapt.js';
 import { isDown } from './player.js';
 import { HERO } from './heroes/index.js';
@@ -18,25 +18,25 @@ export const MISSION_NAME = 'Extraction at the Sentinel Works';
 
 // Units: [type, x], dropping in from above (fliers arrive at hover height)
 export const SECTIONS = [
-  { id: 'roof', name: 'The rooftop', spawn: { x: 2, y: 0 }, start: 6, gate: 'G1',
+  { id: 'roof', name: 'The rooftop', spawn: { x: 2, y: 0 }, start: 6, gate: 'G1', x0: -12, x1: 40,
     waves: [
       [['trooper', 22], ['trooper', 28]],
       [['gunner', 34], ['trooper', 16], ['trooper', 37]],
     ] },
-  { id: 'cells', name: 'The cell block', spawn: { x: 44, y: 0 }, start: 48, gate: 'G2', kid: true,
+  { id: 'cells', name: 'The cell block', spawn: { x: 44, y: 0 }, start: 48, gate: 'G2', kid: true, x0: 41, x1: 96,
     waves: [
       [['trooper', 58], ['gunner', 66], ['hunter', 72]],
       [['trooper', 76], ['trooper', 54], ['gunner', 82]],
     ],
     // When the cell door breaks, the Sentinels send a Collector for her
     onRelease: [['collector', 52], ['trooper', 60]] },
-  { id: 'hall', name: 'The assembly hall', spawn: { x: 100, y: 0 }, start: 106, gate: 'G3',
+  { id: 'hall', name: 'The assembly hall', spawn: { x: 100, y: 0 }, start: 106, gate: 'G3', x0: 97, x1: 176,
     waves: [
       [['trooper', 120], ['trooper', 126], ['gunner', 136], ['hunter', 130]],
       [['collector', 152], ['trooper', 142], ['gunner', 114], ['trooper', 160]],
       [['hunter', 150], ['trooper', 134], ['trooper', 148], ['collector', 168], ['gunner', 172]],
     ] },
-  { id: 'hangar', name: 'The hangar', spawn: { x: 180, y: 0 }, start: 200, gate: null, boss: true,
+  { id: 'hangar', name: 'The hangar', spawn: { x: 180, y: 0 }, start: 200, gate: null, boss: true, x0: 177, x1: 264,
     waves: [[['mk2', 228]]] },
 ];
 const CELLS = SECTIONS.findIndex(s => s.kid);
@@ -45,7 +45,7 @@ const FAIL_TICKS = 150;  // the failure call stays up this long before the secti
 
 export function startMission(S) {
   S.mission = {
-    name: MISSION_NAME, sec: 0, secId: SECTIONS[0].id, phase: 'wait', wave: 0, waveT: 0, released: false,
+    name: MISSION_NAME, sec: 0, secId: SECTIONS[0].id, x0: SECTIONS[0].x0, x1: SECTIONS[0].x1, phase: 'wait', wave: 0, waveT: 0, released: false,
     spawn: { ...SECTIONS[0].spawn }, door: { ...CELL.door }, failed: null, failT: 0, done: false, doneT: 0, t: 0,
     stats: { kills: 0, teamups: 0, assists: 0, perfects: 0, downs: 0, fails: 0, dmg: { optic: 0, claws: 0, tk: 0, team: 0, plain: 0 } },
   };
@@ -76,6 +76,8 @@ export function updateMission(S) {
     return;
   }
   if (M.phase === 'fight') {
+    // A Sentinel thrown (or flown) out of the room is out of the fight: a ring-out counts as a kill
+    for (const e of S.enemies) if (!e.dead && (e.x < sec.x0 - 0.5 || e.x > sec.x1 + 0.5)) killEnemy(S, e, null);
     if (M.waveT > 0) { if (--M.waveT === 0) { spawnWave(S, sec.waves[M.wave]); M.wave++; } return; }
     if (S.enemies.some(e => !e.dead)) return;
     if (M.wave < sec.waves.length) { M.waveT = WAVE_GAP; return; }
@@ -102,7 +104,7 @@ function spawnWave(S, units) {
 function spawnUnit(S, [type, x]) {
   const T = ENEMIES[type], g = groundBelow(x, 40, S.gates), base = g > -Infinity ? g : 0;
   const e = createEnemy(S, type, x, T.flier ? base + 5 : base + 8, T.boss ? { state: 'intro' } : {});
-  if (T.boss) { e.hp = e.maxHp = Math.round(T.hp * (1 + 0.35 * (S.players.length - 1))); }
+  e.hp = e.maxHp = Math.round(T.hp * (T.boss ? 1 + 0.35 * (S.players.length - 1) : 1 + 0.15 * Math.max(0, S.players.length - 1)));
   let near = null, nd = Infinity;
   for (const p of S.players) { const d = Math.abs(p.x - x); if (d < nd) { nd = d; near = p; } }
   e.facing = near && near.x < x ? -1 : 1;
@@ -157,7 +159,7 @@ function clearSection(S) {
   }
   M.sec++; M.phase = 'wait'; M.wave = 0; M.waveT = 0;
   const next = SECTIONS[M.sec];
-  M.secId = next.id; M.spawn = { ...next.spawn };
+  M.secId = next.id; M.x0 = next.x0; M.x1 = next.x1; M.spawn = { ...next.spawn };
   emit(S, 'section', { sec: M.sec, name: next.name });
 }
 
