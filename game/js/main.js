@@ -1,5 +1,5 @@
 // Bootstrap: fixed 60 Hz simulation, interpolated rendering, drop-in joining, menus.
-import { SETTINGS, loadSettings, DT } from './config.js';
+import { SETTINGS, loadSettings, DT, HEROES } from './config.js';
 import { Input } from './input.js';
 import { World } from './world.js';
 import { View } from './render.js';
@@ -40,7 +40,8 @@ function tryJoin() {
   const devices = input.pollJoins(new Set(world.players.map(p => p.device)));
   for (const dev of devices) {
     if (world.players.length >= 4 || paused) break;
-    const char = world.players.length % 2 === 0 ? 'nova' : 'echo';
+    // Each new player takes the first hero nobody is playing (Cyclops, Wolverine, Storm, Jean, Psylocke)
+    const char = HEROES.find(c => !world.players.some(q => q.char === c)) || HEROES[world.players.length % HEROES.length];
     world.addPlayer(dev, char);
     if (!started) { started = true; ui.hideStart(); }
   }
@@ -62,7 +63,7 @@ function handleMenuEvents() {
     else if (ev.type === 'help') ui.toggleHelp();
     else if (ev.type === 'debug') ui.toggleDebug();
     else if (paused) ui.menuNav(ev);
-    else if (ev.type === 'swap') world.swapCharacter(p, p.char === 'nova' ? 'echo' : 'nova');
+    else if (ev.type === 'swap') { const i = HEROES.indexOf(p.char); world.swapCharacter(p, HEROES[(i + (ev.dir || 1) + HEROES.length) % HEROES.length]); }
     else if (ev.type === 'pick') world.swapCharacter(p, ev.char);
   }
 }
@@ -116,7 +117,7 @@ requestAnimationFrame(frame);
 // Test hooks (used by automated checks; harmless otherwise)
 window.__NS = {
   world, view, ui, input, music, sound, haptics, SETTINGS, manual: false, inject: null,
-  start(char = 'nova') { if (!started) { world.addPlayer('kbm', char); started = true; ui.hideStart(); } },
+  start(char = 'cyclops') { if (!started) { world.addPlayer('kbm', char); started = true; ui.hideStart(); } },
   step(n = 1) { for (let i = 0; i < n; i++) stepSim(); },
   stats() { return { fps, players: world.players.length, enemies: world.enemies.length, tick: world.tick }; },
 };

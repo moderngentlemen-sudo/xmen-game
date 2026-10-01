@@ -454,13 +454,15 @@ export class View {
       poundLand: 0.22 + 0.12 * (ev.level || 0), poundDrop: 0.03, aegisHit: 0.05, beamStart: 0.3,
       aegisOff: ev.why === 'break' ? 0.3 : ev.why === 'detonate' ? 0.4 : 0, bossSlam: ev.big ? 0.55 : 0.35, bossPhase: 0.6, bossDown: 0.9, bossCrash: 0.45, bossIntro: 0.15,
       frag: 0.12 + 0.05 * (ev.level || 0), cluster: 0.1, chain: 0.04 + 0.03 * (ev.level || 0), wellOpen: 0.08, wellCollapse: 0.18 + 0.06 * (ev.level || 1), riseBlast: 0.14, perfectDodge: 0.2,
-      ultCast: 0.35, ultJoin: 0.3, ultNova: 0.95, ultCut: 0.06, ultFinisher: 0.8, teamFinisher: 0.3 }[ev.type];
+      ultCast: 0.35, ultJoin: 0.3, ultNova: 0.95, ultCut: 0.06, ultFinisher: 0.8, teamFinisher: 0.3,
+      visor: 0.32, squall: 0.38, berserk: 0.3, drillLevel: 0.02 + (ev.level || 1) * 0.02, ultBolt: 0.12, ultThunder: 0.75 }[ev.type];
     if (shake) this.trauma = Math.min(1, this.trauma + shake);
     // Big releases light the whole frame for a moment (bloom) and the rocket jump thumps the camera
     const glow = { rocketJump: 0.45 + 0.75 * (ev.power || 0.5), perfectRelease: 0.4, dash: ev.level >= 3 ? 0.35 : 0,
       shot: ev.level >= 3 ? 0.22 : 0, blast: ev.level >= 3 ? 0.15 : 0, snipe: ev.full ? 0.3 : 0.08, beamStart: 0.6, chargeLevel: ev.level >= 4 ? 0.3 : 0,
       aegisOff: ev.why === 'detonate' ? 0.5 : ev.why === 'break' ? 0.3 : 0, poundLand: ev.level >= 2 ? 0.2 + 0.1 * ev.level : 0, bossPhase: 0.6, bossDown: 1,
-      wellCollapse: 0.25, riseBlast: 0.2, perfectDodge: 0.35, ultCast: 0.6, ultJoin: 0.5, ultNova: 1.4, ultFinisher: 1, teamFinisher: 1.4, chain: 0.08 * (1 + (ev.level || 0)) }[ev.type];
+      wellCollapse: 0.25, riseBlast: 0.2, perfectDodge: 0.35, ultCast: 0.6, ultJoin: 0.5, ultNova: 1.4, ultFinisher: 1, teamFinisher: 1.4, chain: 0.08 * (1 + (ev.level || 0)),
+      visor: 0.6, squall: 0.35, berserk: 0.45, ultBolt: 0.28, ultThunder: 1.3 }[ev.type];
     if (glow) this.bloomKick = Math.min(1.4, this.bloomKick + glow);
     if (ev.type === 'rocketJump') this.punch = Math.min(this.punch, -(0.25 + 0.5 * (ev.power || 0.5)));
     if (ev.type === 'poundLand') this.punch = Math.min(this.punch, -(0.15 + 0.12 * ev.level));   // the frame thumps down with the landing
@@ -475,6 +477,8 @@ export class View {
     else if (ev.type === 'ultFinisher') this.startImpact(ev.x, ev.y, 1.2, true);
     else if (ev.type === 'teamFinisher') this.pendingImpact = { t: 0.42, x: ev.x, y: ev.y, k: 1.5 };   // when the eclipse shatters
     else if (ev.type === 'perfectDodge') this.startImpact(ev.x, ev.y, 0.6);
+    else if (ev.type === 'ultThunder') this.startImpact(ev.x, ev.y, 1.3, true);   // Storm's last thunderclap
+    else if (ev.type === 'visor') this.startImpact(ev.x, ev.y, 0.5);
     if (ev.type === 'ultNova') this.punch = Math.min(this.punch, -0.6);
   }
 

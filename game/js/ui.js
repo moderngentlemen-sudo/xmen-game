@@ -1,5 +1,6 @@
-// DOM overlays: start screen, HUD, markers, barks, banners, pause/settings, help, debug.
-import { SETTINGS, saveSettings, PLAYER_COLORS, PLAYER_MARKS, CHARS, NOVA, ECHO, HUNTER, MARKSMAN, ATTACH_LOOK, DASH_CHARGE, AEGIS, SUB_LOOK, ULT } from './config.js';
+// DOM overlays: start screen (the roster), HUD, markers, barks, banners, pause/settings, help, debug.
+import { SETTINGS, saveSettings, PLAYER_COLORS, PLAYER_MARKS, CHARS, NOVA, ECHO, HUNTER, MARKSMAN, ATTACH_LOOK, DASH_CHARGE, AEGIS, SUB_LOOK, ULT,
+  HEROES, kitOf, boostOf, attachLook, subLook, DRILL, BERSERK } from './config.js';
 
 // Echo's scarf mode chip: every player can read which mode his scarf is in
 function scarfChip(p) {
@@ -61,31 +62,64 @@ function rifleChip(p) {
   return bolt + rip;
 }
 
+// ---- The X-Men's HUD chips -------------------------------------------------------------------------
+// Cyclops, Storm and Jean (Nova's frame): the loaded power mode and secondary power in the hero's own names,
+// charge stages, Focus, the flight or levitation tank, and their Signature. Wolverine: the Drill Claw's level,
+// Berserker Rage, the healing factor. Psylocke: the Hunter kit, her sash in place of a scarf.
+const secs = t => Math.ceil(t / 60) + 's';
+function heroChips(p, world) {
+  const K = kitOf(p);
+  if (p.arch === 'nova') {
+    const A = attachLook(p, p.attachment), S = subLook(p, p.sub) || SUB_LOOK.scatter, stage = chargeStage(p), bstage = burstStage(p), f = Math.floor(p.focus);
+    const B = boostOf(p), fuel = B ? `<span class="res fuel" title="${p.char === 'storm' ? 'Flight' : 'Levitation'}"><i style="width:${Math.round(p.fuel / B.fuel * 100)}%"></i></span>` : '';
+    const out = (p.sub === 'disc' || p.sub === 'well') && world.subOut(p, p.sub) ? (p.sub === 'disc' ? ' · out' : ' · open') : '';
+    let sig = '';
+    if (K.sig === 'aegis') sig = aegisChips(p).replace(/Aegis/g, 'TK Shield');
+    else {
+      const name = K.sig === 'visor' ? 'Visor Overdrive' : 'Squall';
+      sig = `<span class="chip ${p.sigCd === 0 ? 'ready' : ''}">${name} ${p.sigCd === 0 ? 'ready' : secs(p.sigCd)}</span>` +
+        (p.overcharge > 0 ? `<span class="chip over">Overcharged</span><span class="res over" title="Overcharge"><i style="width:${Math.round(p.overcharge / AEGIS.over.max * 100)}%"></i></span>` : '');
+    }
+    return `<span class="chip attach" style="color:${A.tint};box-shadow:inset 0 0 0 1px ${A.tint}">${A.name}</span>` +
+      `<span class="chip attach" title="Secondary power (LB / T)" style="color:${S.tint};box-shadow:inset 0 0 0 1px ${S.tint}">${S.name}${out}</span>` +
+      (p.state === 'beam' && p.beam ? `<span class="chip perfect">Beam ${(p.beam.t / 60).toFixed(1)}s</span>` : '') +
+      (STAGE[stage] ? `<span class="chip ${stage === 'perfect' || stage === 'L4' ? 'perfect' : 'ready'}">${STAGE[stage]}</span>` : '') +
+      (STAGE[bstage] ? `<span class="chip ${bstage === 'perfect' ? 'perfect' : 'ready'}">${S.name} ${STAGE[bstage]}</span>` : '') +
+      `<span class="chip focus${f ? ' on' : ''}">Focus ${'◆'.repeat(f)}${'◇'.repeat(MARKSMAN.focus.max - f)}</span>` + fuel + sig + (vbTier(p) ? `<span class="chip vb">VB ${vbTier(p)}</span>` : '') + commonChips(p);
+  }
+  if (K.fire === 'drill') {
+    const D = DRILL.charge, L = p.drillT >= D[1] ? 3 : p.drillT >= D[0] ? 2 : p.drillT > 0 ? 1 : 0;
+    const rage = p.berserkT > 0 ? `<span class="chip red">Berserk ${secs(p.berserkT)}</span>` : `<span class="chip ${p.sigCd === 0 ? 'ready' : ''}">Rage ${p.sigCd === 0 ? 'ready' : secs(p.sigCd)}</span>`;
+    const healing = p.hurtT === 0 && p.hp < p.maxHp && p.state !== 'downed' ? '<span class="chip perfect">Healing</span>' : '';
+    return `<span class="res"><i style="width:${p.resolve}%"></i></span>` + (L ? `<span class="chip ${L === 3 ? 'perfect' : 'ready'}">Drill Claw ${L}</span>` : '') + rage + healing +
+      (vbTier(p) ? `<span class="chip vb">VB ${vbTier(p)}</span>` : '') + commonChips(p);
+  }
+  return `<span class="res"><i style="width:${p.resolve}%"></i></span>${scarfChip(p)}${scarfCharges(p).replace('Scarf', 'Sash')}` +
+    `<span class="chip ${p.snares ? 'ready' : ''}">Psi snares ${'◆'.repeat(p.snares)}${'◇'.repeat(HUNTER.snareCharges - p.snares)}</span>` +
+    rifleChip(p) + (p.leash ? '<span class="chip vb">Reeling</span>' : '') + (vbTier(p) ? `<span class="chip vb">VB ${vbTier(p)}</span>` : '') + commonChips(p);
+}
+
 const $ = (sel, root = document) => root.querySelector(sel);
 const h = (tag, cls, html) => { const e = document.createElement(tag); if (cls) e.className = cls; if (html !== undefined) e.innerHTML = html; return e; };
 
 const SETTING_DEFS = [
-  { key: 'novaKit', label: "Nova's kit", opts: [['marksman', 'Marksman: attachments, secondary weapons, dodge, skates'], ['sentinel', 'Sentinel: Pass 1 kit']] },
-  { key: 'echoHead', label: "Echo's head (look only)", opts: [['helmet', 'Full helmet, amber visor'], ['mask', 'Survival mask'], ['bare', 'Bare face']] },
-  { key: 'echoKit', label: "Echo's kit", opts: [['hunter', 'Hunter: blades, glaive, snares, reel'], ['pursuit', 'Pursuit: Pass 1 kit']] },
-  { key: 'echoRanged', label: "Echo's ranged option, Pursuit kit only (Q-A test)", opts: [['A', 'A: Tracer shot only'], ['B', 'B: Bolts + Tracer'], ['C', 'C: No ranged attack']] },
-  { key: 'vbStop', label: 'Velocity Break stop', opts: [['hard', 'Hard stop'], ['keep30', 'Keep 30% momentum']] },
-  { key: 'vbRefund', label: 'Velocity Break refunds air dash on hit', bool: true },
-  { key: 'dashIframes', label: 'Dash invulnerability (A/B test)', bool: true },
-  { key: 'impactFrames', label: 'Impact frames on big moments (Q-C test)', bool: true },
-  { key: 'camera', label: 'Camera projection', opts: [['persp', 'Perspective'], ['ortho', 'Orthographic']] },
-  { key: 'fov', label: 'Camera field of view', range: [24, 50, 1] },
+  { key: 'difficulty', label: 'Difficulty', opts: [['easy', 'Easy'], ['normal', 'Normal'], ['hard', 'Hard']] },
+  { key: 'p1Aim', label: 'Keyboard player aims with', opts: [['mouse', 'Mouse'], ['keys', 'Movement keys (8-way)']] },
   { key: 'aimAssist', label: 'Aim assist (gamepad 8-way aim)', bool: true },
   { key: 'lockOn', label: 'Lock-on (F / R3)', bool: true },
   { key: 'lockMode', label: 'Lock-on mode', opts: [['auto', 'Automatic: nearest enemy, R3 switches'], ['manual', 'Press R3 to lock']] },
   { key: 'dashCharge', label: 'Charged dash (hold dash while standing still)', bool: true },
+  { key: 'dashIframes', label: 'Dash invulnerability (easier)', bool: true },
+  { key: 'vbStop', label: 'Velocity Break stop', opts: [['hard', 'Hard stop'], ['keep30', 'Keep 30% momentum']] },
+  { key: 'vbRefund', label: 'Velocity Break refunds the air dash on a hit', bool: true },
+  { key: 'impactFrames', label: 'Impact frames on big moments', bool: true },
+  { key: 'shake', label: 'Screen shake', bool: true },
+  { key: 'camera', label: 'Camera projection', opts: [['persp', 'Perspective'], ['ortho', 'Orthographic']] },
+  { key: 'fov', label: 'Camera field of view', range: [24, 50, 1] },
+  { key: 'quality', label: 'Graphics quality', opts: [['high', 'High (bloom, shadows)'], ['low', 'Low']] },
+  { key: 'barks', label: 'Character lines', bool: true },
   { key: 'haptics', label: 'Rumble and vibration', bool: true },
   { key: 'hapticStrength', label: 'Rumble strength', range: [0, 1, 0.05] },
-  { key: 'p1Aim', label: 'Keyboard player aims with', opts: [['mouse', 'Mouse'], ['keys', 'Movement keys (8-way)']] },
-  { key: 'difficulty', label: 'Difficulty', opts: [['easy', 'Easy'], ['normal', 'Normal'], ['hard', 'Hard']] },
-  { key: 'barks', label: 'Character lines (CP-09 test)', bool: true },
-  { key: 'shake', label: 'Screen shake', bool: true },
-  { key: 'quality', label: 'Graphics quality', opts: [['high', 'High (bloom, shadows)'], ['low', 'Low']] },
   { key: 'volume', label: 'Sound effects volume', range: [0, 1, 0.05] },
   { key: 'music', label: 'Music volume', range: [0, 1, 0.05] },
 ];
@@ -112,28 +146,36 @@ export class UI {
   // ---- Start ----
   buildStart() {
     const s = h('div', 'overlay start');
+    const card = (id, key, line) => `<div class="hero" style="--hc:${CHARS[id].energy}"><kbd>${key}</kbd><b>${CHARS[id].name}</b><span>${CHARS[id].role}</span><p>${line}</p></div>`;
     s.innerHTML = `
-      <div class="card">
-        <p class="eyebrow">Fresh-start track · Browser prototype · Pass 1</p>
-        <h1>Nova Striker</h1>
-        <p class="lede">Movement, combat and co-op feel test. Placeholder art and sound; nothing here is final.</p>
+      <div class="card wide">
+        <p class="eyebrow">Unofficial fan prototype · Built on Nova Striker Version 9</p>
+        <h1>X-Men: Sentinel Strike</h1>
+        <p class="lede">The Sentinels have come for every mutant in the city. Train in the Danger Room, break the Sentinel Works and Juggernaut, climb Trask Tower, then take the Sentinel beacon back from Magneto. One to four players.</p>
         <div class="join"><span class="pulse"></span>Click, press any key, or press a gamepad button to join</div>
+        <div class="roster">
+          ${card('cyclops', 1, 'Optic blasts from the visor: bank them, charge them, hold them as a beam.')}
+          ${card('wolverine', 2, 'Adamantium claws, the Drill Claw and a healing factor. Berserk when it counts.')}
+          ${card('storm', 3, 'Lightning, wind and real flight. Calls the storm down on everything in sight.')}
+          ${card('jean', 4, 'Telekinesis: throw, grip and shield. The Phoenix Force when it is full.')}
+          ${card('psylocke', 5, 'Psychic blades and snares. Vanishes, marks and strikes from the shadows.')}
+        </div>
         <div class="cols">
           <div><h3>Keyboard + mouse</h3><ul>
             <li><kbd>A</kbd><kbd>D</kbd> move · <kbd>S</kbd> crouch · <kbd>Space</kbd> jump · <kbd>Shift</kbd> dash</li>
-            <li>Left click fire (hold to charge) · Right click melee</li>
-            <li><kbd>Q</kbd> parry / dodge · <kbd>E</kbd> suit ability · <kbd>R</kbd> mode</li>
-            <li><kbd>T</kbd> secondary weapon · <kbd>F</kbd> switch target · <kbd>V</kbd> ultimate</li></ul></div>
+            <li>Left click power (hold to charge) · Right click strike</li>
+            <li><kbd>Q</kbd> dodge / parry · <kbd>E</kbd> signature · <kbd>R</kbd> power mode · <kbd>T</kbd> secondary</li>
+            <li><kbd>V</kbd> ultimate · <kbd>1</kbd>–<kbd>5</kbd> or <kbd>Tab</kbd> change hero</li></ul></div>
           <div><h3>Gamepad</h3><ul>
             <li>Left stick move · Right stick aim · R3 switch target</li>
-            <li>A jump · B dash · X melee · Y suit ability · RB mode</li>
-            <li>RT fire · LT parry / dodge · LB secondary weapon</li>
-            <li>LT + RT ultimate · D-pad swap character · Start pause</li></ul></div>
+            <li>A jump · B dash · X strike · Y signature · RB power mode</li>
+            <li>RT power · LT dodge / parry · LB secondary</li>
+            <li>LT + RT ultimate · D-pad change hero · Start pause</li></ul></div>
         </div>
-        <p class="fine">New in Version 9: Nova's five secondary weapons (LB / <kbd>T</kbd>, no recoil) and his dodge (LT / <kbd>Q</kbd>); automatic lock-on; a rising attack for everyone (up + melee); and ultimates. Fill the bar, then pull both triggers (<kbd>V</kbd>); teammates with a full bar can join in for a team ultimate.</p>
-        <p class="fine">Up to four players: extra gamepads join by pressing any button. <kbd>H</kbd>/View shows every control; <kbd>Esc</kbd>/Start opens settings, zones and the boss fights.</p>
+        <p class="fine">Up to four players: extra gamepads join by pressing any button. Fill the bar under your health and pull both triggers (<kbd>V</kbd>) for an ultimate; teammates with a full bar can join it for a team-up. <kbd>H</kbd>/View shows every control; <kbd>Esc</kbd>/Start opens settings, zones and the boss fights.</p>
         <p class="fine notice" hidden></p>
-        <p class="fine touchnote">This build needs a keyboard or a gamepad. Touch controls are designed separately and arrive with a mobile port.</p>
+        <p class="fine touchnote">This build needs a keyboard or a gamepad.</p>
+        <p class="fine legal">Unofficial, non-commercial fan prototype. The X-Men and their names belong to Marvel; this project is not affiliated with or endorsed by Marvel or Disney. Every model, effect, sound and piece of music here is an original placeholder.</p>
       </div>`;
     this.root.appendChild(s); this.start = s;
   }
@@ -149,16 +191,16 @@ export class UI {
     const p = h('div', 'overlay pause'); p.hidden = true;
     const card = h('div', 'card wide'); p.appendChild(card);
     card.appendChild(h('p', 'eyebrow', 'Paused'));
-    card.appendChild(h('h2', '', 'Settings and test toggles'));
+    card.appendChild(h('h2', '', 'Settings'));
     const row = h('div', 'actions');
     const mk = (label, fn) => { const b = h('button', 'btn', label); b.addEventListener('click', fn); row.appendChild(b); return b; };
     mk('Resume', () => this.H.resume());
-    mk('Movement Gym', () => this.H.zone('gym'));
-    mk('Concourse Lock', () => this.H.zone('arena'));
-    mk('Storm Spire Climb', () => this.H.zone('tower'));
-    mk('Skyline Relay', () => this.H.zone('skyline'));
-    mk('Boss: Lockwarden', () => this.H.boss('warden'));
-    mk('Boss: Stormcaller', () => this.H.boss('stormcaller'));
+    mk('Danger Room', () => this.H.zone('gym'));
+    mk('Sentinel Works', () => this.H.zone('arena'));
+    mk('Trask Tower', () => this.H.zone('tower'));
+    mk('Rooftop Relay', () => this.H.zone('skyline'));
+    mk('Boss: Juggernaut', () => this.H.boss('warden'));
+    mk('Boss: Magneto', () => this.H.boss('stormcaller'));
     mk('Controls', () => this.toggleHelp(true));
     card.appendChild(row);
     this.playerList = h('div', 'players'); card.appendChild(this.playerList);
@@ -177,7 +219,7 @@ export class UI {
       }
       input.id = id; lab.appendChild(input); grid.appendChild(lab);
     }
-    card.appendChild(h('p', 'fine', 'Character lines are placeholder writing for the CP-09 test, not canon. Settings are remembered in this browser only.'));
+    card.appendChild(h('p', 'fine', 'Character lines are original writing for this fan prototype, not lines from the comics or films. Settings are remembered in this browser only.'));
     this.root.appendChild(p); this.pause = p;
   }
   setPaused(on, world) {
@@ -189,7 +231,7 @@ export class UI {
     for (const p of world.players) {
       const row = h('div', 'prow');
       row.appendChild(h('span', 'pmark', `<b style="color:${PLAYER_COLORS[p.slot]}">${PLAYER_MARKS[p.slot]} P${p.slot + 1}</b> ${p.device === 'kbm' ? 'Keyboard + mouse' : 'Gamepad ' + (Number(p.device.slice(3)) + 1)}`));
-      for (const c of ['nova', 'echo']) {
+      for (const c of HEROES) {
         const b = h('button', 'btn small' + (p.char === c ? ' on' : ''), CHARS[c].name);
         b.addEventListener('click', () => { this.H.pick(p, c); this.renderPlayerList(world); }); row.appendChild(b);
       }
@@ -218,42 +260,30 @@ export class UI {
       <p class="closebadge"><b>B</b> or <b>View</b> to close <span>H or Esc on the keyboard · D-pad scrolls</span></p></div>
       <table><thead><tr><th>Action</th><th>Gamepad</th><th>Keyboard + mouse</th></tr></thead><tbody>
       <tr><td>Move · crouch</td><td>Left stick</td><td>A/D · S</td></tr>
-      <tr><td>Jump · double jump · wall jump</td><td>A</td><td>Space</td></tr>
-      <tr><td>Dash (8-way) · slide (down + dash)</td><td>B</td><td>Shift</td></tr>
-      <tr><td>Charged dash: hold dash while standing still, aim, let go. Each level goes further; level 2 is briefly invulnerable, level 3 cuts through enemies (afterimages show the level)</td><td>Hold B</td><td>Hold Shift</td></tr>
-      <tr><td>Wall slide and wall jump: hold toward a wall to slide down it. Jump while holding toward it (or neutral) to kick up it; hold away to leap off. You can shoot and strike while sliding</td><td>Toward the wall · A</td><td>A/D toward the wall · Space</td></tr>
-      <tr><td>Lock-on (automatic by default): whenever you have no target, the nearest enemy in sight is locked. Tap to switch to the next target; hold to let go (it stays off until you tap again). Homing shots go to the target and melee steps in toward it; free aim (right stick, mouse) still aims where you point. Settings: Lock-on mode, to lock only when you press</td><td>R3 (click the right stick)</td><td>F, O, or mouse forward button</td></tr>
-      <tr><td>Velocity Break (Echo's Hunter kit: the Dash Slash, a lunging cut that carries him through)</td><td colspan="2">Melee while dashing or sliding, or just after a dash</td></tr>
-      <tr><td>Melee · charged melee (hold, then let go)</td><td>X · hold X</td><td>Right click or J · hold</td></tr>
-      <tr><td>Ground pound: in the air, melee with down held (or aimed straight down). Hold it to charge through three levels while you hang in the air; the landing throws enemies outward</td><td>Down + X in the air · hold</td><td>S + melee in the air · hold</td></tr>
-      <tr><td>Rising attack: every character has their own. Nova: the Solar Uppercut (his boots fire and a hard-light fist drives up, three hits, a flare at the top; once per jump in the air). Echo: the Rising Glaive (a spinning uppercut that carries him up)</td><td>Up + X</td><td>W + melee</td></tr>
-      <tr><td>Echo, Hunter kit: blade and glaive chain · Spin Slash in the air · Wall Slash on a wall · charged glaive swing that looses a crescent wave</td><td>X · up + X in the air · X on a wall · hold X</td><td>Melee · W + melee in the air · melee on a wall · hold</td></tr>
-      <tr><td>Echo deflects: his parry and his glaive swings knock enemy shots back at whoever fired them. A perfect deflect opens a Riposte: melee straight after</td><td>LT · X</td><td>Q or L · melee</td></tr>
-      <tr><td>Fire · charge</td><td>RT · hold RT</td><td>Left click or K · hold</td></tr>
+      <tr><td>Jump · double jump · wall jump (hold toward a wall to slide down it). Storm flies and Jean levitates: press jump a third time and hold</td><td>A</td><td>Space</td></tr>
+      <tr><td>Dash (8-way) · slide (down + dash) · charged dash (hold while standing still, aim, let go)</td><td>B</td><td>Shift</td></tr>
+      <tr><td>Strike · hold to charge · up + strike: rising attack · down + strike in the air: ground pound</td><td>X</td><td>Right click or J</td></tr>
+      <tr><td>Power (each hero's ranged attack) · hold to charge</td><td>RT</td><td>Left click or K</td></tr>
       <tr><td>Aim</td><td>Right stick (free) or left stick (8-way)</td><td>Mouse</td></tr>
-      <tr><td>Parry, Echo and Nova's Sentinel kit (first 4 frames are perfect)</td><td>LT</td><td>Q or L</td></tr>
-      <tr><td>Nova, Marksman kit: dodge. A quick hop the way you push the stick (a backstep with it centred), untouchable at the start; one in the air per jump. Dodge an attack at the last moment for a perfect dodge: enemies close by slow down, and you gain Overcharge and ultimate charge. You keep charging through it</td><td>LT</td><td>Q or L</td></tr>
-      <tr><td>Suit ability: Nova (Marksman kit) raises the hard-light Aegis for 5 s: it blocks every attack, and the damage it takes Overcharges his weapons (faster charging, harder hits). Press again to detonate it. Nova (Sentinel kit): Bulwark Pulse. Echo: his scarf ability for the current mode</td><td>Y</td><td>E, I, or middle click</td></tr>
-      <tr><td>Switch mode: Nova's bracer attachment (Lance, Volley, Arc, Prism) · Echo's scarf mode (Tether, Veil, Flare)</td><td>RB</td><td>R, U, or mouse back button</td></tr>
-      <tr><td>Nova, Marksman kit: fire · hold to charge the loaded attachment through three levels · let go on the flash after level 3 for a Perfect Release · keep holding to the Level 4 flash and let go for a sustained beam (steer it with your aim; dash or parry cuts it short)</td><td>RT · hold RT</td><td>Left click or K · hold</td></tr>
-      <tr><td>Nova, Marksman kit: close to an enemy, melee is his hard-light combo (backhand, elbow, blast punch; an axe kick in the air). Otherwise it fires his secondary weapon; none has any recoil. Tap to fire, hold to charge through three levels. <b>Scatter</b>: point-blank pellets. <b>Grenade</b>: bounces, and bursts on its fuse or on an enemy (level 3 scatters bomblets). <b>Chain</b>: lightning that leaps from enemy to enemy, round shields, and stuns. <b>Disc</b>: flies out and back cutting everything (from level 2 it hovers at the end); press again to call it back. <b>Gravity Well</b>: pulls enemies in and holds them, swallows their shots, then collapses; press again to open it early, and again to collapse it</td><td>X · hold X</td><td>Right click or J · hold</td></tr>
-      <tr><td>Switch Nova's secondary weapon: Scatter, Grenade, Chain, Disc, Gravity Well</td><td>LB</td><td>T or Y</td></tr>
-      <tr><td>Ultimate: the bar under your health fills as you fight (dealing and taking damage, kills, perfect parries, dodges and deflects). When it is full, pull both triggers together. Nova: <b>Supernova</b>, a colossal beam you steer, then a nova of light. Echo: <b>Thousand Cuts</b>, a storm of blinking cuts on every enemy close by. Enemies freeze while it plays out and you can't be hurt</td><td>LT + RT together</td><td>V or N (or Q + left click together)</td></tr>
-      <tr><td>Team ultimate: while a teammate's ultimate is being called (its name on screen), pull both triggers with a full bar to join in. Everyone who joins unleashes theirs together, stronger, then a team finisher hits every enemy on screen (Echo + Nova: Eclipse Protocol; Nova + Nova: Binary Star; Echo + Echo: Twin Phantom)</td><td>LT + RT during the call</td><td>V during the call</td></tr>
-      <tr><td>Nova: every shot bursts where it lands and splashes nearby enemies. A charged shot bursting on the ground or a wall close to you launches you: aim at your feet to rocket jump. The longer the charge, the higher you go (a gold line shows the height); a Perfect Release goes highest</td><td colspan="2">Aim down, charge, let go</td></tr>
-      <tr><td>Nova: light boosters. After your double jump, press and hold jump to hover and climb (the gold bar under his health)</td><td>A (third press)</td><td>Space (third press)</td></tr>
-      <tr><td>Nova's skates: you glide and keep your speed; reverse to carve to a stop; crouch at speed for a low glide</td><td colspan="2">Move as usual</td></tr>
-      <tr><td>Nova's Focus: each charged shot that lands adds a level (a Perfect Release adds two) and more damage; getting hit clears it</td><td colspan="2">Shown under his health bar</td></tr>
-      <tr><td>Echo, Hunter kit: tap to throw a snare (down + tap plants one) · hold to scope the sniper rifle. Focus builds while you hold: the laser narrows, flickers until it rests on a target, holds solid on one and turns red at full focus. Let go for an instant shot; upper-body hits are critical, and at full focus it pierces everything in line, breaks armor and tags</td><td>Tap RT · hold RT</td><td>Tap / hold left click or K</td></tr>
-      <tr><td>Tether mode: tap pulls light enemies or zips you to heavy ones; hold reels a light enemy in or yanks a heavy one off balance</td><td>Y (tap / hold)</td><td>E (tap / hold)</td></tr>
-      <tr><td>Veil mode: you fade out while you're not attacking and enemies lose track of you; your first strike from hiding is an ambush that staggers. Attacking or getting hit shows you again. Vanish hides you at once</td><td>Y: Vanish</td><td>E: Vanish</td></tr>
-      <tr><td>Flare mode: nearby enemies go for you instead of your team; while they do, parries are easier and Resolve builds faster. Challenge pulls every enemy close by onto you</td><td>Y: Challenge</td><td>E: Challenge</td></tr>
-      <tr><td>Swap character</td><td>D-pad left/right</td><td>1 / 2 / Tab</td></tr>
+      <tr><td>Dodge (Cyclops, Storm, Jean) or parry and deflect (Wolverine, Psylocke). A last-moment dodge slows enemies close by; a perfect parry negates a heavy attack</td><td>LT</td><td>Q or L</td></tr>
+      <tr><td>Signature move</td><td>Y</td><td>E</td></tr>
+      <tr><td>Switch power mode (Cyclops, Storm, Jean) · switch sash mode (Psylocke)</td><td>RB</td><td>R</td></tr>
+      <tr><td>Switch secondary power (Cyclops, Storm, Jean; fired by Strike when nobody is close)</td><td>LB</td><td>T</td></tr>
+      <tr><td>Switch target (the nearest enemy is locked automatically; hold to let go)</td><td>R3</td><td>F</td></tr>
+      <tr><td>Ultimate, when the bar under your health is full. Teammates with a full bar join while its name is on screen, for a team-up</td><td>LT + RT</td><td>V</td></tr>
+      <tr><td>Change hero</td><td>D-pad left/right</td><td>1 to 5, or Tab</td></tr>
       <tr><td>Revive a downed ally</td><td colspan="2">Stand next to them</td></tr>
+      <tr><td>Pause: settings, zones and the boss fights</td><td>Start</td><td>Esc</td></tr>
       </tbody></table>
-      <p class="fine">New enemies: <b>Drones</b> fly above you and shoot (parry, or pull them down with Echo's Tether). <b>Mortars</b> lob shells at a magenta ring on the ground: you can't parry the burst, so move, or shoot the shell down with a charged shot. <b>Chargers</b> telegraph a heavy charge: perfect-parry it or jump over, and they daze themselves on walls.</p>
-      <p class="fine">Controllers rumble with hits, charges and launches (Settings: Rumble). On Android phones the first player's phone can vibrate; iPhones do not support vibration from a web page, and a page embedded in another site may be blocked from it.</p>
-      <p class="fine">Threats: a white glint means you can parry it. A double glint marks a heavy attack: a perfect parry negates it fully. A magenta jagged strip and a rising tone mean you cannot parry it; jump or move.</p>
+      <div class="herohelp">
+        <div style="--hc:${CHARS.cyclops.energy}"><h3>Cyclops · Field Leader</h3><p><b>Power:</b> optic blasts from his visor. Hold to charge through three levels; let go on the flash after level 3 for a perfect blast, or keep holding to the next flash for an optic beam you steer. A charged blast at the ground launches him: aim at your feet. <b>Modes:</b> Piercing Blast (through a line of enemies), Ricochet Blast (splits into shards that rebound off walls), Spread Blast (homing darts). <b>Strike:</b> his combo up close; otherwise Optic Spray or Optic Mine. <b>Signature:</b> Visor Overdrive, an instant overcharge and a concussive flare. <b>Ultimate:</b> Optic Overload.</p></div>
+        <div style="--hc:${CHARS.wolverine.energy}"><h3>Wolverine · Berserker</h3><p><b>Strike:</b> the claw combo, a spin in the air, a slash off walls, a charged swing. <b>Power:</b> the Drill Claw, a corkscrew lunge aimed eight ways; hold for range (once per jump in the air). <b>Parry:</b> deflects shots back. <b>Signature:</b> Berserker Rage: faster, harder hits that heal him, no stagger, less damage taken. <b>Healing factor:</b> unhurt for a moment, he heals. <b>Ultimate:</b> Berserker Barrage X.</p></div>
+        <div style="--hc:${CHARS.storm.energy}"><h3>Storm · Weather Witch</h3><p><b>Power:</b> Lightning Bolt, Thunderhead (a burst that reaches round shields) or Hailstones (homing hail). <b>Secondary:</b> Chain Lightning, Cyclone (pulls enemies in and holds them), Hailstorm. <b>Flight:</b> the third jump press, held, rides the wind (the bar under her health). <b>Signature:</b> Squall, a gust that hurls enemies away and lifts her. <b>Ultimate:</b> Eye of the Storm, lightning on every enemy in sight.</p></div>
+        <div style="--hc:${CHARS.jean.energy}"><h3>Jean Grey · Telekinetic</h3><p><b>Power:</b> Mind Darts (homing), TK Debris (a burst that reaches round shields) or Psi Spear (pierces). <b>Secondary:</b> TK Throw (flies out and back; press again to recall it), TK Grip (holds enemies and swallows their shots), Psychic Push. <b>Levitation:</b> the third jump press, held. <b>Signature:</b> the TK Shield blocks everything for five seconds and the damage it soaks overcharges her; press again to detonate it. <b>Ultimate:</b> Phoenix Force.</p></div>
+        <div style="--hc:${CHARS.psylocke.energy}"><h3>Psylocke · Psi-Ninja</h3><p><b>Strike:</b> psychic blades and the psi-glaive. <b>Power:</b> tap to throw a psychic snare (down + tap plants one); hold to focus a psi-bolt: let go for an instant shot, at full focus it pierces everything and breaks armour. <b>Parry:</b> deflects shots back; a perfect one opens a riposte. <b>Sash modes:</b> Tether (pulls light enemies, zips her to heavy ones), Veil (she fades from sight; the first strike from hiding staggers), Flare (draws enemies onto her). <b>Signature:</b> the sash's move for the current mode. <b>Ultimate:</b> Thousand Butterflies.</p></div>
+      </div>
+      <p class="fine">Threats: a white glint means you can parry it. A double glint marks a heavy attack: a perfect parry negates it fully. A magenta jagged strip and a rising tone mean you cannot parry it: jump or move. Juggernaut can't be stopped head-on: let him charge into a wall. Magneto crashes onto the pad when his dive misses.</p>
+      <p class="fine">Controllers rumble with hits, charges and launches (Settings: Rumble).</p>
       <p class="fine closehint"><b>Close:</b> B, A, Start or View on a controller (the D-pad scrolls) · <kbd>H</kbd>, <kbd>Esc</kbd> or a click on the keyboard. The game waits while this is open.</p></div>`;
     x.addEventListener('click', () => this.toggleHelp(false));
     this.root.appendChild(x); this.help = x;
@@ -359,6 +389,7 @@ export class UI {
       let sub;
       if (p.state === 'downed') sub = p.autoRevive > 0 ? 'Second Wind…' : `Down · revive ${Math.floor(p.revive / 1.2)}% · ${Math.ceil(p.downedT / 60)}s`;
       else if (p.state === 'dead') sub = `Respawning in ${Math.ceil(p.respawnT / 60)}s`;
+      else if (HEROES.includes(p.char)) sub = heroChips(p, world);
       else if (p.char === 'nova') {
         const bulwark = `<span class="chip ${p.bulwarkCd === 0 ? 'ready' : ''}">Bulwark ${p.bulwarkCd === 0 ? 'ready' : Math.ceil(p.bulwarkCd / 60) + 's'}</span>`;
         const vb = vbTier(p) ? `<span class="chip vb">VB ${vbTier(p)}</span>` : '';
@@ -432,14 +463,14 @@ export class UI {
       l.hidden = !s.vis;
     }
     for (const [slot, l] of this.apexLabels) if (!seen.has(slot)) { l.remove(); this.apexLabels.delete(slot); }
-    // Drill post teaching labels
+    // Danger Room post teaching labels
     for (const e of world.enemies) {
       if (e.type !== 'post') continue;
       let l = this.enemyLabels.get(e);
       if (!l) { l = h('div', 'elabel'); this.labels.appendChild(l); this.enemyLabels.set(e, l); }
       const s = view.screenOf(e.x, e.y + e.h + 0.8);
       l.hidden = Math.abs(e.x - world.cam.x) > world.cam.halfW + 1;
-      l.textContent = e.label || 'Sparring post: step close';
+      l.textContent = e.label || 'Training post: step close';
       l.dataset.cat = e.state === 'windup' && e.atk ? e.atk.cat : '';
       l.style.transform = `translate(${s.x}px, ${s.y}px) translate(-50%, -100%)`;
     }

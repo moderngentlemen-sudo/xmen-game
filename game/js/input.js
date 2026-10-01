@@ -1,4 +1,5 @@
 // Input: keyboard + mouse (one device) and up to four gamepads.
+import { HEROES } from './config.js';
 // Each simulation tick, a device produces one command frame with held/pressed/released edges.
 
 const BTNS = ['jump', 'dash', 'melee', 'fire', 'parry', 'sig', 'mode', 'lock', 'sub', 'ult'];
@@ -6,9 +7,9 @@ const BTNS = ['jump', 'dash', 'melee', 'fire', 'parry', 'sig', 'mode', 'lock', '
 const KEYMAP = {
   Space: 'jump', ShiftLeft: 'dash', ShiftRight: 'dash',
   KeyJ: 'melee', KeyK: 'fire', KeyL: 'parry', KeyQ: 'parry', KeyE: 'sig', KeyI: 'sig',
-  KeyR: 'mode', KeyU: 'mode',   // Echo: cycle scarf mode; Nova: cycle bracer attachment
+  KeyR: 'mode', KeyU: 'mode',   // power mode (Cyclops, Storm, Jean) or sash mode (Psylocke)
   KeyF: 'lock', KeyO: 'lock',   // lock-on
-  KeyT: 'sub', KeyY: 'sub',     // Nova: switch secondary weapon
+  KeyT: 'sub', KeyY: 'sub',     // switch secondary power
   KeyV: 'ult', KeyN: 'ult',     // ultimate (a gamepad pulls both triggers)
 };
 
@@ -44,8 +45,8 @@ export class Input {
       if (e.code === 'KeyH') this.menuEvents.push({ dev: 'kbm', type: 'help' });
       if (e.code === 'Backquote') this.menuEvents.push({ dev: 'kbm', type: 'debug' });
       if (e.code === 'Tab') this.menuEvents.push({ dev: 'kbm', type: 'swap', dir: 1 });
-      if (e.code === 'Digit1') this.menuEvents.push({ dev: 'kbm', type: 'pick', char: 'nova' });
-      if (e.code === 'Digit2') this.menuEvents.push({ dev: 'kbm', type: 'pick', char: 'echo' });
+      const n = ['Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5'].indexOf(e.code);   // hero select: 1 to 5
+      if (n >= 0) this.menuEvents.push({ dev: 'kbm', type: 'pick', char: HEROES[n] });
     });
     window.addEventListener('keyup', e => {
       this.keys.delete(e.code);
@@ -156,7 +157,7 @@ export class Input {
       const [rx, ry] = deadzone(pad.axes[2] || 0, -(pad.axes[3] || 0), 0.3);
       if (bt(12)) my = 1; if (bt(13)) my = -1;
       held.jump = bt(0);
-      held.sub = bt(4);     // LB: switch secondary weapon
+      held.sub = bt(4);     // LB: switch secondary power
       held.dash = bt(1);
       held.melee = bt(2);
       held.sig = bt(3);

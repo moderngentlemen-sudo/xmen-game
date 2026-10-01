@@ -1,4 +1,4 @@
-<title>Nova Striker Prototype</title>
+<title>X-Men: Sentinel Strike (fan prototype)</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=IBM+Plex+Mono&family=Saira+Condensed:wght@600;700;800&display=swap">
@@ -12,7 +12,7 @@
   --muted: #a8b7ca;
   --warm: #ffb547;
   --hostile: #ff2e7e;
-  --sky: #cfe7f6;
+  --sky: #2a2350;
   --font-display: 'Saira Condensed', 'Arial Narrow', 'Roboto Condensed', sans-serif;
   --font-body: 'Barlow', 'Segoe UI', system-ui, sans-serif;
   --font-mono: 'IBM Plex Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace;
@@ -58,6 +58,19 @@ h3 { margin: 0 0 6px; font-family: var(--font-display); font-weight: 700; text-t
 .btn.on { background: var(--warm); color: #1d1204; border-color: var(--warm); }
 .btn.ghost { background: transparent; }
 .players { display: grid; gap: 6px; margin-bottom: 16px; }
+/* The roster on the start card, and the per-hero notes on the controls screen: each in the hero's colour */
+.roster { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; margin: 0 0 18px; }
+.roster .hero { position: relative; padding: 9px 10px 10px; border-radius: 6px; background: rgba(255, 255, 255, 0.05); border-top: 3px solid var(--hc); }
+.roster .hero kbd { position: absolute; right: 8px; top: 8px; }
+.roster .hero b { display: block; font-family: var(--font-display); font-weight: 800; font-size: 19px; text-transform: uppercase; letter-spacing: 0.03em; }
+.roster .hero span { display: block; color: var(--hc); font-family: var(--font-display); font-weight: 700; font-size: 12px; text-transform: uppercase; letter-spacing: 0.12em; }
+.roster .hero p { margin: 6px 0 0; color: var(--muted); font-size: 13px; line-height: 1.4; }
+.herohelp { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 10px; margin: 16px 0 4px; }
+.herohelp > div { padding: 10px 12px; border-radius: 6px; background: rgba(255, 255, 255, 0.04); border-left: 3px solid var(--hc); }
+.herohelp h3 { color: var(--text); }
+.herohelp p { margin: 0; font-size: 13.5px; line-height: 1.5; color: var(--muted); }
+.herohelp b { color: var(--text); }
+.fine.legal { font-size: 12px; opacity: 0.85; }
 .prow { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .pmark { min-width: 220px; color: var(--muted); }
 .settings { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 10px 18px; }
@@ -197,7 +210,7 @@ th { font-family: var(--font-display); text-transform: uppercase; letter-spacing
 } }
 </script>
 <div id="app">
-  <canvas id="game" tabindex="0" aria-label="Nova Striker prototype game view"></canvas>
+  <canvas id="game" tabindex="0" aria-label="X-Men: Sentinel Strike game view"></canvas>
   <div id="overlay"></div>
 </div>
 <script type="module" src="./js/main.js"></script>
