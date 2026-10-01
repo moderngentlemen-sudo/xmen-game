@@ -273,8 +273,10 @@ export function animatePlayer(rig, p, dt, t) {
   const rifle = echo && (p.rifleT >= HUNTER.rifle.raise || (p.rifleCd > 0 && (p.rifleCdMax || 0) - p.rifleCd < 14));
   const shooting = (p.chargeT > 0 || p.fireCd > 0 || p.shootT > 0 || rifle || (p.aimFree && !echo)) && ['normal', 'dash', 'slide'].includes(st) && kit.fire !== 'drill';
   if (shooting && kit.eyes) {
-    // Cyclops fires from the visor: his near hand goes to it and his head turns to the aim
-    P.shN = 2.55 + P.spine * 0.5; P.elN = 2.35; P.head = -aimAng * 0.8;
+    // Cyclops fires from the visor: while he charges or fires his near hand goes to it; aiming alone just
+    // turns his head to the aim
+    if (p.chargeT > 0 || p.fireCd > 0 || p.shootT > 0) { P.shN = 2.55 + P.spine * 0.5; P.elN = 2.35; }
+    P.head = Math.max(-0.6, Math.min(0.6, -aimAng * 0.8));
   } else if (shooting) {
     P.shN = aimAng + Math.PI / 2 + P.spine; P.elN = 0.02;
     if (echo) {
@@ -328,7 +330,8 @@ export function animatePlayer(rig, p, dt, t) {
     const LV = { L1: 1, L2: 2, L3: 3, perfect: 3, L4: 4 };
     const stage = chargeStage(p), bstage = mk ? burstStage(p) : '';
     const charge = Math.max(LV[stage] || 0, LV[bstage] || 0, dashLevelOf(p), st === 'beam' ? 4 : 0, st === 'pound' && p.pound ? p.pound.level : 0), flash = stage === 'perfect' || bstage === 'perfect';
-    rig.mats.energy.emissiveIntensity = 2.2 + charge * 1.2 + (p.chargeT > 0 || p.burstT > 0 || p.dashChargeT > 0 || st === 'beam' ? Math.sin(t * 30) * 0.4 : 0) + (flash ? 2.5 : 0)
+    rig.mats.energy.emissiveIntensity = (kit.eyes ? 0.75 : 2.2) + charge * 1.2 +   // Cyclops's visor rests a deep ruby and blazes as he charges
+      (p.chargeT > 0 || p.burstT > 0 || p.dashChargeT > 0 || st === 'beam' ? Math.sin(t * 30) * 0.4 : 0) + (flash ? 2.5 : 0)
       + (p.overcharge > 0 ? 1.2 + Math.sin(t * 12) * 0.5 : 0) + (st === 'ult' ? 4 + Math.sin(t * 36) * 0.8 : 0);
     ex.jets.forEach(j => { j.visible = !!p.thrusting; j.scale.set(1, 0.8 + Math.random() * 0.5, 1); });
     ex.module.visible = mk; ex.blades.forEach(b => { b.visible = mk; });

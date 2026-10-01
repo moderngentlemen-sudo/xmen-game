@@ -100,7 +100,7 @@ function echoFrame(R, extra) {
     const staffGeo = new THREE.CylinderGeometry(0.03, 0.03, 1.5, 10);
     const hs = mesh(staffGeo, extra.staffMat); hs.rotation.z = Math.PI / 2; hand.add(hs);
     const tipGeo = new THREE.ConeGeometry(0.065, 0.5, 4);
-    const tA = mesh(tipGeo, M.energy, 1.0, 0, 0), tB = mesh(tipGeo, M.energy, -1.0, 0, 0);
+    const tA = mesh(tipGeo, extra.staffMat, 1.0, 0, 0), tB = mesh(tipGeo, extra.staffMat, -1.0, 0, 0);
     tA.rotation.z = -Math.PI / 2; tB.rotation.z = Math.PI / 2; tA.scale.z = tB.scale.z = 0.35; hand.add(tA); hand.add(tB);
     glaive = [tA, tB];
   }
@@ -130,13 +130,19 @@ function boots(R, mat, shinMat = null) {
 }
 function gloves(R, mat) { for (const a of R.arms) a.joint.add(mesh(rbox(0.15, 0.17, 0.16, 0.05), mat, 0.01, -0.21)); }
 function eyes(head, mat, z = 0.048, x = 0.128, y = 0.125, r = 0.018) { for (const s of [z, -z]) head.add(mesh(new THREE.SphereGeometry(r, 8, 6), mat, x, y, s)); }
-// Long hair down the back: a cap and a fall of locks (static; they move with the head)
-function longHair(head, mat, { len = 2.6, width = 1.25, locks = 3, cover = 0.46, tilt = 0.32, volume = 1 } = {}) {
-  const capM = mesh(capGeo(0.152 * volume, cover), mat, 0, 0.1); capM.rotation.z = tilt; head.add(capM);
+// Long hair with volume: a crown fuller than the skull, swept back off the face; side curtains past the jaw;
+// a fall of locks down the back; optional bangs. Static: it moves with the head.
+function hairDo(head, mat, { len = 2.6, width = 1.25, locks = 3, vol = 1.1, tilt = 0.3, bangs = true, sides = 1.6, back = 0 } = {}) {
+  const crown = mesh(capGeo(0.158 * vol, 0.56), mat, -0.014, 0.112, 0); crown.rotation.z = tilt; head.add(crown);
+  if (bangs) head.add(mesh(frontBand(0.118, 0.05, Math.PI * 0.7), mat, 0.004, 0.19, 0));   // a fringe across the forehead
+  for (const z of [0.118, -0.118]) {
+    const side = mesh(new THREE.SphereGeometry(0.07, 14, 10), mat, -0.03, 0.06, z * vol);
+    side.scale.set(1.15, sides, 0.6); side.rotation.z = -0.12; head.add(side);
+  }
   for (let i = 0; i < locks; i++) {
     const z = (i - (locks - 1) / 2) * 0.075;
-    const lock = mesh(new THREE.SphereGeometry(0.085 * volume, 12, 10), mat, -0.1 - Math.abs(z) * 0.2, 0.0 - 0.06 * len, z);
-    lock.scale.set(0.75, len, width * (1 - Math.abs(z) * 2)); lock.rotation.z = -0.22; head.add(lock);
+    const lock = mesh(new THREE.SphereGeometry(0.085 * vol, 12, 10), mat, -0.105 - Math.abs(z) * 0.2 - back, 0.02 - 0.06 * len, z);
+    lock.scale.set(0.8, len, width * (1 - Math.abs(z) * 2)); lock.rotation.z = -0.2; head.add(lock);
   }
 }
 
@@ -171,25 +177,27 @@ const BUILD = {
     for (const l of R.legs) R.paintLimb(l, yellow, blue);
     gloves(R, blue); hands(R, blue); boots(R, blue, blue);
     // Black tiger stripes down his sides, the red belt and its X
-    for (const [y, h] of [[0.5, 0.12], [0.36, 0.1], [0.24, 0.08]]) for (const z of [0.236, -0.236]) R.spine.add(mesh(rbox(0.12, h, 0.012, 0.004), black, -0.02, y, z));
+    for (const y of [0.52, 0.44, 0.36]) for (const z of [0.236, -0.236]) { const st = mesh(rbox(0.24, 0.032, 0.012, 0.006), black, -0.03, y, z); st.rotation.z = -0.38; R.spine.add(st); }
     extra.beltMat = std('#b8232b', 0.5);
     const xb = group(0.19, 0.1, 0); R.hips.add(xb);
     for (const a of [0.7, -0.7]) { const b = mesh(rbox(0.02, 0.08, 0.025, 0.006), yellow); b.rotation.x = a; xb.add(b); }
-    // Head: the yellow mask over the eyes, dark cowl at the back, the swept fins, white eye slits, bare jaw
+    // Head: the yellow mask in front, the blue cowl behind, a black band round the eyes sweeping up into the
+    // fins, white eye slits, the jaw bare
     head.add(mesh(new THREE.SphereGeometry(0.142, 24, 18), M.skin, 0, 0.1));
-    head.add(mesh(capGeo(0.151, 0.6), yellow, 0, 0.1));
-    head.add(mesh(capGeo(0.155, 0.62, -Math.PI / 2, Math.PI), black, 0, 0.1));
+    head.add(mesh(capGeo(0.151, 0.6, Math.PI / 2, Math.PI), yellow, 0, 0.1));
+    head.add(mesh(capGeo(0.153, 0.64, -Math.PI / 2, Math.PI), blue, 0, 0.1));
+    head.add(mesh(frontBand(0.156, 0.05, Math.PI * 0.62), black, 0, 0.132));
     for (const z of [0.1, -0.1]) {
-      const fin = mesh(new THREE.ConeGeometry(0.055, 0.24, 4), black, -0.01, 0.25, z); fin.scale.z = 0.35; fin.rotation.z = 0.62; head.add(fin);
+      const fin = mesh(new THREE.ConeGeometry(0.05, 0.28, 4), black, 0.03, 0.24, z); fin.scale.z = 0.32; fin.rotation.set(z > 0 ? 0.22 : -0.22, 0, 0.78); head.add(fin);
     }
-    eyes(head, glowMat('#ffffff', 0.5), 0.05, 0.142, 0.13, 0.016);
+    eyes(head, glowMat('#ffffff', 0.6), 0.052, 0.153, 0.133, 0.017);
     for (const z of [0.125, -0.125]) head.add(mesh(rbox(0.07, 0.08, 0.02, 0.01), M.hair, 0.02, 0.04, z));   // sideburns
     // The claws: three adamantium blades from each fist, out only when he fights
-    const clawMat = std(L.claw || '#dfe6ee', 0.18, 0.95, { emissive: '#8fa6c0', emissiveIntensity: 0.35 });
-    addRim(clawMat, '#ffffff', 0.6);
+    const clawMat = std(L.claw || '#eef3f8', 0.14, 0.9, { emissive: '#b9cde0', emissiveIntensity: 0.6 });
+    addRim(clawMat, '#ffffff', 0.9);
     const claws = a => {
       const g = group(0.03, 0, 0); a.end.add(g);
-      for (const z of [-0.042, 0, 0.042]) { const cl = mesh(new THREE.ConeGeometry(0.016, 0.46, 4), clawMat, 0, -0.32, z); cl.rotation.z = Math.PI; cl.scale.x = 0.55; g.add(cl); }
+      for (const z of [-0.045, 0, 0.045]) { const cl = mesh(new THREE.ConeGeometry(0.024, 0.5, 4), clawMat, 0, -0.34, z); cl.rotation.z = Math.PI; cl.scale.x = 0.7; g.add(cl); }
       return g;
     };
     extra.blade = claws(R.armN); extra.bladeF = claws(R.armF);
@@ -204,9 +212,9 @@ const BUILD = {
     R.hips.add(mesh(rbox(0.35, 0.06, 0.4, 0.025), M.gold, 0, 0.12));
     // Head: dark skin, the white mane falling down her back, a gold tiara; her eyes whiten with power
     head.add(mesh(new THREE.SphereGeometry(0.138, 24, 18), M.skin, 0, 0.1));
-    longHair(head, M.hair, { len: 3.4, width: 1.5, locks: 4, cover: 0.5, tilt: 0.36, volume: 1.08 });
-    head.add(mesh(frontBand(0.152, 0.022, Math.PI * 0.7), M.gold, 0, 0.175));
-    head.add(mesh(new THREE.OctahedronGeometry(0.03), M.gold, 0.152, 0.18, 0));
+    hairDo(head, M.hair, { len: 3.6, width: 1.7, locks: 5, vol: 1.22, tilt: 0.42, bangs: false, sides: 2.3, back: 0.02 });
+    head.add(mesh(frontBand(0.16, 0.024, Math.PI * 0.62), M.gold, 0, 0.178));
+    head.add(mesh(new THREE.OctahedronGeometry(0.032), M.gold, 0.162, 0.184, 0));
     eyes(head, glowMat('#eaf6ff', 1.4), 0.045, 0.126, 0.125, 0.017);
     const m = group(0.04, -0.09, 0); R.armN.end.add(m); extra.muzzle = m;
     R.collar.position.set(-0.16, 0.6, 0);   // the cape hangs from her shoulders
@@ -222,7 +230,7 @@ const BUILD = {
     for (const a of [0.55, -0.55]) { const w = mesh(rbox(0.02, 0.13, 0.03, 0.008), glowMat('#ffd27a', 1.1)); w.rotation.x = a; w.position.y = 0.02; em.add(w); }
     R.hips.add(mesh(rbox(0.36, 0.08, 0.41, 0.03), M.trim, 0, 0.1));
     head.add(mesh(new THREE.SphereGeometry(0.138, 24, 18), M.skin, 0, 0.1));
-    longHair(head, M.hair, { len: 2.5, width: 1.5, locks: 4, cover: 0.5, tilt: 0.3, volume: 1.08 });
+    hairDo(head, M.hair, { len: 2.4, width: 1.55, locks: 4, vol: 1.12, tilt: 0.4, sides: 1.9, bangs: false });
     eyes(head, std('#1f6b4a', 0.4), 0.045, 0.126, 0.125, 0.016);
     const m = group(0.04, -0.09, 0); R.armN.end.add(m); extra.muzzle = m;
     R.collar.position.set(-0.17, 0.12, 0.12);   // the sash hangs from her belt
@@ -236,13 +244,13 @@ const BUILD = {
     for (const a of R.arms) a.joint.add(mesh(new THREE.CylinderGeometry(0.074, 0.07, 0.16, 14), M.trim, 0, -0.17));   // red arm wraps
     extra.beltMat = M.trim;
     head.add(mesh(new THREE.SphereGeometry(0.138, 24, 18), M.skin, 0, 0.1));
-    longHair(head, M.hair, { len: 3.6, width: 1.3, locks: 3, cover: 0.48, tilt: 0.34, volume: 1.05 });
+    hairDo(head, M.hair, { len: 3.9, width: 1.35, locks: 3, vol: 1.08, tilt: 0.3, sides: 2.2 });
     eyes(head, std('#20182e', 0.4), 0.045, 0.126, 0.125, 0.016);
     // Psychic blades: a glowing edge of thought from each fist; the psi-glaive is the same light
-    const bladeGeo = new THREE.BoxGeometry(0.03, 0.64, 0.09);
-    extra.blade = mesh(bladeGeo, M.energy, 0.02, -0.37, 0); extra.bladeF = mesh(bladeGeo, M.energy, 0.02, -0.37, 0);
+    const bladeGeo = new THREE.BoxGeometry(0.03, 0.64, 0.09), psi = glowMat('#c04dff', 1.25, { transparent: true, opacity: 0.92 });
+    extra.blade = mesh(bladeGeo, psi, 0.02, -0.37, 0); extra.bladeF = mesh(bladeGeo, psi, 0.02, -0.37, 0);
     R.armN.end.add(extra.blade); R.armF.end.add(extra.bladeF);
-    extra.staffMat = glowMat(R.c.energy, 1.6, { transparent: true, opacity: 0.9 });
+    extra.staffMat = glowMat('#c04dff', 1.1, { transparent: true, opacity: 0.9 });
     R.collar.position.set(-0.18, 0.12, 0.1);   // the sash ties at her waist
   },
 };

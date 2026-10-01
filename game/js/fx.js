@@ -492,7 +492,17 @@ export class FX {
         break;
       }
       case 'bossMissiles': { const e = ev.e; this.burst(e.x - e.facing * 0.6, e.y + e.h + 0.2, HOSTILE, 14, 5, 0.3, 0.3, { dir: Math.PI / 2, spread: 1 }); this.smoke(e.x - e.facing * 0.6, e.y + e.h + 0.2, '#8e97a3', 5, 1.5, 0.5, 0.7, { dir: Math.PI / 2, spread: 1.2, op: 0.45 }); break; }
-      case 'bossLaser': { const e = ev.e; this.sprite(e.x + e.facing * e.w * 0.5, e.y + (e.flier ? 0.4 : e.h * 0.9), 'star', '#ffffff', 1.6, 0.16, 1.4); break; }
+      case 'bossLaser': {
+        const e = ev.e;
+        if (e.type === 'warden') {
+          // Juggernaut's thunderclap: a white flash and a burst ring where his hands meet
+          const hx = e.x + e.facing * 1.7, hy = e.y + (ev.high ? 1.35 : 0.55);
+          this.sprite(hx, hy, 'glow', '#ffffff', 2.6, 0.22, 2.4); this.sprite(hx, hy, 'star', '#ffe1ee', 2.2, 0.18, 1.8);
+          this.charge.shockRing(toWorld(hx, hy, 0.2, new THREE.Vector3()), new THREE.Vector3(0, 0, 1), '#ffffff', 0.3, 2.6, 0.32, 0);
+          this.burst(hx, hy, '#ffffff', 16, 9, 0.25, 0.25, { spread: Math.PI * 2 });
+        } else this.sprite(e.x + e.facing * 0.75, e.y + 1.25, 'star', '#ffffff', 1.6, 0.16, 1.4);
+        break;
+      }
       case 'bossDive': { const e = ev.e; this.sprite(e.x, e.y + 0.7, 'ring', HOSTILE, 2, 0.25, 2.4); break; }
       case 'bossCall': { const e = ev.e; for (const d of [-4, 4]) { this.sprite(e.x + d, e.y + 1.5, 'ring', HOSTILE, 1.2, 0.35, 2.4); this.burst(e.x + d, e.y + 1.5, HOSTILE, 14, 5, 0.3, 0.35); } break; }
       case 'bossDown': this.bossExplosion(ev); break;
@@ -779,10 +789,22 @@ export class FX {
       const L = A.span, live = e.state === 'laser';
       toWorld(L.x0, L.y, 0.2, B.a); toWorld(L.x1, L.y, 0.2, B.b);
       this.charge.span(B.core, B.a, B.b); this.charge.span(B.glow, B.a, B.b);
-      // A flier fires down from its chin cannon to where the laser starts, so the two read as one beam
-      if (e.flier) { toWorld(e.x + e.facing * 1.3, e.y + 0.35, 0.2, B.c); this.charge.span(B.feed, B.c, B.a); B.feed.material.opacity = live ? 0.75 : 0.25; B.feed.scale.x = B.feed.scale.z = live ? 1 : 0.35; }
+      // Magneto (a flier) drives it down from his aimed hand to where it starts, so the two read as one beam
+      if (e.flier) { toWorld(e.x + e.facing * 0.75, e.y + 1.25, 0.2, B.c); this.charge.span(B.feed, B.c, B.a); B.feed.material.opacity = live ? 0.75 : 0.25; B.feed.scale.x = B.feed.scale.z = live ? 1 : 0.35; }
       else B.feed.visible = false;
-      if (live) {
+      if (live && e.type === 'warden') {
+        // Thunderclap: a pulsing band of pressure with rings racing along it from his hands to the wall
+        const now = performance.now() * 0.001, f = 1 + 0.25 * Math.sin(now * 40);
+        B.core.scale.x = B.core.scale.z = 2.2 * f; B.glow.scale.x = B.glow.scale.z = 1.25 * f;
+        B.core.material.opacity = 0.32; B.glow.material.opacity = 0.42;
+        B.n = (B.n || 0) + 1;
+        if (B.n % 3 === 1) {
+          const d = B.c.copy(B.b).sub(B.a), len = d.length();
+          if (len > 0.1) this.charge.shockRing(B.a.clone(), d.divideScalar(len), B.n % 6 === 1 ? '#ffffff' : HOSTILE, 0.28, 0.62, 0.36, len);
+        }
+        this.burst(L.x1, L.y, Math.random() < 0.5 ? '#ffffff' : '#c9d3de', 3, 7, 0.2, 0.25, { dir: L.x1 > L.x0 ? Math.PI : 0, spread: 2.4, grav: 6 });
+        if (L.y0 - (this.floorUnder(L.x0, L.y0, 3) ?? -99) < 1.2) for (let i = 0; i < 3; i++) { const x = L.x0 + (L.x1 - L.x0) * Math.random(); const g = this.floorUnder(x, L.y0, 1.3); if (g !== null) this.smoke(x, g + 0.1, DUST, 1, 3.5, 0.4, 0.45, { dir: L.x1 > L.x0 ? 0.3 : Math.PI - 0.3, spread: 0.5, op: 0.5 }); }
+      } else if (live) {
         const f = 0.85 + Math.random() * 0.3;
         B.core.scale.x = B.core.scale.z = f; B.glow.scale.x = B.glow.scale.z = f * (1 + 0.1 * Math.sin(performance.now() * 0.05));
         B.core.material.opacity = 1; B.glow.material.opacity = 0.6;

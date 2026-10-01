@@ -1,11 +1,12 @@
-// Level bosses. The Lockwarden holds the Concourse Lock (its last wave); the Stormcaller guards the relay beacon
-// at the end of the Skyline Relay. Both have two phases: at half health they roar (invulnerable for a moment),
-// re-arm and speed up, and gain a new attack. Every attack uses the usual telegraph categories (a glint for
-// standard, a double glint for heavy, the magenta strip and rising tone for unblockable), and each boss opens
-// real punish windows: a Lockwarden that charges into a wall or has its hammer perfect-parried is dazed; a
-// Stormcaller that dives into the pad, or is perfect-parried out of the dive, crashes and lies open. They are
-// never knocked back, hit-stop on them is kept short, poise decays between hits, and after a stagger they
-// cannot be staggered again for a while (combat.js). Registered into the enemy tables at import.
+// Level bosses (internal ids kept from Nova Striker: 'warden' is Juggernaut, 'stormcaller' is Magneto).
+// Juggernaut holds the Sentinel Works lock (its last wave); Magneto guards the relay beacon at the end of the
+// Rooftop Relay. Both have two phases: at half health they roar (invulnerable for a moment), re-arm and speed
+// up, and gain a new attack. Every attack uses the usual telegraph categories (a glint for standard, a double
+// glint for heavy, the magenta strip and rising tone for unblockable), and each boss opens real punish windows:
+// a Juggernaut who charges into a wall or has his hammer fist perfect-parried is dazed; a Magneto who dives
+// into the pad, or is perfect-parried out of the dive, crashes and lies open. They are never knocked back,
+// hit-stop on them is kept short, poise decays between hits, and after a stagger they cannot be staggered again
+// for a while (combat.js). Registered into the enemy tables at import.
 import { DT, GRAVITY } from './config.js';
 import { ENEMY_TYPES, BEHAVIOUR, nearestPlayer, canTarget, enemyPhysics, createEnemy } from './enemies.js';
 import { rayCast, groundBelow } from './level.js';
@@ -257,7 +258,7 @@ BEHAVIOUR.stormcaller = function (e, world) {
   if (s === 'volley') {
     e.vx *= 0.9; e.vy *= 0.9;
     if (e.st % B.volley.every === 1 && p && canTarget(p)) {
-      const sx = e.x + e.facing * 1.2, sy = e.y + 0.3, a = Math.atan2(p.y + 1 - sy, p.x - sx);
+      const sx = e.x + e.facing * 0.8, sy = e.y + 1.25, a = Math.atan2(p.y + 1 - sy, p.x - sx);   // from Magneto's aimed hand
       for (const d of [-1, 1]) {
         const aa = a + d * B.volley.spread;
         world.spawnProjectile({ team: 'e', owner: e, x: sx, y: sy + d * 0.25, vx: Math.cos(aa) * B.volley.speed, vy: Math.sin(aa) * B.volley.speed, r: 0.2, dmg: B.volley.dmg, kind: 'std', ttl: 150 });
@@ -323,7 +324,7 @@ function fireRain(e, world, R) {
   for (let i = 0; i < n; i++) {
     const t = targets[i];
     const tx = t && i < targets.length ? t.x : B.padX[0] + (B.padX[1] - B.padX[0]) * ((i + 0.5) / n) + (Math.random() - 0.5);
-    const ty = Math.max(groundBelow(tx, B.floor + 2), B.floor - 6), sx = e.x + (i - n / 2) * 0.3, sy = e.y + e.h * 0.2;
+    const ty = Math.max(groundBelow(tx, B.floor + 2), B.floor - 6), sx = e.x + (i - n / 2) * 0.3, sy = e.y + 1.9;   // from above his raised hands
     const T = 0.95 + i * 0.12, g = R.gravity;
     world.spawnProjectile({ team: 'e', owner: e, x: sx, y: sy, vx: (tx - sx) / T, vy: (ty + 0.2 - sy + 0.5 * g * T * T) / T, gravity: g, r: 0.3, dmg: 0, heavy: true,
       kind: 'mortar', ttl: 300, blast: { ...R.blast } });

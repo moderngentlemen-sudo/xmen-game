@@ -8,7 +8,7 @@ import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { BOXES, GATES, pathFrame, ARC_START, ARC_END, ARC_R, TOWER_CENTER } from './level.js';
-import { SETTINGS, PLAYER_COLORS } from './config.js';
+import { SETTINGS, PLAYER_COLORS, HOSTILE } from './config.js';
 import { buildPlayerRig } from './rigs.js';
 import { animatePlayer } from './anim.js';
 import { buildEnemyRig, animateEnemy } from './enemyRigs.js';
@@ -24,6 +24,45 @@ function disposeTree(root, materials = true) {
   });
 }
 
+// Canvas textures for the environment, made once: lit windows for the skyline, the Danger Room's grid panels,
+// the city's lights far below, and hazard stripes.
+function canvasTex(w, h, draw) {
+  const c = document.createElement('canvas'); c.width = w; c.height = h;
+  draw(c.getContext('2d'), w, h);
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
+  t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = 4;
+  return t;
+}
+function envTextures() {
+  const windows = canvasTex(128, 256, (g, w, h) => {
+    g.fillStyle = '#000000'; g.fillRect(0, 0, w, h);
+    for (let y = 6; y < h - 6; y += 12) for (let x = 6; x < w - 6; x += 10) {
+      const r = Math.random();
+      if (r < 0.42) { g.globalAlpha = 0.5 + Math.random() * 0.5; g.fillStyle = r < 0.05 ? '#9fd4ff' : r < 0.28 ? '#ffd9a0' : '#ffb870'; g.fillRect(x, y, 6, 7); }
+    }
+    g.globalAlpha = 1;
+  });
+  const grid = canvasTex(256, 256, (g, w, h) => {
+    g.fillStyle = '#0d1824'; g.fillRect(0, 0, w, h);
+    g.strokeStyle = 'rgba(64, 208, 255, 0.5)'; g.lineWidth = 2;
+    for (let i = 32; i < 256; i += 32) { g.beginPath(); g.moveTo(i, 0); g.lineTo(i, h); g.moveTo(0, i); g.lineTo(w, i); g.stroke(); }
+    g.strokeStyle = 'rgba(150, 238, 255, 0.95)'; g.lineWidth = 5; g.strokeRect(0, 0, w, h);
+  });
+  const city = canvasTex(512, 512, (g, w, h) => {
+    g.fillStyle = '#000000'; g.fillRect(0, 0, w, h);
+    g.strokeStyle = 'rgba(255, 170, 90, 0.4)'; g.lineWidth = 2;
+    for (let i = 8; i < w; i += 28 + Math.random() * 34) { g.beginPath(); g.moveTo(i, 0); g.lineTo(i, h); g.stroke(); }
+    for (let i = 8; i < h; i += 28 + Math.random() * 34) { g.beginPath(); g.moveTo(0, i); g.lineTo(w, i); g.stroke(); }
+    for (let i = 0; i < 1800; i++) { g.globalAlpha = Math.random(); g.fillStyle = Math.random() < 0.8 ? '#ffcf8a' : '#bfe3ff'; g.fillRect(Math.random() * w, Math.random() * h, 2, 2); }
+    g.globalAlpha = 1;
+  });
+  const hazard = canvasTex(64, 64, (g, w, h) => {
+    g.fillStyle = '#e8b730'; g.fillRect(0, 0, w, h); g.fillStyle = '#16171b';
+    for (let i = -64; i < 96; i += 32) { g.beginPath(); g.moveTo(i, h); g.lineTo(i + 16, h); g.lineTo(i + 80, 0); g.lineTo(i + 64, 0); g.closePath(); g.fill(); }
+  });
+  return { windows, grid, city, hazard };
+}
+
 export class View {
   constructor(canvas) {
     this.canvas = canvas;
@@ -32,7 +71,7 @@ export class View {
     this.r.toneMapping = THREE.ACESFilmicToneMapping; this.r.toneMappingExposure = 0.95;
     this.r.shadowMap.enabled = true; this.r.shadowMap.type = THREE.PCFSoftShadowMap;
     this.scene = new THREE.Scene();
-    this.scene.fog = new THREE.Fog(0xc6e2f4, 70, 260);
+    this.scene.fog = new THREE.Fog(0x8a6f8f, 60, 250);   // dusk haze, the colour of the low sky
     this.persp = new THREE.PerspectiveCamera(SETTINGS.fov, 16 / 9, 0.5, 600);
     this.ortho = new THREE.OrthographicCamera(-10, 10, 5, -5, 0.5, 600);
     this.camera = this.persp;
@@ -40,14 +79,15 @@ export class View {
     this.trauma = 0; this.time = 0; this.bloomKick = 0; this.punch = 0; this.impact = null; this.impactCd = 0; this.hitPause = 0;
     this.rigs = new Map(); this.enemyRigs = new Map();
 
-    const hemi = new THREE.HemisphereLight(0xd8ecff, 0x7a6f63, 0.95); this.scene.add(hemi);
-    this.sun = new THREE.DirectionalLight(0xffeed6, 2.1);
+    // Dusk: a low orange sun for the key, a violet sky fill, a cool blue rim from behind
+    const hemi = new THREE.HemisphereLight(0xb3b9e8, 0x3d3340, 0.9); this.scene.add(hemi);
+    this.sun = new THREE.DirectionalLight(0xffc08a, 2.0);
     this.sun.position.set(-18, 30, 22); this.sun.castShadow = true;
     this.sun.shadow.mapSize.set(2048, 2048);
     const sc = this.sun.shadow.camera; sc.left = -30; sc.right = 30; sc.top = 24; sc.bottom = -24; sc.near = 1; sc.far = 120;
     this.sun.shadow.bias = -0.0006; this.sun.shadow.normalBias = 0.03;
     this.scene.add(this.sun); this.scene.add(this.sun.target);
-    const rim = new THREE.DirectionalLight(0xa9dbff, 1.4); rim.position.set(14, 12, -26); this.scene.add(rim);
+    const rim = new THREE.DirectionalLight(0x93a6ff, 1.35); rim.position.set(14, 12, -26); this.scene.add(rim);
 
     this.fx = new FX(this.scene, this.rigs);
     this.baked = new Map();
@@ -94,85 +134,127 @@ export class View {
   }
 
   // ---- Environment ----
+  // Dusk over the city: an indigo-to-orange sky, the sun low on the horizon, lit windows in the skyline,
+  // Sentinel patrols crossing it, the city's lights far below. The Danger Room (the training zone) is a dark
+  // room of glowing grid panels; outside it, the route runs over steel and concrete with amber trim, around
+  // Trask Tower and across the rooftops to the Sentinel beacon, a giant Sentinel head on a mast.
   buildSky() {
     const geo = new THREE.SphereGeometry(420, 32, 16);
     const mat = new THREE.ShaderMaterial({
       side: THREE.BackSide, depthWrite: false, fog: false,
-      uniforms: { top: { value: new THREE.Color(0x2b7fd3) }, mid: { value: new THREE.Color(0x7fbfee) }, bot: { value: new THREE.Color(0xd9eefa) } },
+      uniforms: { top: { value: new THREE.Color(0x111842) }, mid: { value: new THREE.Color(0x5b4b8f) }, bot: { value: new THREE.Color(0xf09a62) } },
       vertexShader: 'varying vec3 vP; void main(){ vP = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }',
-      fragmentShader: 'uniform vec3 top, mid, bot; varying vec3 vP; void main(){ float h = vP.y; vec3 c = h > 0.15 ? mix(mid, top, smoothstep(0.15, 0.7, h)) : mix(bot, mid, smoothstep(-0.2, 0.15, h)); gl_FragColor = vec4(c, 1.0); }',
+      fragmentShader: 'uniform vec3 top, mid, bot; varying vec3 vP; void main(){ float h = vP.y; vec3 c = h > 0.12 ? mix(mid, top, smoothstep(0.12, 0.62, h)) : mix(bot, mid, smoothstep(-0.12, 0.12, h)); gl_FragColor = vec4(c, 1.0); }',
     });
     this.sky = new THREE.Mesh(geo, mat); this.scene.add(this.sky);
-    const sunGlow = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.fx.tex.glow, color: 0xfff3d6, transparent: true, depthWrite: false, fog: false }));
-    sunGlow.scale.set(90, 90, 1); sunGlow.position.set(-160, 130, -300); this.scene.add(sunGlow);
+    for (const [color, size, op] of [[0xff8a5c, 300, 0.35], [0xffb072, 120, 0.9]]) {
+      const g = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.fx.tex.glow, color, transparent: true, opacity: op, depthWrite: false, fog: false }));
+      g.scale.set(size, size, 1); g.position.set(-160, 14, -300); this.scene.add(g);
+    }
   }
 
   buildBackdrop() {
-    const cloudMat = new THREE.SpriteMaterial({ map: this.fx.tex.glow, color: 0xeef5fa, transparent: true, opacity: 0.5, depthWrite: false });
-    for (let i = 0; i < 44; i++) {
+    const T = envTextures();
+    this.envTex = T;
+    // Dusk clouds, lit pink from below
+    const cloudMat = new THREE.SpriteMaterial({ map: this.fx.tex.glow, color: 0xd99aa6, transparent: true, opacity: 0.32, depthWrite: false });
+    for (let i = 0; i < 30; i++) {
       const s = new THREE.Sprite(cloudMat);
-      const a = Math.random() * Math.PI * 2, r = 170 + Math.random() * 160;
-      s.position.set(60 + Math.cos(a) * r, -12 + Math.random() * 28, -40 + Math.sin(a) * r * 0.8);
-      const k = 30 + Math.random() * 60; s.scale.set(k * 1.8, k, 1); this.scene.add(s);
+      const a = Math.random() * Math.PI * 2, r = 190 + Math.random() * 150;
+      s.position.set(60 + Math.cos(a) * r, 6 + Math.random() * 34, -40 + Math.sin(a) * r * 0.8);
+      const k = 30 + Math.random() * 60; s.scale.set(k * 2.2, k * 0.8, 1); this.scene.add(s);
     }
-    // Cloud sea below Skyport
-    const sea = new THREE.Mesh(new THREE.PlaneGeometry(1200, 1200), new THREE.MeshStandardMaterial({ color: 0xeef6fb, roughness: 1 }));
-    sea.rotation.x = -Math.PI / 2; sea.position.y = -34; this.scene.add(sea);
-    // Distant spires
-    const spireMat = new THREE.MeshStandardMaterial({ color: 0xc3d7ea, roughness: 0.55 });
-    const glowMat = new THREE.MeshStandardMaterial({ color: 0x7fe3ff, emissive: 0x5fd8ff, emissiveIntensity: 1.4 });
-    const spots = [[-30, -120], [20, -150], [55, -105], [85, -175], [130, -135], [-70, -170], [175, -110], [215, -160], [250, -95], [10, -210], [110, -220], [290, -150]];
+    // The city far below: streets and lights
+    T.city.repeat.set(5, 5);
+    const ground = new THREE.Mesh(new THREE.PlaneGeometry(1200, 1200), new THREE.MeshStandardMaterial({ color: 0x10131d, roughness: 1, emissive: 0xffffff, emissiveMap: T.city, emissiveIntensity: 0.85 }));
+    ground.rotation.x = -Math.PI / 2; ground.position.y = -34; this.scene.add(ground);
+    // The skyline: dark towers with lit windows, rooftop boxes and aviation lights
+    const towerMat = new THREE.MeshStandardMaterial({ color: 0x1f2536, roughness: 0.7, metalness: 0.2, emissive: 0xffffff, emissiveMap: T.windows, emissiveIntensity: 0.75 });
+    const roofMat = new THREE.MeshStandardMaterial({ color: 0x232a3a, roughness: 0.8 });
+    const redLamp = new THREE.MeshStandardMaterial({ color: 0xff6a3d, emissive: 0xff5a2d, emissiveIntensity: 2.4 });
+    const box = (w, h, d) => {
+      const g = new THREE.BoxGeometry(w, h, d), uv = g.attributes.uv, n = g.attributes.normal;
+      for (let i = 0; i < uv.count; i++) {
+        const side = Math.abs(n.getX(i)) > 0.5 ? d : w;   // window columns follow the face's own width
+        uv.setXY(i, uv.getX(i) * side / 10, uv.getY(i) * h / 20);
+      }
+      return g;
+    };
+    // Two bands: behind the first half of the route (looking north), and behind the rooftops (the camera turns
+    // round with the path after Trask Tower and looks south)
+    const spots = [];
+    for (let i = 0; i < 46; i++) spots.push([-130 + i * 9.5 + (Math.random() - 0.5) * 6, -95 - Math.random() * 140]);
+    for (let i = 0; i < 34; i++) spots.push([-150 + i * 9 + (Math.random() - 0.5) * 6, 95 + Math.random() * 130]);
     for (const [x, z] of spots) {
-      const h = 45 + Math.random() * 65, w = 4 + Math.random() * 6;
-      const m = new THREE.Mesh(new RoundedBoxGeometry(w, h, w, 3, 1.5), spireMat); m.position.set(x, h / 2 - 34, z); this.bake(m, false);
-      const band = new THREE.Mesh(new THREE.BoxGeometry(w * 1.02, 0.5, w * 1.02), glowMat); band.position.set(x, h - 38, z); this.bake(band, false);
-      const deck = new THREE.Mesh(new THREE.CylinderGeometry(w * 1.3, w * 1.3, 1.2, 24), spireMat); deck.position.set(x, h * 0.6 - 34, z); this.bake(deck, false);
-    }
-    // Transit rails with moving pods (the civilization's advanced transit)
-    this.pods = [];
-    const railMat = new THREE.MeshStandardMaterial({ color: 0xbfd0df, roughness: 0.4 });
-    const podMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.3, emissive: 0x5fd8ff, emissiveIntensity: 0.25 });
-    for (const [y, z, speed] of [[22, -70, 14], [30, -92, -10], [16, -115, 18]]) {
-      const rail = new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.25, 600, 8), railMat); rail.rotation.z = Math.PI / 2; rail.position.set(60, y, z); this.bake(rail, false);
-      for (let i = 0; i < 3; i++) {
-        const pod = new THREE.Mesh(new THREE.CapsuleGeometry(1.2, 6, 4, 12), podMat); pod.rotation.z = Math.PI / 2;
-        pod.position.set(-200 + i * 160, y - 1.4, z); this.scene.add(pod); this.pods.push({ pod, speed });
+      const h = 38 + Math.random() * 80, w = 8 + Math.random() * 10, d = 8 + Math.random() * 10;
+      const m = new THREE.Mesh(box(w, h, d), towerMat); m.position.set(x, h / 2 - 34, z); this.bake(m, false);
+      const top = new THREE.Mesh(new THREE.BoxGeometry(w * 0.5, 2.5, d * 0.5), roofMat); top.position.set(x, h - 34 + 1.25, z); this.bake(top, false);
+      if (Math.random() < 0.4) {
+        const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.3, 9, 6), roofMat); mast.position.set(x, h - 34 + 7, z); this.bake(mast, false);
+        const l = new THREE.Mesh(new THREE.SphereGeometry(0.7, 10, 8), redLamp); l.position.set(x, h - 34 + 11.6, z); this.bake(l, false);
       }
     }
-    // The Storm Spire tower the path wraps around (CP-08 test)
-    const towerMat = new THREE.MeshStandardMaterial({ color: 0xeef3f8, roughness: 0.4 });
-    const tower = new THREE.Mesh(new THREE.CylinderGeometry(ARC_R - 3.4, ARC_R - 2.4, 110, 48), towerMat);
+    // Sentinel patrols crossing the sky: purple hulls, one magenta eye each
+    this.pods = [];
+    const patrolMat = new THREE.MeshStandardMaterial({ color: 0x6d3aa8, roughness: 0.4, metalness: 0.25 });
+    const greyMat = new THREE.MeshStandardMaterial({ color: 0xb2bac8, roughness: 0.35, metalness: 0.4 });
+    const eyeMat = new THREE.MeshStandardMaterial({ color: HOSTILE, emissive: HOSTILE, emissiveIntensity: 3 });
+    for (const [y, z, speed] of [[26, -78, 9], [34, -104, -7], [20, -126, 12], [30, 40, -8], [38, 70, 10]]) {
+      for (let i = 0; i < 2; i++) {
+        const g = new THREE.Group();
+        const hull = new THREE.Mesh(new THREE.CapsuleGeometry(1.1, 3.2, 4, 10), patrolMat); hull.rotation.z = Math.PI / 2; g.add(hull);
+        const face = new THREE.Mesh(new THREE.BoxGeometry(0.5, 1.2, 1.4), greyMat); face.position.x = 2.5; g.add(face);
+        const eye = new THREE.Mesh(new THREE.SphereGeometry(0.32, 10, 8), eyeMat); eye.position.set(2.8, 0.2, 0); g.add(eye);
+        if (speed < 0) g.scale.x = -1;
+        g.position.set(-200 + i * 230, y, z); this.scene.add(g); this.pods.push({ pod: g, speed });
+      }
+    }
+    // Trask Tower, the one the route wraps around: dark glass, amber floor bands and light strips
+    const glass = new THREE.MeshStandardMaterial({ color: 0x1b2232, roughness: 0.22, metalness: 0.65, emissive: 0xffffff, emissiveMap: T.windows, emissiveIntensity: 0.5 });
+    T.windowsTower = T.windows.clone(); T.windowsTower.repeat.set(26, 11); T.windowsTower.needsUpdate = true; glass.emissiveMap = T.windowsTower;
+    const amber = new THREE.MeshStandardMaterial({ color: 0xffb547, emissive: 0xff9a2a, emissiveIntensity: 1.6 });
+    const tower = new THREE.Mesh(new THREE.CylinderGeometry(ARC_R - 3.4, ARC_R - 2.4, 110, 48), glass);
     tower.position.set(TOWER_CENTER.x, 20, TOWER_CENTER.z); this.bake(tower, false);
     for (let i = 0; i < 12; i++) {
       const a = i / 12 * Math.PI * 2;
-      const strip = new THREE.Mesh(new THREE.BoxGeometry(0.3, 90, 0.3), glowMat);
+      const strip = new THREE.Mesh(new THREE.BoxGeometry(0.3, 90, 0.3), amber);
       strip.position.set(TOWER_CENTER.x + Math.sin(a) * (ARC_R - 3.3), 25, TOWER_CENTER.z + Math.cos(a) * (ARC_R - 3.3)); this.bake(strip, false);
     }
     for (const y of [-4, 18, 40, 62]) {
-      const ring = new THREE.Mesh(new THREE.TorusGeometry(ARC_R - 2.8, 0.35, 8, 48), glowMat); ring.rotation.x = Math.PI / 2;
+      const ring = new THREE.Mesh(new THREE.TorusGeometry(ARC_R - 2.8, 0.35, 8, 48), amber); ring.rotation.x = Math.PI / 2;
       ring.position.set(TOWER_CENTER.x, y, TOWER_CENTER.z); this.bake(ring, false);
     }
+    // The Danger Room: walls of glowing grid panels behind and above the training floor
+    T.gridWall = T.grid.clone(); T.gridWall.repeat.set(76 / 6, 30 / 6); T.gridWall.needsUpdate = true;
+    const wallMat = new THREE.MeshStandardMaterial({ color: 0x9fb3c8, map: T.gridWall, emissive: 0xffffff, emissiveMap: T.gridWall, emissiveIntensity: 0.6, roughness: 0.6 });
+    const wall = new THREE.Mesh(new THREE.PlaneGeometry(76, 30), wallMat); wall.position.set(24, 9, -10.5); this.scene.add(wall);
   }
 
   buildLevel() {
+    const T = this.envTex;
     const M = {
-      cap: new THREE.MeshStandardMaterial({ color: 0xd9dfe7, roughness: 0.82 }),
-      body: new THREE.MeshStandardMaterial({ color: 0x5f7897, roughness: 0.72 }),
-      dark: new THREE.MeshStandardMaterial({ color: 0x46596f, roughness: 0.7 }),
-      trim: new THREE.MeshStandardMaterial({ color: 0x7fe3ff, emissive: 0x4fd6ff, emissiveIntensity: 2.0 }),
+      cap: new THREE.MeshStandardMaterial({ color: 0xa9aeb6, roughness: 0.85 }),
+      body: new THREE.MeshStandardMaterial({ color: 0x3a4150, roughness: 0.72, metalness: 0.2 }),
+      dark: new THREE.MeshStandardMaterial({ color: 0x262b36, roughness: 0.7 }),
+      trim: new THREE.MeshStandardMaterial({ color: 0xffb547, emissive: 0xff9a2a, emissiveIntensity: 1.7 }),
       gate: new THREE.MeshStandardMaterial({ color: 0xff2e7e, emissive: 0xff2e7e, emissiveIntensity: 1.6, transparent: true, opacity: 0.45, depthWrite: false }),
+      // The Danger Room's floor and blocks: dark grid panels with cyan light
+      gymCap: new THREE.MeshStandardMaterial({ color: 0x9fb3c8, map: T.grid, emissive: 0xffffff, emissiveMap: T.grid, emissiveIntensity: 0.45, roughness: 0.55 }),
+      gymBody: new THREE.MeshStandardMaterial({ color: 0x1c2633, roughness: 0.6, metalness: 0.3 }),
+      gymTrim: new THREE.MeshStandardMaterial({ color: 0x40d0ff, emissive: 0x2fc6ff, emissiveIntensity: 1.9 }),
     };
     this.gateMeshes = [];
     const pc = document.createElement('canvas'); pc.width = pc.height = 128;
     const g = pc.getContext('2d'); g.fillStyle = '#ffffff'; g.fillRect(0, 0, 128, 128);
-    g.fillStyle = '#c9d2dc'; g.fillRect(0, 0, 128, 3); g.fillRect(0, 0, 3, 128);
-    g.fillStyle = '#e6ebf0'; g.fillRect(62, 20, 4, 88);
+    g.fillStyle = '#b9bec6'; g.fillRect(0, 0, 128, 3); g.fillRect(0, 0, 3, 128);
+    g.fillStyle = '#d6d9de'; g.fillRect(62, 20, 4, 88);
     this.panelTex = new THREE.CanvasTexture(pc); this.panelTex.colorSpace = THREE.SRGBColorSpace;
     this.panelTex.wrapS = this.panelTex.wrapT = THREE.RepeatWrapping; this.panelTex.anisotropy = 4;
     M.capTex = M.cap.clone(); M.capTex.map = this.panelTex;
     const depthFor = b => (b.type === 'o' ? 2.6 : ['panel', 'column', 'pillar'].includes(b.tag) ? 1.8 : b.type === 'g' ? 3.2 : 4.4);
     for (const b of BOXES) {
       const depth = depthFor(b), h = b.y1 - b.y0;
+      const gym = b.x1 <= 60 && b.x0 >= -10;
       const segs = [];
       const curved = b.x1 > ARC_START && b.x0 < ARC_END;
       if (!curved) segs.push([b.x0, b.x1]);
@@ -188,64 +270,84 @@ export class View {
         if (b.tag === 'bound') { place(new THREE.Mesh(new THREE.BoxGeometry(w, h, depth), M.dark), b.y0 + h / 2); continue; }
         const capH = Math.min(0.22, h * 0.4);
         const bodyGeo = curved || b.type === 'o' ? new THREE.BoxGeometry(w, h - capH, depth) : new RoundedBoxGeometry(w, h - capH, depth, 2, 0.12);
-        const bodyMesh = new THREE.Mesh(bodyGeo, b.type === 'o' ? M.dark : M.body);
+        const bodyMesh = new THREE.Mesh(bodyGeo, b.type === 'o' ? M.dark : gym ? M.gymBody : M.body);
         bodyMesh.userData.cast = b.type !== 's' || h < 10;
         place(bodyMesh, b.y0 + (h - capH) / 2);
         const capGeo = curved ? new THREE.BoxGeometry(w, capH, depth + 0.1) : new RoundedBoxGeometry(w + 0.08, capH, depth + 0.1, 2, 0.06);
-        const uv = capGeo.attributes.uv;
-        for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * Math.max(1, w / 2), uv.getY(i) * Math.max(1, (depth + 0.1) / 2));
-        place(new THREE.Mesh(capGeo, M.capTex), b.y1 - capH / 2);
-        if (b.tag !== 'tunnel' && b.tag !== 'panel') place(new THREE.Mesh(new THREE.BoxGeometry(w, 0.06, 0.06), M.trim), b.y1 - capH - 0.05, depth / 2 + 0.02);
-        if (b.type === 'o') place(new THREE.Mesh(new THREE.BoxGeometry(w * 0.9, 0.05, depth * 0.8), M.trim), b.y0 - 0.01);
+        const uv = capGeo.attributes.uv, tile = gym ? 3 : 2;
+        for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * Math.max(1, w / tile), uv.getY(i) * Math.max(1, (depth + 0.1) / tile));
+        place(new THREE.Mesh(capGeo, gym ? M.gymCap : M.capTex), b.y1 - capH / 2);
+        const trim = gym ? M.gymTrim : M.trim;
+        if (b.tag !== 'tunnel' && b.tag !== 'panel') place(new THREE.Mesh(new THREE.BoxGeometry(w, 0.06, 0.06), trim), b.y1 - capH - 0.05, depth / 2 + 0.02);
+        if (b.type === 'o') place(new THREE.Mesh(new THREE.BoxGeometry(w * 0.9, 0.05, depth * 0.8), trim), b.y0 - 0.01);
       }
     }
   }
 
   buildProps() {
-    const white = new THREE.MeshStandardMaterial({ color: 0xf1f4f7, roughness: 0.5 });
-    const navy = new THREE.MeshStandardMaterial({ color: 0x2b4f7e, roughness: 0.6 });
-    const leafA = new THREE.MeshStandardMaterial({ color: 0x5fb36a, roughness: 0.9 });
-    const leafB = new THREE.MeshStandardMaterial({ color: 0x3f8f58, roughness: 0.9 });
-    const lamp = new THREE.MeshStandardMaterial({ color: 0x9ff0ff, emissive: 0x5fe0ff, emissiveIntensity: 2.2 });
-    const cloth = [0x2fb5c9, 0x2b5d9b, 0xf1f4f7].map(c => new THREE.MeshStandardMaterial({ color: c, roughness: 0.8, side: THREE.DoubleSide }));
+    const T = this.envTex;
+    const steel = new THREE.MeshStandardMaterial({ color: 0x2c323e, roughness: 0.55, metalness: 0.4 });
+    const concrete = new THREE.MeshStandardMaterial({ color: 0x7d838c, roughness: 0.9 });
+    const lamp = new THREE.MeshStandardMaterial({ color: 0xffd9a0, emissive: 0xffb15a, emissiveIntensity: 2.4 });
+    const cyan = new THREE.MeshStandardMaterial({ color: 0x9feaff, emissive: 0x2fc6ff, emissiveIntensity: 2.4 });
+    const amber = new THREE.MeshStandardMaterial({ color: 0xffb547, emissive: 0xff9a2a, emissiveIntensity: 1.8 });
+    const hazard = new THREE.MeshStandardMaterial({ color: 0xffffff, map: T.hazard, roughness: 0.6 });
+    const crate = new THREE.MeshStandardMaterial({ color: 0x5a4a3b, roughness: 0.85 });
+    const redLamp = new THREE.MeshStandardMaterial({ color: 0xff6a3d, emissive: 0xff5a2d, emissiveIntensity: 2.4 });
     // Scale and shadow flags must be set before baking, since baking copies the geometry.
     const add = (geo, mat, x, y, z, { cast = true, scale = null } = {}) => {
       const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z);
       if (scale) m.scale.set(...scale);
       this.bake(m, cast); return m;
     };
-    const potGeo = new RoundedBoxGeometry(1.4, 0.9, 1.4, 2, 0.2), leafGeo = new THREE.IcosahedronGeometry(0.75, 1);
     // A lower back terrace holds the props so they sit below and behind character silhouettes
     const Y = -1.1;
-    add(new THREE.BoxGeometry(108, 5, 8), new THREE.MeshStandardMaterial({ color: 0x55708f, roughness: 0.75 }), 43.5, Y - 2.5, -6.4, { cast: false });
-    add(new THREE.BoxGeometry(108, 0.2, 8.1), new THREE.MeshStandardMaterial({ color: 0xc9d2dd, roughness: 0.85 }), 43.5, Y - 0.1, -6.4, { cast: false });
+    add(new THREE.BoxGeometry(108, 5, 8), new THREE.MeshStandardMaterial({ color: 0x2f3542, roughness: 0.75 }), 43.5, Y - 2.5, -6.4, { cast: false });
+    add(new THREE.BoxGeometry(108, 0.2, 8.1), new THREE.MeshStandardMaterial({ color: 0x6f7680, roughness: 0.85 }), 43.5, Y - 0.1, -6.4, { cast: false });
     for (let x = -4; x < 96; x += 11) {
       const z = -5.2;
-      add(potGeo, white, x, Y + 0.45, z);
-      add(leafGeo, leafA, x - 0.2, Y + 1.25, z, { scale: [1, 0.8, 1] });
-      add(leafGeo, leafB, x + 0.35, Y + 1.05, z + 0.2, { scale: [0.7, 0.7, 0.7] });
-      add(new THREE.CylinderGeometry(0.07, 0.09, 5.5, 8), navy, x + 5, Y + 2.75, z - 2, { cast: false });
-      add(new THREE.SphereGeometry(0.22, 12, 10), lamp, x + 5, Y + 5.6, z - 2, { cast: false });
-      add(new THREE.PlaneGeometry(1.1, 2.6), cloth[(x / 11 + 10) % 3 | 0], x + 5.62, Y + 3.9, z - 2, { cast: false });
+      if (x < 58) {
+        // Danger Room: hologram emitters, a dark pylon with a cyan lens
+        add(new THREE.CylinderGeometry(0.22, 0.34, 2.4, 10), steel, x, Y + 1.2, z);
+        add(new THREE.SphereGeometry(0.26, 12, 10), cyan, x, Y + 2.5, z, { cast: false });
+        add(new THREE.BoxGeometry(1.6, 0.12, 0.3), cyan, x + 5, Y + 0.08, z - 1.5, { cast: false });
+        continue;
+      }
+      // The Sentinel Works yard: hazard barriers, crates, sodium lamps
+      add(new THREE.BoxGeometry(1.8, 0.9, 0.5), hazard, x, Y + 0.45, z);
+      add(new THREE.BoxGeometry(1.1, 1.1, 1.1), crate, x + 2.2, Y + 0.55, z - 0.6);
+      add(new THREE.BoxGeometry(0.8, 0.8, 0.8), crate, x + 2.0, Y + 1.5, z - 0.6, { scale: [1, 1, 1] });
+      add(new THREE.CylinderGeometry(0.08, 0.1, 5.5, 8), steel, x + 5, Y + 2.75, z - 2, { cast: false });
+      add(new THREE.BoxGeometry(0.9, 0.12, 0.3), steel, x + 5.35, Y + 5.45, z - 2, { cast: false });
+      add(new THREE.SphereGeometry(0.2, 12, 10), lamp, x + 5.75, Y + 5.3, z - 2, { cast: false });
     }
-    const archGeo = new THREE.TorusGeometry(9, 0.55, 10, 40, Math.PI);
-    for (const x of [8, 48, 88]) add(archGeo, white, x, -1, -16, { cast: false });
+    // Ribs over the Danger Room (cyan) and a steel gantry over the Sentinel Works (amber)
+    const archGeo = new THREE.TorusGeometry(9, 0.55, 10, 40, Math.PI), stripGeo = new THREE.TorusGeometry(8.4, 0.08, 6, 40, Math.PI);
+    for (const x of [8, 48, 88]) { add(archGeo, steel, x, -1, -16, { cast: false }); add(stripGeo, x < 58 ? cyan : amber, x, -1, -15.4, { cast: false }); }
 
-    // Skyline Relay dressing: antenna masts behind the rooftops, and the relay beacon at the route's end
+    // Rooftop Relay dressing: masts with aviation lights behind the rooftops, and the Sentinel beacon at the end
     const at = (x, y, depth) => toWorld(x, y, depth, new THREE.Vector3());
     for (const [x, y, h] of [[195, 15.6, 6], [212, 15.6, 8], [226, 12.6, 5], [252, 18.6, 6], [262, 18.6, 7], [294, 18.6, 7]]) {
       const b = at(x, y, -2.9);
-      add(new THREE.CylinderGeometry(0.1, 0.15, h, 10), navy, b.x, y + h / 2, b.z, { cast: false });
-      add(new THREE.SphereGeometry(0.24, 12, 10), lamp, b.x, y + h + 0.15, b.z, { cast: false });
+      add(new THREE.CylinderGeometry(0.1, 0.15, h, 10), steel, b.x, y + h / 2, b.z, { cast: false });
+      add(new THREE.SphereGeometry(0.22, 12, 10), redLamp, b.x, y + h + 0.15, b.z, { cast: false });
     }
-    const bc = at(310, 18.6, -1.2);
-    add(new THREE.CylinderGeometry(0.45, 0.85, 14, 16), white, bc.x, 18.6 + 7, bc.z);
-    for (const k of [0.3, 0.55, 0.8]) {
-      const ring = new THREE.Mesh(new THREE.TorusGeometry(1.45 - k * 0.6, 0.12, 8, 32), lamp);
-      ring.rotation.x = Math.PI / 2; ring.position.set(bc.x, 18.6 + 14 * k, bc.z); this.bake(ring, false);
-    }
-    const beacon = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.fx.tex.glow, color: 0x9ff0ff, transparent: true, depthWrite: false }));
-    beacon.scale.set(9, 9, 1); beacon.position.set(bc.x, 18.6 + 14.6, bc.z); this.scene.add(beacon);
+    // The beacon: a giant Sentinel head on a mast, its eyes burning magenta
+    const bc = at(314, 18.6, -7);
+    const purple = new THREE.MeshStandardMaterial({ color: 0x6d3aa8, roughness: 0.4, metalness: 0.25 });
+    const grey = new THREE.MeshStandardMaterial({ color: 0xb2bac8, roughness: 0.35, metalness: 0.4 });
+    const eyes = new THREE.MeshStandardMaterial({ color: HOSTILE, emissive: HOSTILE, emissiveIntensity: 3.2 });
+    add(new THREE.CylinderGeometry(0.45, 0.85, 3.4, 16), steel, bc.x, 18.6 + 1.7, bc.z);
+    const head = new THREE.Group(); head.position.set(bc.x, 18.6 + 5.2, bc.z); const nf = pathFrame(310); head.rotation.y = Math.atan2(nf.nx, nf.nz); head.scale.setScalar(0.75);   // its face turned to the camera
+    const hp = (geo, mat, x, y, z) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); head.add(m); return m; };
+    hp(new RoundedBoxGeometry(4.2, 4.6, 4.1, 3, 0.8), purple, 0, 0, 0);
+    hp(new RoundedBoxGeometry(3.4, 3.4, 0.7, 2, 0.2), grey, 0, -0.35, 1.9);
+    for (const x of [-0.8, 0.8]) hp(new THREE.BoxGeometry(0.95, 0.38, 0.3), eyes, x, 0.45, 2.3);
+    for (const y of [-1.0, -1.35, -1.7]) hp(new THREE.BoxGeometry(1.7, 0.12, 0.2), steel, 0, y, 2.3);
+    for (const x of [-2.1, 2.1]) { const d = hp(new THREE.CylinderGeometry(0.95, 0.95, 0.35, 20), grey, x, 0, 0); d.rotation.z = Math.PI / 2; }
+    head.updateMatrixWorld(true); head.traverse(o => { if (o.isMesh) { o.updateMatrixWorld(true); this.bake(o, false); } });
+    const beacon = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.fx.tex.glow, color: HOSTILE, transparent: true, opacity: 0.8, depthWrite: false }));
+    beacon.scale.set(9, 9, 1); beacon.position.set(bc.x, 18.6 + 5.5, bc.z); this.scene.add(beacon);
   }
 
   // ---- Entities ----
@@ -297,7 +399,7 @@ export class View {
       g.mesh.visible = GATES[g.tag];
       g.mesh.material.opacity = 0.35 + 0.12 * Math.sin(t * 6);
     }
-    for (const pd of this.pods) { pd.pod.position.x += pd.speed * dt; if (pd.pod.position.x > 260) pd.pod.position.x = -220; if (pd.pod.position.x < -220) pd.pod.position.x = 260; }
+    for (const pd of this.pods) { pd.pod.position.x += pd.speed * dt; if (pd.pod.position.x > 280) pd.pod.position.x = -220; if (pd.pod.position.x < -220) pd.pod.position.x = 280; }
   }
 
   // ---- Camera ----
