@@ -166,11 +166,12 @@ export class View {
     }
     // The city far below: streets and lights
     T.city.repeat.set(5, 5);
-    const ground = new THREE.Mesh(new THREE.PlaneGeometry(1200, 1200), new THREE.MeshStandardMaterial({ color: 0x10131d, roughness: 1, emissive: 0xffffff, emissiveMap: T.city, emissiveIntensity: 0.85 }));
+    // (Backdrop surfaces are unlit or Lambert: they fill much of the screen, and fill rate is what weak GPUs run out of)
+    const ground = new THREE.Mesh(new THREE.PlaneGeometry(1200, 1200), new THREE.MeshBasicMaterial({ color: 0xd9d9d9, map: T.city }));
     ground.rotation.x = -Math.PI / 2; ground.position.y = -34; this.scene.add(ground);
     // The skyline: dark towers with lit windows, rooftop boxes and aviation lights
-    const towerMat = new THREE.MeshStandardMaterial({ color: 0x1f2536, roughness: 0.7, metalness: 0.2, emissive: 0xffffff, emissiveMap: T.windows, emissiveIntensity: 0.75 });
-    const roofMat = new THREE.MeshStandardMaterial({ color: 0x232a3a, roughness: 0.8 });
+    const towerMat = new THREE.MeshLambertMaterial({ color: 0x1f2536, emissive: 0xffffff, emissiveMap: T.windows, emissiveIntensity: 0.75 });
+    const roofMat = new THREE.MeshLambertMaterial({ color: 0x232a3a });
     const redLamp = new THREE.MeshStandardMaterial({ color: 0xff6a3d, emissive: 0xff5a2d, emissiveIntensity: 2.4 });
     const box = (w, h, d) => {
       const g = new THREE.BoxGeometry(w, h, d), uv = g.attributes.uv, n = g.attributes.normal;
@@ -226,7 +227,7 @@ export class View {
     }
     // The Danger Room: walls of glowing grid panels behind and above the training floor
     T.gridWall = T.grid.clone(); T.gridWall.repeat.set(76 / 6, 30 / 6); T.gridWall.needsUpdate = true;
-    const wallMat = new THREE.MeshStandardMaterial({ color: 0x9fb3c8, map: T.gridWall, emissive: 0xffffff, emissiveMap: T.gridWall, emissiveIntensity: 0.6, roughness: 0.6 });
+    const wallMat = new THREE.MeshBasicMaterial({ color: 0xc8d6e6, map: T.gridWall });
     const wall = new THREE.Mesh(new THREE.PlaneGeometry(76, 30), wallMat); wall.position.set(24, 9, -10.5); this.scene.add(wall);
   }
 

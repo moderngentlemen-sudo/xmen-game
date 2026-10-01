@@ -1,71 +1,57 @@
-# X-Men: Sentinel Strike — handoff (paused 2026-10-01, mid visual pass)
+# X-Men: Sentinel Strike — handoff (2026-10-01, original conversion complete)
 
 Unofficial fan prototype built on the latest Nova Striker build: Version 9 from `moderngentlemen-sudo/nova-striker-claude`,
-branch `claude/nova-striker-fresh-start-lqu8sn`, commit `eeeece5` (`fresh-start-prototype/`). It is byte-identical to
-the published "Nova Striker Prototype" artifact (https://claude.ai/artifact/2JBmE2k83AroPhhqYN1iwJ).
+branch `claude/nova-striker-fresh-start-lqu8sn`, commit `eeeece5` (`fresh-start-prototype/`), byte-identical to the
+published "Nova Striker Prototype" artifact (https://claude.ai/artifact/2JBmE2k83AroPhhqYN1iwJ).
 
 Working copy: this folder (`<scratchpad>/xmen`, a local git repo, nothing pushed anywhere). `game/` is the site,
-`tests/` the headless suites. It lives only in this session's container.
+`tests/` the headless suites. It lives only in this session's container unless it is pushed or published.
 
-## Done
+## What the game is now
+- **Five X-Men** on the two V9 body frames (`arch: 'nova' | 'echo'`, `kit` flags in `config.js` CHARS). Nova and Echo
+  stay as hidden reference frames so the V9 regression checks still exercise the original kits.
+  - Cyclops (nova frame): optic blasts from the visor (Piercing/Ricochet/Spread), Optic Spray and Optic Mine, Visor
+    Overdrive, Optic Overload. Storm: lightning and hail, Chain Lightning/Cyclone/Hailstorm, real flight, Squall, Eye
+    of the Storm. Jean Grey: Mind Darts/TK Debris/Psi Spear, TK Throw/Grip/Push, TK Shield, levitation, Phoenix Force.
+  - Wolverine (echo frame): claw chain, Drill Claw, Berserker Rage, healing factor. Psylocke: the Hunter kit (psi
+    blades, psi-glaive, psychic snares, psi-bolt, sash modes).
+  - Signature cooldowns persist per hero across swaps. Pair team-up names, "To Me, My X-Men" for three or more.
+- **Villains**: Sentinel units (purple plate, grey faceplates, magenta eyes) in `enemyRigs.js`; the Danger Room's
+  training post and turret in grey and hazard yellow; **Juggernaut** (boss id `warden`: maroon armour, domed helmet,
+  slab overhead for the rubble volley, a thunderclap in place of the old laser) and **Magneto** (boss id
+  `stormcaller`: red and purple, cape, orbiting steel, magenta force field). Magneto's volley leaves from his hand
+  and his scrap rain from above his raised hands (`bosses.js`).
+- **Zones**: Danger Room (dark room of cyan grid panels) → Sentinel Works (dusk city, amber trim, hazard barriers)
+  → Trask Tower (dark glass, amber bands) → Rooftop Relay (skyline on both sides, Sentinel patrols) → the Sentinel
+  beacon (a giant Sentinel head on a mast). Environment in `render.js` (`envTextures`, `buildSky/Backdrop/Level/Props`).
+- **UI** (`ui.js`, `index.html`): title screen with the roster and an unofficial-fan disclaimer, per-hero HUD
+  chips, a controls screen with a card per hero, pause menu with the zones and both bosses, settings without the
+  V9 test toggles. Keys 1-5 pick a hero, Tab and the D-pad cycle; new players join as the first free hero.
+- **Audio**: hero sounds in `audio.js` `heroPlay` (optic blasts, snikt and claws, lightning, wind, thunder, TK,
+  psi-blades); an original heroic score in `music.js` (E minor, 132 BPM, galloping bass, brass stabs, a fanfare lead;
+  no borrowed melody).
 
-**Hero layer (simulation), committed (`61e6900`).**
-- `config.js` CHARS: every hero runs on one of the two V9 body frames (`arch: 'nova' | 'echo'`) plus its own `kit`.
-  Nova and Echo stay as hidden reference frames so the 189 V9 regression checks still exercise the original kits.
-- Cyclops (nova frame): Piercing/Ricochet/Spread Blast (lance/prism/volley), Optic Spray and Optic Mine
-  (scatter/grenade). Shots leave from the visor (`muzzle()` in player.js). Signature **Visor Overdrive** (instant
-  Overcharge plus a concussive flare). No hover, no skates. Ultimate Optic Overload (beam engine).
-- Storm (nova frame): Lightning Bolt/Thunderhead/Hailstones, Chain Lightning/Cyclone/Hailstorm, real flight
-  (BOOST.storm, fuel 170), **Squall** Signature, new ultimate engine **Eye of the Storm** (`ultStorm` in world.js:
-  bolts from the sky on every enemy in view, then a thunderclap).
-- Jean Grey (nova frame): Mind Darts/TK Debris/Psi Spear, TK Throw/TK Grip/Psychic Push, the Aegis as her **TK
-  Shield**, levitation (BOOST.jean). Ultimate Phoenix Force (beam engine).
-- Wolverine (echo frame): Hunter melee chain; fire is **Drill Claw** (`fireDrill`: tiers 1-3 by hold, aimed
-  8-way, one per airtime); Signature **Berserker Rage** (faster moves via `moveFor`, x1.3 damage, 30% lifesteal,
-  no stagger, x0.8 damage taken); **healing factor** (HEAL: 4 hp/s after 2.5 s unhurt). No scarf, no snares.
-- Psylocke (echo frame): the full Hunter kit (psychic snares, focus shot, sash modes).
-- Signature cooldowns are kept per hero across swaps (`sigStash`). The ultimate names, 15 pair team-up names and
-  "To Me, My X-Men" for three or more are in ULT. Original barks are written for all five.
+## Tests
+212 checks green: the 189 from V9 plus 23 in `tests/xmen-test.mjs` (including every hero against both bosses).
+Run `node tests/run-all.mjs`.
 
-**Villains and zones (text), committed.** Danger Room / Sentinel Works / Trask Tower / Rooftop Relay. The Lockwarden
-became Juggernaut and the Stormcaller became Magneto. Banners and enemy display names are done; tests are updated.
+## Browser checks done
+Screenshots of every hero, enemy, boss pose and zone; a real-input playtest (click to join, keys 1-5, Tab, H, Esc,
+pause-menu boss fights) with no console errors; audio context runs and the score schedules notes. In SwiftShader the
+frame cost is within about 5-20% of V9 after the big backdrops moved to unlit or Lambert materials.
 
-**Tests.** 210 checks green: the 189 from V9 plus 21 in `tests/xmen-test.mjs`. Run `node tests/run-all.mjs`.
+## Known limits
+- Procedural placeholder art throughout; heroes share two body frames' physics and charge timings (the concept
+  proposal addresses this).
+- One-way platforms (2.6 deep) hide the part of a tall enemy standing under them, as in V9.
 
-**Visual pass, in progress (committed as WIP with this note).**
-- `rigs_xmen.js`: the five hero rigs on the shared skeleton (Cyclops visor = energy material so it blazes with
-  charge; Wolverine's three-claw blades; Storm's mane and tiara; Jean's hair, emblem and sash; Psylocke's
-  psi-blades and psi-glaive). `rigs.js` routes non-Nova/Echo ids there. Rigs build (Cyclops: 39 meshes, sane
-  positions) but have **not been visually reviewed yet**.
-- `anim.js`: frame checks by `arch`, glide poses only for gliding heroes, Cyclops's hand-to-visor firing and beam
-  poses, Drill Claw corkscrew, Wolverine's claws in and out, Storm's ultimate pose, Berserker keyframes.
-- Per-hero colour palette `FXPAL`/`fxPal()` in config.js, threaded through fx.js, chargefx.js, subfx.js (Storm's
-  cyclone, Jean's TK grip), ultfx.js (Cyclops/Jean beam colours, Phoenix wings, Psylocke butterflies, Wolverine
-  triple claw marks, Storm sky bolts), aegisfx.js (dome takes owner colours) and beamfx.js. Per-hero projectile
-  looks (`projMesh`), villain projectiles (Juggernaut rubble, Magneto steel and scrap). Cloth: Psylocke's sash
-  (shows her modes), Storm's cape, Jean's sash.
-
-## Next, in order
-1. Visual check: render all five heroes side by side (set `p.mercy = 0` first or they blink), then fix
-   proportions and colours.
-2. `enemyRigs.js`: the Sentinel palette (purple plate, grey faceplates, magenta eyes), Danger Room grey and yellow
-   for the post and turret, and Juggernaut and Magneto rigs. Keep the part names that `animateWarden` and
-   `animateStorm` drive (legs/hip/knee, torso, chest, head, eye, core, pod, tubes, plates, armN/armF, hull,
-   rotors, cannon, muzzle, shield, shieldMat).
-3. `render.js`: environment retheme (dusk city, Danger Room grid, Sentinel-head beacon); add shake/glow entries for
-   visor, squall, berserk, ultBolt and ultThunder; restyle Juggernaut's laser in `fx.syncBossLasers` as a thunderclap.
-4. UI: `ui.js` title "X-Men: Sentinel Strike"; hero select on keys 1-5; HUD chips per hero (Cyclops still shows
-   Echo's chips); help screen; settings cleanup (drop the kit, echoHead and echoRanged rows); an unofficial-fan
-   disclaimer. `input.js` keys 1-5, `main.js` joins in HEROES order with swap cycling through them, and
-   `index.html` title and aria-label.
-5. Audio: hero sounds (snikt, optic hum, thunder) and an original heroic score (no copied theme melody).
-6. Extend the tests and run them all. Playtest every hero and both bosses in the browser, then publish the
-   multi-file artifact (index.html + js/).
+## Next
+The alternate, redesigned version follows the concept proposal (Claude Doc "X-Men: Sentinel Strike concept
+proposal"). Any concept change beyond that doc is proposed to the user before it is built.
 
 ## Tooling
 - Static server: `cd game && python3 -m http.server 8765 --bind 127.0.0.1`.
-- Screenshots: `NODE_USE_ENV_PROXY=1 node <scratchpad>/shot.mjs out.png [page-script.js]`. Chromium runs without a
-  proxy; https requests (three.js CDN, Google Fonts) are fetched by Node through the agent proxy and cached in
-  `<scratchpad>/netcache`. Page scripts get `window.__NS` (world, view, step, start, inject).
-- A proposal for redesigning the game at the concept level was written after this pause (see the Claude Docs link
-  in the conversation).
+- Screenshots: `NODE_USE_ENV_PROXY=1 node <scratchpad>/shots.mjs plan.mjs` (a plan module exports `{ out, script }`
+  shots; each reloads the game and runs its page script with `window.__NS`). https requests (three.js CDN, Google
+  Fonts) are fetched by Node through the agent proxy and cached in `<scratchpad>/netcache`.
+- `playtest.mjs` / `playtest2.mjs`: real keyboard and mouse input; `fpscmp.mjs`: frame cost with a GPU sync.
