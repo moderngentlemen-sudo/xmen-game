@@ -3,7 +3,7 @@
 // reverb pad, brass-like stabs and a lead fanfare. Three intensity levels crossfade: 0 explore (pad, arp,
 // half-time beat), 1 combat (driving drums and bass), 2 intense (adds the stabs and the lead). update() picks
 // the level from what is happening on screen.
-import { SETTINGS } from './config.js';
+import { SETTINGS } from './settings.js';
 
 const BPM = 132, STEP = 60 / BPM / 4, BAR = 16, LOOP = BAR * 8;
 const hz = n => 440 * Math.pow(2, (n - 69) / 12);
@@ -31,22 +31,14 @@ const MIX = [
   { drums: 1.1, bass: 1.05, arp: 0.8, pad: 0.4, lead: 0.85, stab: 0.8 },
 ];
 
-// How hot is the moment? Enemies near the camera, and whether a gate has the team locked in.
-export function musicIntensity(world) {
-  if (world.ultCast) return 2;   // an ultimate is always full intensity
-  const cam = world.cam; let near = 0, heavy = false;
-  for (const e of world.enemies) {
-    if (e.dead || e.type === 'post' || e.type === 'turret') continue;
-    if (e.boss && Math.abs(e.x - cam.x) < cam.halfW + 14) return 2;   // a boss fight is always full intensity
-    if (Math.abs(e.x - cam.x) < cam.halfW + 8 && Math.abs(e.y - cam.y) < cam.halfH + 10) {
-      near++;
-      if (e.type === 'brute' || e.type === 'charger' || e.type === 'mortar') heavy = true;
-    }
-  }
+// How hot is the moment? Sentinels near the camera, a fight locked in, the Mk-II, the team ultimate.
+export function musicIntensity(S) {
+  if (S.ult) return 2;
+  if (S.enemies.some(e => !e.dead && e.type === 'mk2')) return 2;
+  const cam = S.cam; let near = 0;
+  for (const e of S.enemies) if (!e.dead && Math.abs(e.x - cam.x) < cam.halfW + 8) near++;
   if (!near) return 0;
-  const locked = world.arena.state === 'wave1' || world.arena.state === 'wave2' ||
-    (world.encounters || []).some(S => S.state === 'active' && S.def.gates);
-  return near >= 5 || (locked && (heavy || near >= 3)) ? 2 : 1;
+  return near >= 5 || (S.mission && S.mission.phase === 'fight' && near >= 3) || (S.adapt && S.adapt.active) ? 2 : 1;
 }
 
 export class Music {

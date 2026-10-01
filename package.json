@@ -1,8 +1,8 @@
 {
-  "name": "nova-striker-fresh-start-prototype",
+  "name": "xmen-sentinel-strike-team-edition",
   "private": true,
   "type": "module",
-  "description": "Isolated fresh-start browser prototype track for Nova Striker (placeholder art and sound).",
+  "description": "X-Men: Sentinel Strike, Team Edition: the first concept proposal's vertical slice. An unofficial fan prototype (placeholder art and sound).",
   "scripts": {
     "test": "node tests/run-all.mjs"
   }

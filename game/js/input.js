@@ -1,17 +1,18 @@
-// Input: keyboard + mouse (one device) and up to four gamepads.
-import { HEROES } from './config.js';
-// Each simulation tick, a device produces one command frame with held/pressed/released edges.
-
-const BTNS = ['jump', 'dash', 'melee', 'fire', 'parry', 'sig', 'mode', 'lock', 'sub', 'ult'];
+// Input: the six inputs (Attack, Power, Jump, Evade, Signature, Team) plus move and aim, from keyboard and
+// mouse (one device) and up to four gamepads. Each simulation tick a device gives one command:
+// { mx, my, ax, ay, aim, b }, b being the held buttons as bits. A press that comes and goes between two ticks
+// still counts (it is reported held for one tick), so fast taps are never lost.
+import { BTN } from './sim/config.js';
+import { SETTINGS } from './settings.js';
 
 const KEYMAP = {
-  Space: 'jump', ShiftLeft: 'dash', ShiftRight: 'dash',
-  KeyJ: 'melee', KeyK: 'fire', KeyL: 'parry', KeyQ: 'parry', KeyE: 'sig', KeyI: 'sig',
-  KeyR: 'mode', KeyU: 'mode',   // power mode (Cyclops, Storm, Jean) or sash mode (Psylocke)
-  KeyF: 'lock', KeyO: 'lock',   // lock-on
-  KeyT: 'sub', KeyY: 'sub',     // switch secondary power
-  KeyV: 'ult', KeyN: 'ult',     // ultimate (a gamepad pulls both triggers)
+  Space: 'jump', KeyJ: 'attack', KeyK: 'power', KeyL: 'evade', ShiftLeft: 'evade', ShiftRight: 'evade',
+  KeyI: 'sig', KeyE: 'sig', KeyU: 'team', KeyQ: 'team',
 };
+// Mouse: left Attack, right Power, middle Signature, back Team, forward Evade
+const MOUSE = { 0: 'attack', 2: 'power', 1: 'sig', 3: 'team', 4: 'evade' };
+// Gamepad (standard mapping): A jump, X attack, B evade, Y signature, RB or RT power, LB or LT team
+const PAD = { 0: 'jump', 2: 'attack', 1: 'evade', 3: 'sig', 5: 'power', 7: 'power', 4: 'team', 6: 'team' };
 
 function deadzone(x, y, dz) {
   const m = Math.hypot(x, y);
@@ -23,90 +24,59 @@ function deadzone(x, y, dz) {
 export class Input {
   constructor(canvas) {
     this.canvas = canvas;
-    this.keys = new Set();
-    this.kbPressed = new Set();    // presses since last sample (so fast taps aren't lost)
-    this.kbReleased = new Set();
-    this.mouse = { x: 0, y: 0, moved: false, buttons: 0 };
-    this.mousePressed = new Set();
-    this.mouseReleased = new Set();
-    this.prevPads = {};
-    this.devices = {};             // deviceId -> { prevHeld, freeAimGrace }
-    this.gamepadBlocked = false;
-    this.menuEvents = [];          // pause/help/debug/swap toggles for the UI
-    this.anyKbm = false;           // any keyboard/mouse input since last join poll
-
+    this.keys = new Set(); this.kbTapped = new Set();
+    this.mouse = { x: 0, y: 0, buttons: 0, moved: 0 }; this.mouseTapped = new Set();
+    this.devices = {}; this.prevPads = {}; this.gamepadBlocked = false;
+    this.menuEvents = []; this.anyKbm = false;
     window.addEventListener('keydown', e => {
-      if (['Space', 'Tab', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) e.preventDefault();
+      if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Tab'].includes(e.code)) e.preventDefault();
       if (e.repeat) return;
-      this.keys.add(e.code);
-      this.kbPressed.add(e.code);
-      this.anyKbm = true;
+      this.keys.add(e.code); this.kbTapped.add(e.code); this.anyKbm = true;
       if (e.code === 'Escape' || e.code === 'KeyP') this.menuEvents.push({ dev: 'kbm', type: 'pause' });
       if (e.code === 'KeyH') this.menuEvents.push({ dev: 'kbm', type: 'help' });
-      if (e.code === 'Backquote') this.menuEvents.push({ dev: 'kbm', type: 'debug' });
-      if (e.code === 'Tab') this.menuEvents.push({ dev: 'kbm', type: 'swap', dir: 1 });
-      const n = ['Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5'].indexOf(e.code);   // hero select: 1 to 5
-      if (n >= 0) this.menuEvents.push({ dev: 'kbm', type: 'pick', char: HEROES[n] });
+      if (e.code === 'Enter') this.menuEvents.push({ dev: 'kbm', type: 'confirm' });
+      if (e.code === 'ArrowUp') this.menuEvents.push({ dev: 'kbm', type: 'up' });
+      if (e.code === 'ArrowDown') this.menuEvents.push({ dev: 'kbm', type: 'down' });
     });
-    window.addEventListener('keyup', e => {
-      this.keys.delete(e.code);
-      this.kbReleased.add(e.code);
-    });
+    window.addEventListener('keyup', e => this.keys.delete(e.code));
     window.addEventListener('blur', () => { this.keys.clear(); this.mouse.buttons = 0; });
     canvas.addEventListener('mousemove', e => {
       const r = canvas.getBoundingClientRect();
-      this.mouse.x = e.clientX - r.left; this.mouse.y = e.clientY - r.top; this.mouse.moved = true;
+      this.mouse.x = e.clientX - r.left; this.mouse.y = e.clientY - r.top; this.mouse.moved = performance.now();
     });
     canvas.addEventListener('mousedown', e => {
-      if (e.button >= 3) e.preventDefault();   // back/forward buttons are game buttons here, not navigation
-      this.mouse.buttons |= (1 << e.button);
-      this.mousePressed.add(e.button);
-      this.anyKbm = true;
+      if (e.button >= 3) e.preventDefault();
+      this.mouse.buttons |= (1 << e.button); this.mouseTapped.add(e.button); this.anyKbm = true;
     });
-    window.addEventListener('mouseup', e => {
-      if (e.button >= 3 && e.target === canvas) e.preventDefault();
-      this.mouse.buttons &= ~(1 << e.button);
-      this.mouseReleased.add(e.button);
-    });
+    window.addEventListener('mouseup', e => { this.mouse.buttons &= ~(1 << e.button); });
     canvas.addEventListener('contextmenu', e => e.preventDefault());
-    // A click anywhere (including on the start card) counts as keyboard + mouse wanting to join
-    window.addEventListener('pointerdown', () => { this.anyKbm = true; });
   }
 
   pads() {
     if (this.gamepadBlocked) return [];
-    try {
-      return Array.from(navigator.getGamepads ? navigator.getGamepads() : []).filter(Boolean);
-    } catch (e) {
-      this.gamepadBlocked = true;
-      return [];
-    }
+    try { return Array.from(navigator.getGamepads ? navigator.getGamepads() : []).filter(Boolean); }
+    catch (e) { this.gamepadBlocked = true; return []; }
   }
 
-  // Devices that pressed something this frame and are not yet assigned.
+  // Devices that pressed something and are not yet playing
   pollJoins(assigned) {
     const out = [];
     if (this.anyKbm && !assigned.has('kbm')) out.push('kbm');
     this.anyKbm = false;
     for (const p of this.pads()) {
       const id = 'pad' + p.index;
-      if (assigned.has(id)) continue;
-      if (p.buttons.some(b => b.pressed)) out.push(id);
+      if (!assigned.has(id) && p.buttons.some((b, i) => b.pressed && i !== 9 && i !== 8)) out.push(id);
     }
     return out;
   }
 
-  // Pad menu buttons (Start/View/D-pad) become UI events.
+  // Start, View and the D-pad drive the menus
   pollPadMenus() {
     for (const p of this.pads()) {
-      const id = 'pad' + p.index;
-      const prev = this.prevPads[id] || [];
-      const now = p.buttons.map(b => b.pressed);
+      const id = 'pad' + p.index, prev = this.prevPads[id] || [], now = p.buttons.map(b => b.pressed);
       const edge = i => now[i] && !prev[i];
       if (edge(9)) this.menuEvents.push({ dev: id, type: 'pause' });
       if (edge(8)) this.menuEvents.push({ dev: id, type: 'help' });
-      if (edge(14)) this.menuEvents.push({ dev: id, type: 'swap', dir: -1 });
-      if (edge(15)) this.menuEvents.push({ dev: id, type: 'swap', dir: 1 });
       if (edge(12)) this.menuEvents.push({ dev: id, type: 'up' });
       if (edge(13)) this.menuEvents.push({ dev: id, type: 'down' });
       if (edge(0)) this.menuEvents.push({ dev: id, type: 'confirm' });
@@ -114,87 +84,44 @@ export class Input {
       this.prevPads[id] = now;
     }
   }
+  takeMenuEvents() { const e = this.menuEvents; this.menuEvents = []; return e; }
 
-  // aimFromMouse(screenX, screenY) is supplied by the caller: returns a unit sim-space vector.
-  sample(dev, aimFromMouse, p1AimMode) {
-    const st = this.devices[dev] || (this.devices[dev] = { prevHeld: {}, grace: 0, lastFree: [1, 0] });
-    const held = {};
-    let mx = 0, my = 0, aimFree = false, ax = 0, ay = 0;
-
+  // One command for this tick. aimFromMouse(x, y) gives a unit vector from the player's hero to the pointer.
+  sample(dev, aimFromMouse) {
+    const st = this.devices[dev] || (this.devices[dev] = { toggled: 0, prevRaw: 0, grace: 0, lastAim: [1, 0], swallow: 0 });
+    let raw = 0, mx = 0, my = 0, ax = 1, ay = 0, aim = false;
+    const set = name => { raw |= BTN[name]; };
     if (dev === 'kbm') {
       const k = c => this.keys.has(c);
       mx = (k('KeyD') || k('ArrowRight') ? 1 : 0) - (k('KeyA') || k('ArrowLeft') ? 1 : 0);
       my = (k('KeyW') || k('ArrowUp') ? 1 : 0) - (k('KeyS') || k('ArrowDown') ? 1 : 0);
-      for (const b of BTNS) held[b] = false;
-      for (const [code, b] of Object.entries(KEYMAP)) if (k(code)) held[b] = true;
-      // Bits: 1 = left (fire), 2 = middle (signature), 4 = right (melee), 8 = back (mode), 16 = forward (lock-on)
-      if (this.mouse.buttons & 1) held.fire = true;
-      if (this.mouse.buttons & 2) held.sig = true;
-      if (this.mouse.buttons & 4) held.melee = true;
-      if (this.mouse.buttons & 8) held.mode = true;
-      if (this.mouse.buttons & 16) held.lock = true;
-      if (p1AimMode === 'mouse' && aimFromMouse) {
-        const v = aimFromMouse(this.mouse.x, this.mouse.y);
-        if (v) { aimFree = true; ax = v[0]; ay = v[1]; }
-      }
-      // Keyboard presses that happened and released between samples still count as presses
-      const pressedExtra = {};
-      for (const code of this.kbPressed) { const b = KEYMAP[code]; if (b) pressedExtra[b] = true; }
-      if (this.mousePressed.has(0)) pressedExtra.fire = true;
-      if (this.mousePressed.has(2)) pressedExtra.melee = true;
-      if (this.mousePressed.has(1)) pressedExtra.sig = true;
-      if (this.mousePressed.has(3)) pressedExtra.mode = true;
-      if (this.mousePressed.has(4)) pressedExtra.lock = true;
-      this.kbPressed.clear(); this.mousePressed.clear(); this.kbReleased.clear(); this.mouseReleased.clear();
-      return this.finish(st, held, pressedExtra, mx, my, aimFree, ax, ay);
-    }
-
-    const pad = this.pads().find(p => 'pad' + p.index === dev);
-    for (const b of BTNS) held[b] = false;
-    if (pad) {
-      const bt = i => (pad.buttons[i] ? pad.buttons[i].pressed || pad.buttons[i].value > 0.5 : false);
-      [mx, my] = deadzone(pad.axes[0] || 0, -(pad.axes[1] || 0), 0.22);
-      const [rx, ry] = deadzone(pad.axes[2] || 0, -(pad.axes[3] || 0), 0.3);
-      if (bt(12)) my = 1; if (bt(13)) my = -1;
-      held.jump = bt(0);
-      held.sub = bt(4);     // LB: switch secondary power
-      held.dash = bt(1);
-      held.melee = bt(2);
-      held.sig = bt(3);
-      held.mode = bt(5);
-      held.parry = pad.buttons[6] ? pad.buttons[6].value > 0.5 || pad.buttons[6].pressed : false;
-      held.fire = pad.buttons[7] ? pad.buttons[7].value > 0.35 || pad.buttons[7].pressed : false;
-      held.lock = bt(11);   // right stick click
-      const rm = Math.hypot(rx, ry);
-      if (rm > 0.35) {
-        aimFree = true; ax = rx / rm; ay = ry / rm; st.grace = 18; st.lastFree = [ax, ay];
-      } else if (st.grace > 0) {
-        st.grace--; aimFree = true; [ax, ay] = st.lastFree;
+      for (const [code, b] of Object.entries(KEYMAP)) if (k(code) || this.kbTapped.has(code)) set(b);
+      for (const [i, b] of Object.entries(MOUSE)) if ((this.mouse.buttons & (1 << i)) || this.mouseTapped.has(+i)) set(b);
+      this.kbTapped.clear(); this.mouseTapped.clear();
+      // The mouse aims once it has moved over the game in the last few seconds
+      if (aimFromMouse && performance.now() - this.mouse.moved < 4000) { const v = aimFromMouse(this.mouse.x, this.mouse.y); if (v) { aim = true; [ax, ay] = v; } }
+    } else {
+      const pad = this.pads().find(p => 'pad' + p.index === dev);
+      if (pad) {
+        const bt = i => !!pad.buttons[i] && (pad.buttons[i].pressed || pad.buttons[i].value > 0.4);
+        [mx, my] = deadzone(pad.axes[0] || 0, -(pad.axes[1] || 0), 0.22);
+        if (bt(14)) mx = -1; if (bt(15)) mx = 1; if (bt(12)) my = 1; if (bt(13)) my = -1;
+        for (const [i, b] of Object.entries(PAD)) if (bt(+i)) set(b);
+        const [rx, ry] = deadzone(pad.axes[2] || 0, -(pad.axes[3] || 0), 0.3), rm = Math.hypot(rx, ry);
+        if (rm > 0.35) { aim = true; ax = rx / rm; ay = ry / rm; st.grace = 18; st.lastAim = [ax, ay]; }
+        else if (st.grace > 0) { st.grace--; aim = true; [ax, ay] = st.lastAim; }
       }
     }
-    return this.finish(st, held, {}, mx, my, aimFree, ax, ay);
-  }
-
-  // After a menu closes, buttons still held from closing it count as already held (no stray jump or dash)
-  swallowAll() { for (const st of Object.values(this.devices)) st.swallow = true; this.kbPressed.clear(); this.mousePressed.clear(); }
-
-  finish(st, held, pressedExtra, mx, my, aimFree, ax, ay) {
-    if (st.swallow) { st.swallow = false; st.prevHeld = { ...held }; pressedExtra = {}; }
-    const pressed = {}, released = {};
-    for (const b of BTNS) {
-      pressed[b] = (held[b] && !st.prevHeld[b]) || !!pressedExtra[b];
-      released[b] = !held[b] && !!st.prevHeld[b];
+    // Holds as toggles: a press of Power latches it until the next press
+    if (SETTINGS.holdToggle) {
+      const pressed = raw & ~st.prevRaw;
+      if (pressed & BTN.power) st.toggled ^= BTN.power;
+      st.prevRaw = raw;
+      raw = (raw & ~BTN.power) | st.toggled;
     }
-    st.prevHeld = { ...held };
-    return { mx, my, aimFree, ax, ay, held, pressed, released };
+    // After a menu closes, whatever is still held from closing it does not act until released
+    if (st.swallow) { st.swallow &= raw; raw &= ~st.swallow; }
+    return { mx, my, ax, ay, aim, b: raw };
   }
-
-  takeMenuEvents() {
-    const ev = this.menuEvents;
-    this.menuEvents = [];
-    return ev;
-  }
+  swallowAll() { for (const st of Object.values(this.devices)) st.swallow = 0x3f; this.kbTapped.clear(); this.mouseTapped.clear(); }
 }
-
-const none = () => Object.fromEntries(BTNS.map(b => [b, false]));
-export const EMPTY_CMD = { mx: 0, my: 0, aimFree: false, ax: 0, ay: 0, held: none(), pressed: none(), released: none() };
