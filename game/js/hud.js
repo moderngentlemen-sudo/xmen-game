@@ -73,6 +73,7 @@ export class UI {
       <h1>X-Men: Sentinel Strike<small>Team Edition</small></h1>
       <p class="lede">A Sentinel factory has a young mutant in its cells. Get in, break her out, and get her to the X-Jet. The Sentinels study how you fight and field counter-tech against the power you lean on, so rotate, and fight as a team: every pair has a team-up.</p>
       <div class="join">Click, press a key or a gamepad button to join</div>
+      <p class="lede touchnote">This game needs a keyboard and mouse or a gamepad; touch controls are not supported.</p>
       <div class="roster">${cards}</div>
       <p class="lede"><b>Alone</b>, you run all three as a squad: tap <kbd>Team</kbd> to tag the next hero in, hold it to call a benched hero's assist. <b>With friends</b> (up to four, each on a gamepad or the keyboard), stand together and press <kbd>Team</kbd> for that pair's team-up.</p>
       <div class="btns"><button class="btn" data-act="help">Controls</button><button class="btn" data-act="settings">Settings</button></div>
