@@ -175,6 +175,16 @@ function playRandom(seed, players, ticks, every) {
   assert(count(log, 'vault') === 1 && p.vy > 5, 'a blast fired at the floor vaults him upward');
 }
 
+{
+  // Holding Power through the end of a combo still opens the visor once he is free
+  const { S, p, run, log } = setup({ heroes: ['cyclops'], x: 16 });
+  run({ b: bits('attack') }, 2); run({}, 4); run({ b: bits('attack') }, 2);
+  run({ b: bits('power') }, 60);
+  assert(p.openT > 0 && count(log, 'apertureOpen') === 1, 'Power held through an attack opens the visor as soon as he is free');
+  run({}, 2);
+  assert(count(log, 'optic') === 1, 'and letting go fires');
+}
+
 // ---- Wolverine ---------------------------------------------------------------------------------------------
 {
   const { S, p, run, log } = setup({ heroes: ['wolverine'], x: 18 });
@@ -343,6 +353,15 @@ function playRandom(seed, players, ticks, every) {
   assert(Math.abs(hp - p.hp - 10 * ENEMIES.hunter.mark.mult) < 0.01, 'the marked hero takes more damage');
   hitEnemy(S, h, { owner: p.id, team: 'p', inst: 779, dmg: 9999, power: 'plain' });
   assert(p.markedBy === 0, 'bringing the Hunter down clears the mark');
+}
+
+{
+  // The team ultimate called mid-Fastball: Wolverine is let go, nobody is left holding anyone
+  const { S, ps, run, log } = setup({ heroes: ['jean', 'wolverine', 'cyclops'], x: 16 });
+  run([{ b: bits('team') }, {}, {}], 2);
+  S.gauge = GAUGE.max;
+  run([{}, {}, { b: bits('team', 'sig') }], 2); run([{}, {}, {}], 140);
+  assert(count(log, 'ultEnd') === 1 && ps[1].state !== 'held' && !ps[0].fastball, 'a team ultimate in the middle of a Fastball Special lets Wolverine go');
 }
 
 // ---- Joining and leaving ------------------------------------------------------------------------------------------

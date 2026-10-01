@@ -11,6 +11,8 @@ const MINE = {
   drill: ev => [0.25 + 0.15 * ev.tier, 0.5, 90 + 30 * ev.tier, 2],
   tkGrab: () => [0, 0.35, 60, 1], tkThrow: () => [0.3, 0.6, 110, 2],
   berserk: () => [0.7, 0.7, 300, 3], tag: () => [0.15, 0.5, 80, 2], vault: () => [0.35, 0.4, 100, 2],
+  teamup: () => [0.35, 0.8, 180, 3], fastballThrow: () => [0.5, 0.6, 140, 3],
+  hit: ev => (ev.heavy ? [0.3, 0.6, 70, 1] : [0.05, 0.3, 35, 1]), kill: () => [0.2, 0.55, 70, 2],
 };
 const ALL = { bossLand: () => [0.8, 0.6, 300, 3], bossPhase: () => [0.9, 0.8, 380, 4], ultStrike: () => [1, 1, 600, 4], fastballSlam: () => [0.7, 0.7, 260, 3],
   missionComplete: () => [0.4, 0.8, 400, 2] };
@@ -33,7 +35,7 @@ export class Haptics {
     if (ALL[ev.type]) { for (const d of devices) this.play(d, ALL[ev.type](ev)); return; }
     const f = MINE[ev.type]; if (!f) return;
     const fx = f(ev); if (!fx) return;
-    const ids = ev.ids || [ev.id];
+    const ids = ev.ids || (ev.type === 'hit' || ev.type === 'kill' ? [ev.by] : [ev.id]);
     for (const id of ids) this.play(deviceOf(id), fx);
   }
 }

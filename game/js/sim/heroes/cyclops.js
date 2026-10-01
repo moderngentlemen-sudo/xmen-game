@@ -26,7 +26,7 @@ export default {
   power(S, p, cmd, E) {
     const O = C().optic, holding = (p.held & 2) !== 0;
     if (p.overheatT > 0) { if (p.openT) p.openT = 0; return false; }
-    if (holding && p.openT === 0 && p.blastCd === 0 && p.buf.power <= 8) { p.openT = 1; p.buf.power = 99; emit(S, 'apertureOpen', { id: p.id }); }
+    if (holding && p.openT === 0 && p.blastCd === 0) { p.openT = 1; p.buf.power = 99; emit(S, 'apertureOpen', { id: p.id }); }   // a held Power opens it as soon as he is free
     if (p.openT > 0) {
       if (holding) {
         p.openT++;

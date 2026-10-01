@@ -96,6 +96,8 @@ function updateCamera(S) {
   for (const p of S.players) if (p.state !== 'dead') pts.push([p.x, p.y + 1]);
   if (S.kid && S.kid.state !== 'caged' && S.kid.state !== 'boarded') pts.push([S.kid.x, S.kid.y + 0.6]);
   if (!pts.length) return;
+  // A boss close to the team stays in frame, head and all
+  for (const e of S.enemies) if (!e.dead && ENEMIES[e.type].boss && pts.some(([x]) => Math.abs(e.x - x) < 24)) { pts.push([e.x, e.y + e.h + 0.5]); pts.push([e.x, e.y]); }
   let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
   for (const [x, y] of pts) { x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y); }
   const spanX = x1 - x0 + 10, spanY = y1 - y0 + 7;

@@ -215,8 +215,8 @@ export function buildSet(scene, fxTex) {
   for (let x = 100; x < 176; x += 10) box(0.6, 1.2, 13, M.steel, x, 11.6, -0.5, false);
   // Half-built Sentinels hanging on chains along the line
   for (let x = 104; x < 174; x += 9) {
-    cyl(0.06, 0.06, 4, M.steelDark, x, 10, -4.6, 6, false);
-    const t = new THREE.Group(); t.position.set(x, 6.4, -4.6); t.rotation.y = 0.5 + (x % 3) * 0.2;
+    cyl(0.06, 0.06, 5, M.steelDark, x, 9.5, -4.6, 6, false);
+    const t = new THREE.Group(); t.position.set(x, 5.4, -4.6); t.rotation.y = 0.5 + (x % 3) * 0.2;
     const tor = new THREE.Mesh(new RoundedBoxGeometry(2.2, 2.0, 2.4, 3, 0.4), M.purple); t.add(tor);
     const hd = new THREE.Mesh(new RoundedBoxGeometry(1.1, 1.2, 1.1, 3, 0.25), M.purple); hd.position.y = 1.7; t.add(hd);
     const fp = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.9, 0.9), M.grey); fp.position.set(0.55, 1.6, 0); t.add(fp);

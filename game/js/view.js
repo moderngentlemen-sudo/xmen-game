@@ -169,7 +169,7 @@ export class View {
         this.scene.add(m); this.crates.set(c.id, m);
       }
       const [x, y] = this.lerpPos(c, alpha);
-      m.position.set(x, y + 0.45, 0);
+      m.position.set(x, y + 0.45, -0.6);
       if (c.thrown) { m.rotation.z -= dt * 12 * Math.sign(c.vx || 1); } else if (c.heldBy) m.rotation.z += dt * 2; else m.rotation.z *= Math.exp(-dt * 8);
     }
     for (const [id, m] of this.crates) if (!seenC.has(id)) { this.scene.remove(m); this.crates.delete(id); }

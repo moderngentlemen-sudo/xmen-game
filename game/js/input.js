@@ -50,6 +50,8 @@ export class Input {
     });
     window.addEventListener('mouseup', e => { this.mouse.buttons &= ~(1 << e.button); });
     canvas.addEventListener('contextmenu', e => e.preventDefault());
+    // A click anywhere but on a menu control (the cover page included) counts as keyboard and mouse joining
+    window.addEventListener('pointerdown', e => { if (!(e.target.closest && e.target.closest('button, select, input, label'))) this.anyKbm = true; });
   }
 
   pads() {

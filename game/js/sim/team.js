@@ -21,6 +21,8 @@ export const TEAMUP_NAMES = { fastball: 'Fastball Special', rapport: 'Psychic Ra
 export function updateTeam(S, cmds) {
   if (S.rapportT > 0 && --S.rapportT === 0) emit(S, 'rapportEnd', {});
   if (S.called) { const c = ent(S, S.called.id); if (--S.called.t <= 0 || !c || c.dead) { S.called = null; emit(S, 'callEnd', {}); } }
+  // A Fastball whose thrower was interrupted (the team ultimate, a hit, going down) lets Wolverine go
+  for (const p of S.players) if (p.fastball && p.state !== 'teamup') endFastball(S, p);
   if (S.ult) { updateUlt(S); return; }
   for (const p of S.players) {
     if (p.state === 'thrown') fly(S, p);
@@ -106,6 +108,13 @@ function holdFastball(S, j) {
   // She throws on a second press (Team, Power or Attack), or when the hold runs out
   const again = f.t > 6 && ((j.buf.team === 0) || (j.buf.power === 0) || (j.buf.attack === 0));
   if (again || f.t >= f.max) { j.buf.team = j.buf.power = j.buf.attack = 99; throwWolverine(S, j, w, j.aimX, j.aimY); j.fastball = null; setState(j, 'normal'); j.teamCd = TEAM.cd; }
+}
+function endFastball(S, j) {
+  const w = ent(S, j.fastball.wolv); j.fastball = null;
+  if (!w || w.state !== 'held' || w.heldBy !== j.id) return;
+  w.heldBy = 0;
+  if (w.kind === 'assist') w.done = true;
+  else { w.state = 'normal'; w.st = 0; w.vy = 4; w.onGround = false; w.mercy = Math.max(w.mercy, 20); }
 }
 function carryOverhead(S, j, w) {
   const tx = j.x - j.facing * 0.1, ty = j.y + j.h + 0.25;

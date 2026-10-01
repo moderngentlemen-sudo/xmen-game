@@ -31,7 +31,7 @@ export default {
 
   power(S, p, cmd, E) {
     const D = W().drill, holding = (p.held & 2) !== 0;
-    if (p.drillT === 0 && holding && p.buf.power <= 8 && p.drillCd === 0) { p.drillT = 1; p.buf.power = 99; }
+    if (p.drillT === 0 && holding && p.drillCd === 0) { p.drillT = 1; p.buf.power = 99; }   // a held Power starts the coil as soon as he is free
     if (p.drillT > 0) {
       if (holding) {
         p.drillT++;

@@ -12,12 +12,13 @@ import { physics } from '../player.js';
 const J = () => HEROES.jean;
 
 export default {
-  init(p) { p.conc = p.conc === undefined ? J().tk.max : p.conc; p.phoenix = p.phoenix || 0; p.tk = null; p.tkCd = 0; p.levFuel = J().levitate.fuel; p.levitating = false;
+  init(p) { p.conc = p.conc === undefined ? J().tk.max : p.conc; p.phoenix = p.phoenix || 0; p.tk = null; p.tkCd = 0; p.tkTried = false; p.levFuel = J().levitate.fuel; p.levitating = false;
     p.shieldT = 0; p.shieldCd = 0; p.shieldX = p.x; p.shieldY = p.y + 1; },
 
   tick(S, p) {
     const T = J().tk, P = J().phoenix;
     if (p.tkCd > 0) p.tkCd--;
+    if (!(p.held & 2)) p.tkTried = false;   // letting go of Power re-arms the reach
     if (p.shieldCd > 0) p.shieldCd--;
     if (p.shieldT > 0) { p.shieldT--; p.shieldX = p.x; p.shieldY = p.y + p.h * 0.55; if (p.shieldT === 0) emit(S, 'shieldDown', { id: p.id }); }
     if (!p.tk) p.conc = Math.min(T.max, p.conc + T.regen);
@@ -30,7 +31,8 @@ export default {
 
   power(S, p, cmd, E) {
     const T = J().tk, holding = (p.held & 2) !== 0;
-    if (!p.tk && holding && p.buf.power <= 8 && p.tkCd === 0 && p.conc > 8) {
+    if (!p.tk && holding && (p.buf.power <= 8 || !p.tkTried) && p.tkCd === 0 && p.conc > 8) {   // a held Power reaches out once she is free
+      p.tkTried = true;
       p.buf.power = 99;
       const t = findTarget(S, p);
       if (t && t.anchored) emit(S, 'anchored', { id: p.id, target: t.id, x: t.x, y: t.y });
