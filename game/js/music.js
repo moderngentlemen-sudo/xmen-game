@@ -1,34 +1,34 @@
-// Adaptive score, synthesized live with Web Audio (no audio files). A driving synthwave loop in
-// D minor at 124 BPM: kick, snare and hats, a rolling bass, a delayed arpeggio, a reverb pad and a
-// heroic lead. Three intensity levels crossfade: 0 explore (pad, arp, half-time beat), 1 combat
-// (four-on-the-floor, driving bass), 2 intense (adds the lead). update() picks the level from what
-// is happening on screen.
+// Adaptive score, synthesized live with Web Audio (no audio files), written for this fan prototype: an
+// original heroic theme (no borrowed melody) in E minor at 132 BPM, drums, a galloping bass, an arpeggio, a
+// reverb pad, brass-like stabs and a lead fanfare. Three intensity levels crossfade: 0 explore (pad, arp,
+// half-time beat), 1 combat (driving drums and bass), 2 intense (adds the stabs and the lead). update() picks
+// the level from what is happening on screen.
 import { SETTINGS } from './config.js';
 
-const BPM = 124, STEP = 60 / BPM / 4, BAR = 16, LOOP = BAR * 8;
+const BPM = 132, STEP = 60 / BPM / 4, BAR = 16, LOOP = BAR * 8;
 const hz = n => 440 * Math.pow(2, (n - 69) / 12);
 
-// Dm  Bb  F  C | Dm  Bb  Gm  A
-const CHORDS = [[38, 'm'], [34, 'M'], [41, 'M'], [36, 'M'], [38, 'm'], [34, 'M'], [43, 'm'], [45, 'M']];
+// Em  C  G  D | Em  C  Am  B (the major V turns it back home)
+const CHORDS = [[40, 'm'], [36, 'M'], [43, 'M'], [38, 'M'], [40, 'm'], [36, 'M'], [45, 'm'], [35, 'M']];
 const triad = q => (q === 'm' ? [0, 3, 7] : [0, 4, 7]);
 // Arpeggio walks these chord tones (root, third, fifth, then an octave up) in 16ths
-const ARP = [0, 2, 3, 2, 4, 2, 3, 1, 0, 2, 3, 2, 5, 4, 3, 2];
-// Lead melody: [step in the 8-bar loop, midi note, length in 16ths]
+const ARP = [0, 1, 2, 3, 2, 1, 4, 2, 0, 1, 2, 3, 5, 4, 3, 1];
+// Lead fanfare: [step in the 8-bar loop, midi note, length in 16ths]
 const LEAD = [
-  [0, 69, 3], [3, 74, 3], [6, 77, 4], [10, 76, 2], [12, 74, 4],
-  [16, 77, 6], [22, 74, 2], [24, 70, 4], [28, 74, 4],
-  [32, 72, 3], [35, 77, 3], [38, 81, 6], [44, 79, 4],
-  [48, 76, 6], [54, 79, 2], [56, 76, 4], [60, 72, 4],
-  [64, 74, 3], [67, 77, 3], [70, 81, 4], [74, 79, 2], [76, 77, 4],
-  [80, 77, 4], [84, 79, 4], [88, 77, 2], [90, 74, 2], [92, 70, 4],
-  [96, 67, 3], [99, 70, 3], [102, 74, 4], [106, 79, 2], [108, 77, 4],
-  [112, 76, 6], [118, 73, 2], [120, 76, 4], [124, 81, 4],
+  [0, 71, 2], [2, 76, 2], [4, 79, 6], [10, 78, 2], [12, 76, 4],
+  [16, 72, 4], [20, 76, 4], [24, 79, 4], [28, 81, 4],
+  [32, 79, 6], [38, 74, 2], [40, 71, 4], [44, 74, 4],
+  [48, 78, 6], [54, 76, 2], [56, 74, 4], [60, 69, 4],
+  [64, 71, 2], [66, 76, 2], [68, 79, 4], [72, 83, 4], [76, 81, 4],
+  [80, 79, 6], [86, 76, 2], [88, 72, 4], [92, 76, 4],
+  [96, 72, 3], [99, 76, 3], [102, 81, 6], [108, 79, 4],
+  [112, 78, 6], [118, 75, 2], [120, 78, 4], [124, 83, 4],
 ];
 // Layer levels per intensity
 const MIX = [
-  { drums: 0.5, bass: 0.55, arp: 0.8, pad: 0.95, lead: 0 },
-  { drums: 1, bass: 1, arp: 0.8, pad: 0.45, lead: 0 },
-  { drums: 1.1, bass: 1.05, arp: 0.85, pad: 0.4, lead: 0.85 },
+  { drums: 0.5, bass: 0.55, arp: 0.8, pad: 0.95, lead: 0, stab: 0 },
+  { drums: 1, bass: 1, arp: 0.75, pad: 0.45, lead: 0, stab: 0.35 },
+  { drums: 1.1, bass: 1.05, arp: 0.8, pad: 0.4, lead: 0.85, stab: 0.8 },
 ];
 
 // How hot is the moment? Enemies near the camera, and whether a gate has the team locked in.
@@ -69,7 +69,7 @@ export class Music {
     const delayOut = c.createGain(); delayOut.gain.value = 0.3; damp.connect(delayOut); delayOut.connect(this.out);
     // One bus per layer; bass and pad also duck under the kick
     this.bus = {};
-    for (const k of ['drums', 'bass', 'arp', 'pad', 'lead']) {
+    for (const k of ['drums', 'bass', 'arp', 'pad', 'lead', 'stab']) {
       const g = c.createGain(); g.gain.value = MIX[0][k]; g.connect(this.out); this.bus[k] = g;
     }
     this.duck = { bass: c.createGain(), pad: c.createGain() };
@@ -138,10 +138,13 @@ export class Music {
     // Bass
     if (L === 0) {
       if (s === 0) this.bass(t, root, STEP * 14, 0.28, 500);
-    } else if (s % 2 === 0) {
-      const oct = s === 6 || s === 14 ? 12 : 0, fifth = s === 10 && bar % 2 ? 7 : 0;
-      this.bass(t, root + oct + fifth, STEP * 1.6, 0.32, L === 2 ? 1500 : 1100);
+    } else if ([0, 3, 4, 6, 8, 11, 12, 14].includes(s)) {
+      // A gallop: the long-short-short drive of a charge
+      const oct = s === 6 || s === 14 ? 12 : 0, fifth = s === 11 && bar % 2 ? 7 : 0;
+      this.bass(t, root + oct + fifth, STEP * (s % 4 === 0 ? 2.2 : 0.9), 0.32, L === 2 ? 1500 : 1100);
     }
+    // Brass-like stabs on the downbeats and a push into the next bar (heard from intensity 1)
+    if (L > 0 && (s === 0 || s === 6 || (s === 14 && bar % 2 === 1))) this.stab(t, [root + 24, root + 24 + tones[1], root + 24 + tones[2]], s === 0 ? 0.2 : 0.13);
     // Arpeggio: chord tones placed around D4
     const base = root + 12 * Math.round((62 - root) / 12);
     const ladder = [0, tones[1], tones[2], 12, 12 + tones[1], 12 + tones[2]];
@@ -237,9 +240,20 @@ export class Music {
     const send = c.createGain(); send.gain.value = 0.7; g.connect(send); send.connect(this.verb);
     this.notes++;
   }
+  stab(t, notes, v) {
+    const c = this.ctx, f = c.createBiquadFilter(), g = c.createGain();
+    f.type = 'lowpass'; f.Q.value = 1.2; f.frequency.setValueAtTime(600, t); f.frequency.exponentialRampToValueAtTime(3400, t + 0.03); f.frequency.setTargetAtTime(900, t + 0.05, 0.08);
+    for (const n of notes) for (const det of [-7, 7]) {
+      const o = c.createOscillator(); o.type = 'sawtooth'; o.frequency.value = hz(n); o.detune.value = det; o.connect(f); o.start(t); o.stop(t + 0.5);
+    }
+    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(v, t + 0.012); g.gain.setTargetAtTime(0.0001, t + 0.09, 0.07);
+    f.connect(g); g.connect(this.bus.stab);
+    const send = c.createGain(); send.gain.value = 0.4; g.connect(send); send.connect(this.verb);
+    this.notes++;
+  }
   lead(t, note, dur) {
     const c = this.ctx, f = c.createBiquadFilter(), g = c.createGain(), lfo = c.createOscillator(), depth = c.createGain();
-    f.type = 'lowpass'; f.frequency.value = 3200; f.Q.value = 2;
+    f.type = 'lowpass'; f.Q.value = 2; f.frequency.setValueAtTime(1200, t); f.frequency.exponentialRampToValueAtTime(3600, t + 0.06); f.frequency.setTargetAtTime(2400, t + 0.1, 0.2);   // brassy: it opens as each note speaks
     lfo.frequency.value = 5.6; depth.gain.setValueAtTime(0, t); depth.gain.linearRampToValueAtTime(9, t + 0.25); lfo.connect(depth);
     for (const [type, det, lvl] of [['sawtooth', -6, 0.6], ['square', 6, 0.4]]) {
       const o = c.createOscillator(); o.type = type; o.frequency.value = hz(note); o.detune.value = det;

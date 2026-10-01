@@ -1,6 +1,6 @@
 // Synthesized placeholder audio. Timing cues matter more than fidelity here: every threat
 // category and both parry grades have a distinct, unmistakable sound.
-import { SETTINGS, MARKSMAN, NOVA, DASH_CHARGE, HUNTER, POUND, ULT } from './config.js';
+import { SETTINGS, MARKSMAN, NOVA, DASH_CHARGE, HUNTER, POUND, ULT, DRILL, kitOf } from './config.js';
 import { marksman, rifleFocus } from './player.js';
 
 // The pitch each secondary weapon hums at while it charges (and chimes at when selected)
@@ -11,7 +11,10 @@ const SUB_HUM = { scatter: 130, grenade: 110, chain: 260, disc: 180, well: 70 };
 function chargeOf(p) {
   if (p.state === 'dashCharge' && p.dashChargeT >= DASH_CHARGE.tap) return { k: Math.min(1, p.dashChargeT / DASH_CHARGE.charge[2]), kind: 'dash' };
   if (p.state === 'pound' && p.pound && p.pound.phase === 'hold' && p.pound.held && p.pound.t > POUND.windup) return { k: Math.min(1, p.pound.t / POUND.charge[2]), kind: 'pound' };
-  if (p.char === 'echo') return p.rifleT >= HUNTER.rifle.raise ? { k: rifleFocus(p.rifleT), kind: 'rifle' } : { k: -1 };
+  if (p.arch === 'echo') {
+    if (kitOf(p).fire === 'drill') return p.drillT > 0 ? { k: Math.min(1, p.drillT / DRILL.charge[1]), kind: 'drill' } : { k: -1 };   // Wolverine coils a Drill Claw
+    return p.rifleT >= HUNTER.rifle.raise ? { k: rifleFocus(p.rifleT), kind: 'rifle' } : { k: -1 };
+  }
   if (marksman(p)) {
     const C = MARKSMAN.charge, B = MARKSMAN.burst.charge, L4 = MARKSMAN.beam.at;
     if (p.chargeT > 0) return { k: Math.min(1, p.chargeT / C[2]), kind: 'shot', perfect: p.chargeT >= C[2] && p.chargeT < C[2] + MARKSMAN.perfectWindow,
@@ -104,7 +107,7 @@ export class Sound {
           g.gain.setValueAtTime(0.0001, now); o1.start(); o2.start(); lfo.start();
           h = { o1, o2, lfo, lg, g }; this.hums.set(p, h);
         }
-        const base = ch.kind === 'dash' ? 90 : ch.kind === 'rifle' ? 240 : ch.kind === 'burst' ? SUB_HUM[ch.sub] || 130 : ch.kind === 'pound' ? 70 : 110;
+        const base = ch.kind === 'dash' ? 90 : ch.kind === 'rifle' ? 240 : ch.kind === 'burst' ? SUB_HUM[ch.sub] || 130 : ch.kind === 'pound' ? 70 : ch.kind === 'drill' ? 150 : 110;
         const l4 = ch.l4 || 0, f0 = base * (1 + 2.2 * ch.k) * (ch.perfect ? 2 : 1) * (1 + 0.6 * l4);
         h.o1.frequency.setTargetAtTime(f0, now, 0.03); h.o2.frequency.setTargetAtTime(f0 * (l4 >= 1 ? 2 : 1.5), now, 0.03);
         h.lfo.frequency.setTargetAtTime(ch.perfect || l4 >= 1 ? 26 : 5 + 10 * ch.k + 10 * l4, now, 0.05);
@@ -207,8 +210,68 @@ export class Sound {
     this.last[key] = now; return true;
   }
 
+  // The X-Men's own sounds, in place of the frame's: Cyclops's optic blasts, Wolverine's claws (the snikt as
+  // they come out), Storm's lightning, wind and thunder, Jean's telekinesis, Psylocke's psychic blades.
+  // Returns true when it played the event.
+  heroPlay(ev) {
+    const p = ev.p, c = p && p.char;
+    switch (ev.type) {
+      case 'shot': {
+        if (ev.bolt || !c) return false;
+        const L = ev.level || 0;
+        if (c === 'cyclops') {
+          if (L === 0 && !this.limit('optic', 0.03)) return true;
+          this.tone(1500 - L * 160, 260, 0.11 + 0.05 * L, 'sawtooth', 0.045 + 0.022 * L); this.tone(2900, 800, 0.09, 'sine', 0.035);
+          this.noise(0.08 + 0.04 * L, 2400, 0.05 + 0.03 * L, 'bandpass', 900); if (L >= 2) this.tone(110, 40, 0.32, 'sine', 0.1 + 0.03 * L);
+          return true;
+        }
+        if (c === 'storm') {
+          if (L === 0 && !this.limit('zap', 0.03)) return true;
+          this.noise(0.05 + 0.05 * L, 6000, 0.08 + 0.04 * L, 'highpass'); this.tone(1900, 120, 0.09 + 0.04 * L, 'sawtooth', 0.04 + 0.02 * L);
+          if (L >= 2) { this.noise(0.6, 320, 0.12, 'lowpass', 60, 0.05); this.tone(70, 35, 0.6, 'sine', 0.12, 0.04); }   // thunder behind a charged bolt
+          return true;
+        }
+        if (c === 'jean') {
+          if (L === 0 && !this.limit('psi', 0.03)) return true;
+          for (const [f, d] of [[660, 0], [990, 0.015], [1320, 0.03]]) this.tone(f * (1 + 0.1 * L), f * 0.6, 0.14 + 0.04 * L, 'sine', 0.028 + 0.01 * L, d);
+          this.noise(0.1 + 0.05 * L, 3000, 0.04, 'bandpass', 1200); if (L >= 2) this.tone(120, 50, 0.3, 'sine', 0.1);
+          return true;
+        }
+        return false;
+      }
+      case 'swing':
+        if (c === 'wolverine') {
+          if (!this.limit('swing', 0.04)) return true;
+          if (this.limit('snikt' + p.slot, 1.4)) { this.tone(3300, 0, 0.05, 'square', 0.028); this.tone(4900, 0, 0.07, 'triangle', 0.024, 0.04); this.noise(0.05, 7000, 0.05, 'highpass', 0, 0.02); }
+          this.noise(0.08, 4200, 0.08, 'bandpass', 8000); this.tone(1800, 900, 0.05, 'triangle', 0.02);
+          return true;
+        }
+        if (c === 'psylocke') {
+          if (!this.limit('swing', 0.04)) return true;
+          this.tone(320, 900, 0.12, 'sine', 0.05); this.tone(640, 1800, 0.1, 'triangle', 0.02); this.noise(0.08, 3000, 0.04, 'bandpass', 5000);
+          return true;
+        }
+        return false;
+      case 'visor': this.tone(600, 2400, 0.25, 'sawtooth', 0.05); this.tone(80, 35, 0.4, 'sine', 0.22, 0.2); this.noise(0.3, 1500, 0.16, 'lowpass', 200, 0.2); return true;
+      case 'squall': this.noise(0.7, 400, 0.18, 'bandpass', 2600); this.noise(0.6, 1500, 0.08, 'bandpass', 500, 0.1); this.tone(90, 50, 0.4, 'sine', 0.08); return true;
+      case 'berserk': this.tone(90, 60, 0.5, 'sawtooth', 0.12); this.tone(135, 80, 0.5, 'sawtooth', 0.07); this.noise(0.5, 600, 0.12, 'lowpass', 200); return true;
+      case 'berserkEnd': this.tone(300, 150, 0.25, 'sine', 0.04); return true;
+      case 'drillLevel': this.tone(600 + 300 * (ev.level || 2), 0, 0.1, 'square', 0.03); return true;
+      case 'healed': this.tone(880, 1320, 0.22, 'sine', 0.03); this.tone(1320, 1760, 0.2, 'sine', 0.02, 0.05); return true;
+      case 'ultBolt':
+        if (this.limit('bolt', 0.05)) { this.noise(0.12, 7000, 0.12, 'highpass'); this.tone(2600, 200, 0.1, 'sawtooth', 0.04); this.noise(0.4, 250, 0.1, 'lowpass', 60, 0.05); }
+        return true;
+      case 'ultThunder':
+        this.noise(0.15, 8000, 0.22, 'highpass'); this.tone(50, 22, 1.6, 'sine', 0.34); this.noise(1.6, 500, 0.3, 'lowpass', 40);
+        for (let i = 0; i < 4; i++) this.noise(0.25, 260, 0.12, 'lowpass', 80, 0.25 + i * 0.22);
+        return true;
+    }
+    return false;
+  }
+
   play(ev) {
     if (!this.ctx || SETTINGS.volume <= 0) return;
+    if (this.heroPlay(ev)) return;
     switch (ev.type) {
       case 'jump': if (this.limit('jump', 0.05)) this.tone(280, 460, 0.09, 'triangle', 0.06); break;
       case 'djump': this.tone(380, 640, 0.09, 'triangle', 0.06); break;

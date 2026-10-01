@@ -6,6 +6,7 @@ import { World } from '../game/js/world.js';
 import { createEnemy } from '../game/js/enemies.js';
 import { SETTINGS, CHARS, HEROES, MARKSMAN, SUB, ULT, MOVES, VISOR, SQUALL, DRILL, BERSERK, HEAL, BOOST, AEGIS, DASH_SLASH, kitOf, ultName, attachLook, subLook } from '../game/js/config.js';
 import { muzzle } from '../game/js/player.js';
+import { forceBossAttack } from '../game/js/bosses.js';
 SETTINGS.novaKit = 'marksman'; SETTINGS.echoKit = 'hunter'; SETTINGS.lockOn = true; SETTINGS.lockMode = 'manual'; SETTINGS.dashCharge = true;
 SETTINGS.dashIframes = false; SETTINGS.difficulty = 'normal'; SETTINGS.barks = true;
 const BT = ['jump', 'dash', 'melee', 'fire', 'parry', 'sig', 'mode', 'lock', 'sub', 'ult'];
@@ -298,4 +299,49 @@ function climb(hero) {
     }
   }
   assert(errs === 0 && nan === 0, `Soak: 15 s of mashing per hero on the rooftops, ${errs} exceptions, ${nan} NaN positions`);
+}
+
+// ---------------------------------------------------------------- The villains
+// Each boss at its arena, with one hero: Juggernaut drops into the Sentinel Works, Magneto rises over the beacon pad
+function bossFight(boss, hero) {
+  const w = new World(); w.enemies = []; const p = w.addPlayer('b', hero);
+  w.bossRush(boss);
+  if (boss === 'stormcaller') { p.x = 305; p.y = 18.6; } else p.x = 66;
+  p.prevX = p.x; p.prevY = p.y;
+  let prev = { held: {} };
+  const step = (o = {}) => { const c = mk(prev, o); prev = c; w.step({ [p.slot]: c }); const ev = w.events.slice(); w.events.length = 0; return ev; };
+  for (let i = 0; i < 260; i++) step();
+  return { w, p, step, e: w.enemies.find(q => q.boss) };
+}
+{ // Magneto fires from his aimed hand and rains scrap from above his raised hands (where the rig draws them)
+  const { w, step, e } = bossFight('stormcaller', 'cyclops');
+  const shots = [], orig = w.spawnProjectile.bind(w);
+  w.spawnProjectile = o => { shots.push({ kind: o.kind, dy: o.y - e.y }); return orig(o); };
+  e.cd = 9999; forceBossAttack(w, e, 'volley'); for (let i = 0; i < 90; i++) step();
+  forceBossAttack(w, e, 'rain'); for (let i = 0; i < 80; i++) step();
+  const vol = shots.filter(s => s.kind === 'std'), rain = shots.filter(s => s.kind === 'mortar');
+  const handOk = vol.length > 0 && vol.every(s => Math.abs(s.dy - 1.25) <= 0.3), aboveOk = rain.length > 0 && rain.every(s => Math.abs(s.dy - 1.9) < 0.01);
+  assert(handOk && aboveOk, `Magneto: ${vol.length} volley shots from his hand (y + ${vol.map(s => s.dy.toFixed(2)).slice(0, 2).join(', ')}), ${rain.length} scrap shells from above him`);
+}
+{ // Every hero against both bosses: 20 s of fighting each, aimed at the boss, without exceptions or NaN, and every
+  // hero hurts both (Magneto hovers out of claw reach between attacks, so this checks that everyone can reach him)
+  let errs = 0, nan = 0; const out = [];
+  for (const boss of ['warden', 'stormcaller']) for (const h of HEROES) {
+    const { w, p, step, e } = bossFight(boss, h);
+    if (!e) { out.push(`${h}/${boss}: no boss`); continue; }
+    for (let t = 0; t < 1200; t++) {
+      const dx = e.x - p.x, dy = e.y + e.h / 2 - (p.y + 1), m = Math.hypot(dx, dy) || 1, dir = Math.sign(dx) || 1;
+      const o = { mx: Math.abs(dx) > 2.5 ? dir : 0, aim: [dx / m, dy / m],
+        held: { fire: t % 40 < 30, melee: t % 13 < 2, jump: t % 70 < 8 || (h === 'storm' || h === 'jean' ? (t % 70 > 20 && t % 70 < 50) : false), sig: t % 300 === 20, mode: t % 200 === 9, sub: t % 230 === 11, parry: t % 97 === 3 } };
+      if (t === 700) p.ult = ULT.max;
+      if (t === 701) o.held.ult = true;
+      p.mercy = Math.max(p.mercy, 30);   // keep the hero standing so the whole fight runs
+      try { step(o); } catch (err) { errs++; if (errs < 3) console.log(h, boss, err.stack); }
+      if (!Number.isFinite(p.x + p.y) || !Number.isFinite(e.x + e.y)) nan++;
+    }
+    out.push(`${CHARS[h].name} ${boss === 'warden' ? 'Juggernaut' : 'Magneto'} -${Math.round(e.maxHp - Math.max(0, e.hp))}`);
+    if (e.maxHp - e.hp <= 0) out.push(`${h}/${boss}: no damage`);
+  }
+  const none = out.filter(q => /no damage|no boss/.test(q));
+  assert(errs === 0 && nan === 0 && none.length === 0, `Boss soak, every hero vs both bosses: ${out.join(' · ')}; ${errs} exceptions, ${nan} NaN`);
 }
