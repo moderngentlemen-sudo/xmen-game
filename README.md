@@ -7,7 +7,7 @@ commit `eeeece5`). Each version lives on its own branch.
 | Branch | Version | Status |
 |---|---|---|
 | `v1-original` | **X-Men: Sentinel Strike**: Nova Striker V9 converted to five X-Men, Sentinels, Juggernaut and Magneto | Finished |
-| `v2-first-proposal` | The first concept proposal's vertical slice: Cyclops, Wolverine and Jean rebuilt around team-ups, Sentinels that adapt, one rescue mission | In progress |
+| `v2-first-proposal` | **X-Men: Sentinel Strike, Team Edition**: the first concept proposal's vertical slice. Cyclops, Wolverine and Jean rebuilt around team-ups, Sentinels that adapt, one rescue mission, a comic-book look | Playable slice |
 | `v3-sentinel-war` | **X-Men: Sentinel War**, Issue #1: co-op roguelite runs against a Master Mold that learns between runs | Not started |
 
 V2 branches from V1 and V3 from V2, so each branch's history shows what it reused.
@@ -25,7 +25,8 @@ Three.js loads from jsDelivr, so the first load needs a network connection. Each
 published as a private claude.ai artifact:
 
 - V1: https://claude.ai/artifact/Xjv2KwWDRpNE6RmFNiMzgK
-- V2 and V3: added here when they are playable
+- V2: https://claude.ai/artifact/MzaN97QpEmcpV11n83Aq7A
+- V3: added here when it is playable
 
 ## Tests
 
