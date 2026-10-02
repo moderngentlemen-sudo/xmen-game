@@ -1,9 +1,10 @@
 # Handoff: the Team Edition expansion (branch `v2-expansion`)
 
-> **Status, 2 October 2026:** **phase 0 is done and its gate passed**; phase 1 has not started. V2's melee runs on
-> one move engine from per-hero move tables, the client's strikes and effects are tables too, and golden replays
-> prove nothing changed (section 3). The user gave the go-ahead in chat with no changes; the proposal doc has no
-> comments. Before phase 1, check the doc's comment thread again, then refine phase 1's checklist into steps.
+> **Status, 2 October 2026:** **phase 0 is done and its gate passed**, and a menus and HUD pass the user asked for
+> came after it (section 3b): the HUD sits in bands above and below the game view and never covers play, there is
+> a ready room for picking heroes, first-time hints and key rebinding. That build is published (link below).
+> Phase 1 has not started. Before it, check the proposal doc's comment thread again, then refine phase 1's
+> checklist into steps.
 > **Update this box, the phase checklists and the log at the end of every session.**
 
 | | |
@@ -12,6 +13,7 @@
 | Proposal (copy in the repo) | `docs/expansion-proposal.md` |
 | Where V2 started | branch `v2-first-proposal`, frozen at `7ba3a51`; its notes are in `HANDOFF.md` |
 | V2 as published | https://claude.ai/artifact/MzaN97QpEmcpV11n83Aq7A |
+| Ready room build (after phase 0) | https://claude.ai/artifact/UhSDGngLMLnCuq1W4CNjSj |
 | Rules | `CLAUDE.md` |
 | Tools | `tools/README.md` |
 
@@ -117,6 +119,36 @@ behaviour**, and prove it. All of it is done, and the gate passed.
   - the playtest and co-op runs are clean;
   - pushed. No publish was needed: nothing changed for a player.
 
+## 3b. Menus and HUD pass (2 October 2026, between phases 0 and 1)
+
+The user asked for interface work before phase 1, with one firm rule: **no HUD or interface element may cover the
+play area**. Done and published (the ready room build, linked above). No simulation change beyond `addPlayer`
+taking an optional hero; the golden replays still match.
+
+- **HUD bands.** `game/index.html` lays the page out as `#hud-top`, `#stage` (the 3D view and the comic layer)
+  and `#hud-bottom`. The top band holds the mission caption, the X-Gauge and the kid; the Sentinels' alert, else a
+  hint, takes the caption's place. The bottom band holds the player plates (compact, four fit in one row).
+  Banners fill the top band, and the team ultimate's letterbox blacks out the bands. Only menus, on a halted game,
+  go over the view. `main.js` sizes the view to `#stage`. The view keeps 72 to 84% of the window's height.
+- **`tools/layout.mjs`** checks the rule at five window sizes and the HUD's busiest states. It must pass after any
+  HUD change (a rule in `CLAUDE.md`).
+- **Ready room** (`showLobby` in `hud.js`, the lobby functions in `main.js`). The first press on the cover opens
+  it; players join with a press, pick heroes with left and right, leave with Back or Esc, and anyone joined
+  starts. Alone, the pick leads the squad. Joining mid-mission still drops straight in. `window.__X.join()` skips
+  the ready room, so the tools that use it are unchanged; `playtest.mjs` and `coop.mjs` go through it.
+- **Menus.** The controls page no longer claims a held heavy (section 3) and shows the current keys. Restart and
+  the new "Quit to the title page" ask first; Back or Esc on a sub-page steps back one page. The debrief has Play
+  again, Change heroes and Title page.
+- **First-time hints**, one line in the top band, each shown once per browser, keys named for the player's
+  device and bindings: Power when a Sentinel is near, tagging when hurt alone, the team-up when two stand
+  together, answering a white tell, the full X-Gauge. A setting turns them off; a button shows them again.
+- **Key rebinding** in Settings, for every keyboard action including movement (`SETTINGS.keys`, `bindKey` and
+  `keyLabel` in `settings.js`). Esc, P, H and Enter stay the menu keys; the arrows always move.
+
+Left for later: Hunters hovering high can sit at the top edge of the view (the camera frames heroes, the kid and
+bosses, as in V2; `S.cam` is simulation state that the ultimate uses, so a change there is a behaviour change);
+drop-out happens only in the ready room; the debrief still shows team totals only.
+
 ## 4. Phases 1 to 5: checklists
 
 Refine each into steps like phase 0's before starting it, and write its gate down as tests first.
@@ -127,6 +159,9 @@ Refine each into steps like phase 0's before starting it, and write its gate dow
   what the cases cover. Behaviour now changes on purpose, so re-record again at the end, and say so in the
   commit. In between, check a refactor meant to change nothing with `tools/sidebyside.mjs` against a worktree of
   the last commit (section 6).
+- [ ] **Keep the interface rules from section 3b.** New HUD (combo counter, style rank, meter) goes in the
+  bands and must pass `tools/layout.mjs`; add hints for the new grammar where they help; the controls page lists
+  moves as they arrive.
 - [ ] **Fix the charged heavy**, which V2 never fires, and **tune the step forward**, which `physics` mostly
   cancels (section 3, what phase 0 found).
 - [ ] **Hitstop in the simulation.** Freeze the attacker and the target together: 3, 8 or 14 ticks (section
@@ -456,6 +491,12 @@ V2's adaptation rule stays: one counter at a time, and team hits are never count
 - **A plan's page script shares one scope with `helpers.mjs`.** `X`, `S`, `C`, `BT`, `bits`, `E`, `MS`, `place`,
   `spawn`, `run`, `settle` and `wait` are taken. Declaring one again fails every shot with "Identifier has
   already been declared".
+- **A press that is not consumed lingers.** `pollJoins` reads a keyboard "join" flag set by any keydown. While
+  the game was paused nothing read it, so the Esc that opened the menu joined someone once the cover came back.
+  `input.clearJoins()` now runs on the way to the title. A device that leaves the ready room is blocked from
+  joining until its buttons are let go (`blockJoin`).
+- **The playtest's held Power raced its combo.** Power only fires once the hero is free, and at 11 frames a second
+  a 900 ms hold sometimes ended first (strain read 0.0). It holds for 1.6 s now.
 - **Buttons are levels, not presses.** A button down on two ticks in a row is one press, so a tap is
   `run(press, 1); run({}, 1)`.
 
@@ -503,6 +544,7 @@ V2's adaptation rule stays: one counter at a time, and team hits are never count
 
 | Date | What happened |
 |---|---|
+| 2026-10-02 | **Menus and HUD pass** (section 3b), asked for by the user before phase 1: HUD bands so nothing covers play, `tools/layout.mjs`, the ready room, honest controls text, confirmations, debrief routes, first-time hints, key rebinding. Tests (107), layout check, playtest and co-op clean. Published: https://claude.ai/artifact/UhSDGngLMLnCuq1W4CNjSj (also in the README on `main`). Next: phase 1. |
 | 2026-10-02 | **Phase 0 done; gate passed.** The user gave the go-ahead in chat (no comments on the doc). Golden replays recorded from V2 (seven cases), then the move table format, V2's three movesets, the move engine, the strike clips and the effect cues, each committed green. New: `tests/moves-test.mjs`, `tools/sidebyside.mjs`, `tools/plans/moves.mjs`. Gate: the golden replays and V2's state hashes match, 107 checks pass, the bot finishes, side-by-side runs against V2 are identical (whole state, poses, effect calls), screenshots match V2 by eye, the playtest and co-op runs are clean. Found for phase 1: V2's charged heavy never fires, and the step forward is mostly cancelled by `physics`. Next: phase 1. |
 | 2026-10-02 | Proposal written (doc linked above) and copied to `docs/`. A `v2.0` tag could not be pushed (this session's git proxy dropped tag pushes, while branch pushes worked), so the frozen `v2-first-proposal` marks V2 instead. `v2-expansion` created with `CLAUDE.md`, this handoff and `tools/`. The tools were verified from the repo: the six example screenshots, the playtest (menus, race, debrief, clean console) and the co-op check (pad join, team-up, pad pause, rumble). 78 checks pass. Next: phase 0. |
 
