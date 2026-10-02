@@ -15,7 +15,8 @@ tools are what you use on top of them to look at the game.
 | `publish-prep.mjs` | Copies `game/` into a folder ready to publish as a claude.ai artifact and prints the publish arguments | `node tools/publish-prep.mjs <scratchpad>/publish` |
 
 Plans for `shots.mjs`: `plans/rooms.mjs` (each hero's core verb and V2's four rooms) and `plans/moves.mjs` (each hero
-mid-strike: a chain finisher, the launcher, a spin, the heavy, an air strike). A plan can shoot another tree's game:
+mid-strike: a chain finisher, the launcher, a spin, the counter, an air strike) and `plans/reactions.mjs` (a Sentinel
+in each hit reaction). A plan can shoot another tree's game:
 run that tree's `tools/shots.mjs` with this plan's path and another `PORT`. Phase 0 compared itself with V2 that way.
 
 Screenshots land in `tools/out/` (gitignored). Open them with the Read tool to look at them.
