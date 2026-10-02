@@ -104,6 +104,10 @@ export const CANCEL = Object.freeze({
   evade: cancels('evade'),                     // V2: the heavy, which ends a chain
   // A strike: on hit, up the ladder into a special (Power with a direction) or the super; else as V2's strikes
   strike: Object.freeze([Object.freeze({ into: Object.freeze(['special', 'super']), on: 'hit' }), ...cancels('evade', 'attack')]),
+  // A throw: on hit, into a special or the super (chase what it threw); else only Evade
+  grab: Object.freeze([Object.freeze({ into: Object.freeze(['special', 'super']), on: 'hit' }), ...cancels('evade')]),
+  // A special that launches: on hit, into a jump to follow it up, or the super; else only Evade
+  launchSpecial: Object.freeze([Object.freeze({ into: Object.freeze(['jump', 'super']), on: 'hit' }), ...cancels('evade')]),
   // A special: on hit, into the super; else only Evade
   special: Object.freeze([Object.freeze({ into: Object.freeze(['super']), on: 'hit' }), ...cancels('evade')]),
   // The launcher: on hit, from its first active tick, into a jump to follow the Sentinel up; else as a strike

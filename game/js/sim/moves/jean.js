@@ -38,11 +38,11 @@ export default {
       heavy: true, counter: { dmgMult: 1.5, poiseMult: 1.5 } },
     // Throws (Attack and Power beside a Sentinel): a hurl into the wall, an overhead toss, a lift high, a slam in the
     // air. And the execution on a stunned Sentinel: she pulls it apart
-    throwF: { slot: 'throwF', input: ON.throwF, su: 5, ac: 1, rc: 18, dmg: 5, poise: 60, kb: [16, 3], boxes: [[0.2, 1.0, 0.3, 1.5]], step: 0, cancel: CANCEL.evade, react: 'wallBounce', grab: true, hitstop: 'heavy' },
-    throwB: { slot: 'throwB', input: ON.throwB, su: 5, ac: 1, rc: 18, dmg: 5, poise: 60, kb: [-10, 9], boxes: [[0.2, 1.0, 0.3, 1.5]], step: 0, cancel: CANCEL.evade, react: 'knockdown', grab: true, hitstop: 'heavy' },
-    throwU: { slot: 'throwU', input: ON.throwU, su: 5, ac: 1, rc: 18, dmg: 5, poise: 60, kb: [0, 18], boxes: [[0.2, 1.0, 0.3, 1.5]], step: 0, cancel: CANCEL.evade, react: 'launch', grab: true, hitstop: 'heavy', juggle: 20 },
-    throwAir: { slot: 'throwAir', input: ON.throwAir, su: 5, ac: 1, rc: 16, dmg: 6, poise: 60, kb: [2, -14], boxes: [[0.2, 1.0, 0.3, 1.5]], step: 0, cancel: CANCEL.evade, react: 'groundBounce', grab: true, hitstop: 'heavy' },
-    exec: { slot: 'exec', input: ON.exec, su: 24, ac: 1, rc: 20, dmg: 40, poise: 200, kb: [0, 6], boxes: [[0.2, 1.0, 0.3, 1.5]], step: 0, cancel: CANCEL.evade, react: 'knockdown', grab: true, hitstop: 'super', heavy: true,
+    throwF: { slot: 'throwF', input: ON.throwF, su: 5, ac: 1, rc: 18, dmg: 5, poise: 60, kb: [16, 3], boxes: [[0.2, 1.0, 0.3, 1.5]], step: 0, cancel: CANCEL.grab, react: 'wallBounce', grab: true, hitstop: 'heavy' },
+    throwB: { slot: 'throwB', input: ON.throwB, su: 5, ac: 1, rc: 18, dmg: 5, poise: 60, kb: [-10, 9], boxes: [[0.2, 1.0, 0.3, 1.5]], step: 0, cancel: CANCEL.grab, react: 'knockdown', grab: true, hitstop: 'heavy' },
+    throwU: { slot: 'throwU', input: ON.throwU, su: 5, ac: 1, rc: 18, dmg: 5, poise: 60, kb: [0, 18], boxes: [[0.2, 1.0, 0.3, 1.5]], step: 0, cancel: CANCEL.grab, react: 'launch', grab: true, hitstop: 'heavy', juggle: 20 },
+    throwAir: { slot: 'throwAir', input: ON.throwAir, su: 5, ac: 1, rc: 16, dmg: 6, poise: 60, kb: [2, -14], boxes: [[0.2, 1.0, 0.3, 1.5]], step: 0, cancel: CANCEL.grab, react: 'groundBounce', grab: true, hitstop: 'heavy' },
+    exec: { slot: 'exec', input: ON.exec, su: 24, ac: 1, rc: 20, dmg: 40, poise: 200, kb: [0, 6], boxes: [[0.2, 1.0, 0.3, 1.5]], step: 0, cancel: CANCEL.grab, react: 'knockdown', grab: true, hitstop: 'super', heavy: true,
       invuln: [0, 45] },
     // the second counter, by Power out of a perfect defence: a telekinetic repel that crumples whoever struck
     counterP: { slot: 'counterP', input: ON.counterP, su: 6, ac: 5, rc: 18, dmg: 8, poise: 90, kb: [14, 5], boxes: [[-0.6, 3.0, 0.2, 1.8]], step: 0, cancel: CANCEL.evade, react: 'crumple',
@@ -55,7 +55,7 @@ export default {
     pAir: { slot: 'pAir', input: ON.pAir, module: 'tk', event: 'tkGrab' },
     pFwd: { slot: 'pFwd', input: ON.pFwd, su: 8, ac: 1, rc: 18, dmg: 3, poise: 25, kb: [8, 3], boxes: [[0.3, 1.0, 0.5, 1.0]], step: 0, cancel: CANCEL.special, react: 'stagger',
       shots: { n: 3, speed: 22, spread: 0.18, dmg: 3, poise: 25, r: 0.25, ttl: 50, kind: 'debris' } },
-    pUp: { slot: 'pUp', input: ON.pUp, su: 7, ac: 4, rc: 18, dmg: 3.5, poise: 45, kb: [0, 14], boxes: [[-1.2, 4.0, 0.0, 3.0]], step: 0, cancel: CANCEL.special, react: 'launch', launch: true },
+    pUp: { slot: 'pUp', input: ON.pUp, su: 7, ac: 4, rc: 18, dmg: 3.5, poise: 45, kb: [0, 14], boxes: [[-1.2, 4.0, 0.0, 3.0]], step: 0, cancel: CANCEL.launchSpecial, react: 'launch', launch: true },
     // Evade (a telekinetic blink) and Signature (the TK Shield), in the module
     evade: { slot: 'evade', input: ON.evade, module: 'evade', event: 'evade' },
     sig: { slot: 'sig', input: ON.sig, module: 'shield', event: 'shield' },

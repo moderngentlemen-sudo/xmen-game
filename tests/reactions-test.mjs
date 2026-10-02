@@ -90,10 +90,10 @@ assert(REACTIONS.length === 12, `twelve reactions: ${REACTIONS.join(', ')}`);
   hit('wallBounce', { kb: [-10, 3] });
   const flying = e.state === 'wallBounce' && e.vx < 0;
   run(40, () => log.some(v => v.type === 'wallBounce'));
-  const back = e.vx > 0 && e.state === 'launched' && e.wallBounced;
+  const back = Math.abs(e.vx - 14 * REACT.wallKeep) < 0.01 && e.state === 'launched' && e.wallBounced;   // back at 60% of the speed it hit with
   run(e.hitstop + 2);
   hit('wallBounce', { kb: [-10, 3] });   // once per combo: a second one in the same juggle just knocks it down
-  assert(flying && back && e.state === 'knockdown', 'a wall bounce flies flat into the wall and comes back toward the hero, into a juggle; once per combo');
+  assert(flying && back && e.state === 'knockdown', `a wall bounce flies flat into the wall and comes back toward the hero at ${REACT.wallKeep * 100}% of its speed, into a juggle; once per combo`);
 }
 // ---- Ground bounce -------------------------------------------------------------------------------------------------
 {

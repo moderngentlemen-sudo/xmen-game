@@ -24,7 +24,7 @@ export function createEnemy(S, type, x, y, extra = {}) {
     hp: T.hp, maxHp: T.hp, poise: 0, armour: T.armour || 0, state: 'idle', st: 0, atk: null, cd: 30 + Math.floor(rand(S) * 40),
     target: 0, token: null, flash: 0, hitstop: 0, dead: false, deathT: 0, liftT: 0, liftBy: 0, heldBy: 0, thrownBy: 0,
     slowT: 0, carry: 0, staggerT: 0, phase: 1, hitInst: [],
-    juggle: 0, stun: 0, calmT: 0, flinchT: 0, flipT: 0, lying: false, otgUsed: false, wallBounced: false, groundBounced: false, ...extra };
+    juggle: 0, stun: 0, calmT: 0, flinchT: 0, flipT: 0, flight: 0, lying: false, otgUsed: false, wallBounced: false, groundBounced: false, ...extra };
 }
 
 const caps = S => ({ melee: Math.min(3, 1 + S.players.length), ranged: 2 });

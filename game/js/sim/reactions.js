@@ -158,9 +158,12 @@ export function updateReaction(S, e, physics) {
       else if (e.lying && ++e.downT >= REACT.down) recover(e);
       return true;
     case 'wallBounce':
-      physics(S, e, 1);   // flat and fast, skidding along the floor if it comes down, until a wall or `wallTicks`
+      // Flat and fast, skidding along the floor if it comes down, until a wall or `wallTicks`. The collision stops the
+      // body, so the bounce takes the speed it hit the wall with (`flight`), back the way it came
+      e.flight = e.vx || e.flight;
+      physics(S, e, 1);
       if (e.hitWall) {
-        e.wallBounced = true; e.vx = -e.vx * REACT.wallKeep; if (Math.abs(e.vx) < 3) e.vx = -Math.sign(e.vx || e.facing) * 3; e.vy = 6; e.onGround = false;
+        e.wallBounced = true; e.vx = -e.flight * REACT.wallKeep; if (Math.abs(e.vx) < 3) e.vx = -Math.sign(e.flight) * 3; e.vy = 6; e.onGround = false;
         e.juggle += JUGGLE.hit; e.state = 'launched'; e.st = 0; e.staggerT = 30;
         emit(S, 'wallBounce', { id: e.id, x: e.x, y: e.y + e.h * 0.5, dir: Math.sign(e.vx) });
       } else if (e.st > REACT.wallTicks) { e.state = 'launched'; e.st = 4; e.juggle = Math.max(e.juggle, 1); }   // no wall in reach: it skids to a fall

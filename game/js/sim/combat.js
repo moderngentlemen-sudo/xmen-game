@@ -48,7 +48,7 @@ export function hitEnemy(S, e, h) {
   if (S.called && S.called.id === e.id && isPlayer && by.id !== S.called.by) { mult *= HEROES.cyclops.call.bonus; teamHit = true; S.gauge = Math.min(GAUGE.max, S.gauge + GAUGE.called * h.dmg); }
   let resisted = false;
   if (!teamHit && POWER_TYPES.includes(power) && S.adapt.active === power) { mult *= ADAPT.counters[power].mult; resisted = true; }
-  if (isPlayer && by.move && by.move.inst === h.inst) by.move.hit = true;   // for cancels on hit (moveEngine.js)
+  if (isPlayer && by.move && (by.move.inst === h.inst || by.move.inst === h.minst)) by.move.hit = true;   // for cancels on hit (moveEngine.js); a shot counts for the move that fired it
   if (isPlayer) mult *= HERO[by.hero].dmgMult(by, h) * streakHit(S, by, e, h);   // the combo's damage scaling (combo.js)
   if (e.armour > 0 && !h.heavy && !teamHit) mult *= 0.6;   // armoured plate turns light hits
   const dmg = h.dmg * mult;
@@ -145,7 +145,7 @@ export function updateProjectiles(S) {
       if (t === S.kid && !kidExposed(t)) continue;
       if (Math.abs(pr.x - t.x) > t.w / 2 + pr.r || pr.y < t.y - pr.r || pr.y > t.y + t.h + pr.r) continue;
       pr.hit.push(t.id);
-      const h = { owner: pr.owner, team: pr.team, inst: pr.id, dmg: pr.dmg, poise: pr.poise, power: pr.power, kb: [Math.sign(pr.vx) * 5, 3], proj: true, kind: pr.kind, heavy: !!pr.heavy, react: pr.react };
+      const h = { owner: pr.owner, team: pr.team, inst: pr.id, dmg: pr.dmg, poise: pr.poise, power: pr.power, kb: [Math.sign(pr.vx) * 5, 3], proj: true, kind: pr.kind, heavy: !!pr.heavy, react: pr.react, minst: pr.minst };
       if (pr.team === 'p') hitEnemy(S, t, h); else if (t === S.kid) hurtKid(S, t, h); else hurtPlayer(S, t, h);
       if (pr.pierce-- <= 0) pr.dead = true;
     }

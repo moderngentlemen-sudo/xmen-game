@@ -187,7 +187,7 @@ function fireShots(S, p, m) {
   for (let i = 0; i < Q.n; i++) {
     const a = (i - (Q.n - 1) / 2) * Q.spread, dx = Math.cos(a) * p.facing, dy = Math.sin(a);
     spawnProjectile(S, { team: 'p', owner: p.id, x: p.x + p.facing * 0.6, y: p.y + p.h * 0.6, vx: dx * Q.speed, vy: dy * Q.speed, r: Q.r, dmg: Q.dmg, poise: Q.poise,
-      kind: Q.kind || 'shot', power: HEROES[p.hero].power, ttl: Q.ttl, react: m.react });
+      kind: Q.kind || 'shot', power: HEROES[p.hero].power, ttl: Q.ttl, react: m.react, minst: p.move.inst });
   }
   emit(S, 'shots', { id: p.id, move: p.move.id, n: Q.n, x: p.x, y: p.y + p.h * 0.6, facing: p.facing });
 }
