@@ -11,6 +11,7 @@ tools are what you use on top of them to look at the game.
 | `probe.mjs` | The test bot plays the mission with no cheats and prints time, failures, kills, team-ups and damage by power | `node tools/probe.mjs 2 1,4,7` |
 | `layout.mjs` | Checks that no HUD element covers the game view, spills out of its band or covers another HUD item, across five window sizes and the HUD's busiest states; saves `layout-<w>x<h>.png` | `NODE_USE_ENV_PROXY=1 node tools/layout.mjs` |
 | `sidebyside.mjs` | Runs this tree beside a reference tree (a worktree of another commit) tick by tick: the simulation, the heroes' poses and the effect calls. Proves a refactor changes nothing, or finds where a golden replay diverged | `node tools/sidebyside.mjs ../ref all` |
+| `contact.mjs` | Contact sheets: every move of every hero on its first active tick, labelled with its slot, frame data and reaction, one sheet per hero (`contact-<hero>.png`). One page per hero does all its shots | `NODE_USE_ENV_PROXY=1 node tools/contact.mjs [hero ...]` |
 | `publish-prep.mjs` | Copies `game/` into a folder ready to publish as a claude.ai artifact and prints the publish arguments | `node tools/publish-prep.mjs <scratchpad>/publish` |
 
 Plans for `shots.mjs`: `plans/rooms.mjs` (each hero's core verb and V2's four rooms) and `plans/moves.mjs` (each hero
