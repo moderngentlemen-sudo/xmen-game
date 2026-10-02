@@ -17,7 +17,8 @@ tools are what you use on top of them to look at the game.
 Plans for `shots.mjs`: `plans/rooms.mjs` (each hero's core verb and V2's four rooms) and `plans/moves.mjs` (each hero
 mid-strike: a chain finisher, the launcher, a spin, the counter, an air strike) and `plans/reactions.mjs` (a Sentinel
 in each hit reaction) and `plans/effects.mjs` (phase 1's effects: heavy hit, trail, bounces, a super, a kill; each shot
-reports the live GPU sparks, lit pool lights, decals and trails). A plan can shoot another tree's game:
+reports the live GPU sparks, lit pool lights, decals and trails). `plans/danger.mjs` drives the Danger Room through its buttons (its page,
+the move list, the trials, the sparring settings, a demo with the hitbox readout, a trial being tried). A plan can shoot another tree's game:
 run that tree's `tools/shots.mjs` with this plan's path and another `PORT`. Phase 0 compared itself with V2 that way.
 
 Screenshots land in `tools/out/` (gitignored). Open them with the Read tool to look at them.

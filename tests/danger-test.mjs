@@ -64,3 +64,20 @@ for (const [hero, list] of Object.entries(TRIALS)) {
   }
   assert(!bad.length, `${hero}: every trial plays out in the Danger Room as its demo${bad.length ? '; not: ' + bad.join(', ') : ''}`);
 }
+// Every move's demo in the move list reaches its move (a module's move shows its event), in a Danger Room world
+{
+  const D = await import('../game/js/danger.js'), { MOVESETS } = await import('../game/js/sim/moves/index.js');
+  for (const hero of Object.keys(MOVESETS)) {
+    const bad = [];
+    for (const id of Object.keys(MOVESETS[hero].moves)) {
+      const demo = D.moveDemo(MOVESETS[hero], id), { S, p } = room({}, hero);
+      setupTrial(S, p, { setup: demo.setup });
+      const ev = [], g = pilot(S, p, { inputs: demo.inputs }, 30);
+      let r = g.next();
+      while (!r.done) { step(S, { [p.slot]: r.value }); ev.push(...S.events); r = g.next(); }
+      const m = MOVESETS[hero].moves[id];
+      if (!(m.module ? ev.some(v => v.type === m.event) : r.value.route.includes(id))) bad.push(id);
+    }
+    assert(!bad.length, `${hero}: every move's demo reaches its move${bad.length ? '; not: ' + bad.join(', ') : ''}`);
+  }
+}

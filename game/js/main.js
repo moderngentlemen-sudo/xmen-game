@@ -10,6 +10,10 @@ import { UI } from './hud.js';
 import { Sound } from './audio.js';
 import { Music } from './music.js';
 import { Haptics } from './haptics.js';
+import { setupDanger, DANGER_DEFAULTS } from './sim/dangerRoom.js';
+import { TRIALS, setupTrial, pilot, trialPassed, inputLabel } from './sim/trials.js';
+import { MOVESETS } from './sim/moves/index.js';
+import { moveDemo } from './danger.js';
 
 loadSettings();
 const stage = document.getElementById('stage'), canvas = document.getElementById('game'), ink = document.getElementById('ink');
@@ -37,7 +41,77 @@ const ui = new UI(document.getElementById('ui'), {
   start: () => startMission(),
   pick: (i, dir) => pickHero(i, dir),
   leave: i => leaveLobby(i),
+  danger: () => enterDanger(),
+  dangerHero: dir => { const i = HERO_IDS.indexOf(danger.hero); danger.hero = HERO_IDS[(i + dir + HERO_IDS.length) % HERO_IDS.length]; enterDanger(); },
+  dangerInfo: () => ({ hero: danger.hero, spar: danger.spar, done: danger.done }),
+  demoMove: id => demo({ inputs: moveDemo(MOVESETS[danger.hero], id).inputs, setup: moveDemo(MOVESETS[danger.hero], id).setup }, `Demo: ${id}`),
+  demoTrial: i => demo(TRIALS[danger.hero][i], `Demo: ${TRIALS[danger.hero][i].name}`),
+  tryTrial: i => tryTrial(i),
+  spar: (k, v) => { danger.spar[k] = k === 'count' ? +v : v === 'true' ? true : v === 'false' ? false : v; saveDanger(); setupDanger(S, danger.spar); },
 });
+
+// ---- The Danger Room ----------------------------------------------------------------------------------------------
+// A training mode (sim/dangerRoom.js keeps the sparring Sentinels): one player, the hero picked on its page, the
+// sparring settings, live demos played by the trial pilot (sim/trials.js) through this player's commands, and trials
+// tried for real, tracked from the swings. Passed trials are remembered in this browser.
+const DANGER_KEY = 'xmen-team-edition-danger';
+let danger = null;
+function loadDanger() {
+  let saved = {};
+  try { saved = JSON.parse(localStorage.getItem(DANGER_KEY) || '{}'); } catch (e) { /* not remembered */ }
+  return { hero: HERO_IDS.includes(saved.hero) ? saved.hero : HERO_IDS[0], spar: { ...DANGER_DEFAULTS, ...(saved.spar || {}) }, done: new Set(saved.done || []), pilot: null, attempt: null };
+}
+function saveDanger() { try { localStorage.setItem(DANGER_KEY, JSON.stringify({ hero: danger.hero, spar: danger.spar, done: [...danger.done] })); } catch (e) { /* not remembered */ } }
+function enterDanger() {
+  if (!danger) danger = loadDanger();
+  danger.pilot = null; danger.attempt = null; ui.trialLine(null);
+  const dev = devices[0] || 'kbm';
+  devices = [dev]; picks = [danger.hero]; lobby = null;
+  S = createWorld({ seed: newSeed(), players: 0 }); view.reset();
+  addPlayer(S, 0, false, danger.hero);
+  setupDanger(S, danger.spar);
+  started = true; complete = false; ui.hideStart(); ui.setDanger(true); saveDanger();
+  setPaused(true);
+}
+// A demo: the room set up for it, then the pilot plays this player's commands until it is done
+function demo(trial, label) {
+  setupDanger(S, { ...danger.spar, count: 1, behaviour: 'stand', sturdy: true });
+  const p = S.players[0];
+  setupTrial(S, p, trial);
+  danger.attempt = null; ui.trialLine(null);
+  danger.pilot = pilot(S, p, trial, 60);
+  setPaused(false); ui.banner(label, 'Watch: the inputs are played for you', false, 1.4);
+}
+function tryTrial(i) {
+  const trial = TRIALS[danger.hero][i];
+  setupDanger(S, { ...danger.spar, count: 1, behaviour: 'stand', sturdy: true });
+  setupTrial(S, S.players[0], trial);
+  danger.pilot = null; danger.attempt = { i, trial, route: [] };
+  showTrialLine();
+  setPaused(false); ui.banner(trial.name, 'Land the route in one combo', false, 1.4);
+}
+function showTrialLine() {
+  const A = danger.attempt; if (!A) { ui.trialLine(null); return; }
+  ui.trialLine(`<b>${A.trial.name}</b> ` + A.trial.route.map((id, k) => `<span style="${k < A.route.length ? 'color:#2a9d4a;font-weight:700' : ''}">${id}</span>`).join(' → ')
+    + ` <small>(${A.trial.inputs.map(inputLabel).join(', ')})</small>`);
+}
+// A trial in progress follows the hero's swings: the route so far must be the trial's, from its first move
+function trackTrial(ev) {
+  const A = danger.attempt, p = S.players[0];
+  if (!A || !p) return;
+  if (ev.type === 'swing' && ev.id === p.id) {
+    A.route.push(ev.move);
+    const want = A.trial.route;
+    if (A.route.some((m, k) => m !== want[k])) A.route = ev.move === want[0] ? [ev.move] : [];
+    showTrialLine();
+    if (A.route.length === want.length) A.waitHits = true;
+  }
+  if (A.waitHits && trialPassed(A.trial, A.route, p.streak.n)) {
+    danger.done.add(`${danger.hero}:${A.i}`); saveDanger();
+    ui.banner('Trial complete!', A.trial.name, false, 2); sound.play({ type: 'revived' });
+    danger.attempt = null; ui.trialLine(null);
+  } else if (ev.type === 'comboEnd' && ev.id === p.id) { A.route = []; A.waitHits = false; showTrialLine(); }
+}
 
 // The 3D view and the comic layer fill the stage, between the HUD bands
 function resize() {
@@ -51,6 +125,7 @@ function setPaused(on) { paused = on; ui.setPaused(on); if (!on) { canvas.focus(
 
 // A new run of the mission with everyone who is playing, on the heroes they picked
 function restart() {
+  if (S.danger) { enterDanger(); return; }   // (the Danger Room starts over as itself)
   S = createWorld({ seed: newSeed(), players: 0 });
   view.reset();
   devices.forEach((d, slot) => addPlayer(S, slot, devices.length === 1, picks[slot]));
@@ -79,6 +154,7 @@ function startMission() {
   restart();
 }
 function toTitle() {
+  if (danger) { danger.pilot = null; danger.attempt = null; ui.trialLine(null); ui.setDanger(false); }
   devices = []; picks = []; lobby = null; started = false; complete = false; paused = false;
   S = createWorld({ seed: newSeed(), players: 0 }); view.reset();
   ui.toTitle(); input.swallowAll(); input.clearJoins();
@@ -95,6 +171,7 @@ function tryJoin() {
     if (dev && !ui.helpOpen && !ui.subPage()) { sound.play({ type: 'join' }); openLobby([{ dev, hero: HERO_IDS[0] }]); }
     return;
   }
+  if (S.danger) return;   // the Danger Room is for one
   // Mid-mission: drop straight in, as the first hero nobody is playing
   for (const dev of input.pollJoins(new Set(devices))) {
     if (devices.length >= 4) break;
@@ -151,9 +228,16 @@ function stepSim() {
   let cmds = {};
   for (const p of S.players) cmds[p.slot] = input.sample(devices[p.slot], (mx, my) => view.aimFromMouse(mx, my, p));
   if (window.__X.inject) cmds = window.__X.inject(S.tick, cmds) || cmds;
+  // A Danger Room demo plays the first player's commands
+  if (danger && danger.pilot && S.players[0]) {
+    const r = danger.pilot.next();
+    if (r.done) { danger.pilot = null; ui.banner('Your turn', 'Pause for the Danger Room menu', false, 1.2); }
+    else cmds[S.players[0].slot] = r.value;
+  }
   step(S, cmds);
   for (const ev of S.events) {
     view.onEvent(ev, S); overlay.onEvent(ev); sound.play(ev); ui.onEvent(ev, S); haptics.onEvent(ev, deviceOf, devices);
+    if (danger && S.danger) trackTrial(ev);
     const k = panelFor(ev);
     if (k) slowMotion(overlay.impact(ev.x !== undefined ? ev.x : S.cam.x, ev.y !== undefined ? ev.y : S.cam.y, k), 0.4);
     if (ev.type === 'super') slowMotion(0.3, 0.5);   // a super or an ultimate: 0.3 s at half speed

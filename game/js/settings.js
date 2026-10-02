@@ -12,7 +12,8 @@ export const SETTINGS = {
   holdToggle: false,   // every hold (Power, Attack charge) can be a toggle instead
   hints: true,         // first-time hints in the HUD band
   clarity: false,      // fewer particles and thinner trails, so a crowded fight stays readable
-  reduceFlashing: false,   // no white impact flashes, dimmer hit lights and flashes, gentler distortion
+  reduceFlashing: false,
+  hitboxes: true,      // the Danger Room outlines hitboxes in the view   // no white impact flashes, dimmer hit lights and flashes, gentler distortion
   keys: copyKeys(DEFAULT_KEYS),
 };
 const KEY = 'xmen-team-edition-settings';

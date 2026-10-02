@@ -74,6 +74,10 @@ th { font-family: var(--font-display); text-transform: uppercase; letter-spacing
 .btn:hover, .btn.sel { background: #fff; }
 .btn:focus-visible { outline: 3px solid #ff3a24; outline-offset: 3px; }
 .btn.small { font-size: 17px; padding: 3px 10px; box-shadow: 3px 3px 0 var(--ink); }
+.btn.on { background: var(--ink); color: #fff1b8; }
+.movelist { max-height: 52vh; overflow-y: auto; border: 2px solid rgba(18,13,26,0.2); }
+.movelist td, .movelist th { padding: 2px 6px; font-size: 13px; }
+.setting .btn.small + .btn.small { margin-left: 4px; }
 .btn.key { min-width: 90px; font-family: var(--font-display); font-weight: 800; font-size: 15px; }
 .btn.key.unbound { background: #ffd6cf; } .btn.key.listening { background: #ff3a24; color: #fff; }
 /* The ready room: a card per player */

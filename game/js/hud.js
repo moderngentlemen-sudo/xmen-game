@@ -6,6 +6,10 @@
 // tools/layout.mjs checks that no HUD element reaches into the view.
 import { HEROES, GAUGE, ADAPT, SQUAD, METER } from './sim/config.js';
 import { STYLE_RANKS } from './sim/combo.js';
+import { MOVES } from './sim/config.js';
+import { TRIALS, inputLabel } from './sim/trials.js';
+import { FOES } from './sim/dangerRoom.js';
+import { moveRows } from './danger.js';
 import { SECTIONS, MISSION_NAME } from './sim/mission.js';
 import { PLAYER_COLORS, HERO_LOOKS } from './looks.js';
 import { SETTINGS, saveSettings, bindKey, resetKeys, keyLabel } from './settings.js';
@@ -83,6 +87,17 @@ export class UI {
     else if (a === 'bind') this.captureKey(d.k);
     else if (a === 'reset-keys') { resetKeys(); this.showSettings(); }
     else if (a === 'hints-again') { this.hintsSeen.clear(); this.saveHints(); this.showSettings(); }
+    // The Danger Room
+    else if (a === 'danger') this.A.danger();
+    else if (a === 'dhero') this.A.dangerHero(+d.dir);
+    else if (a === 'dmoves') this.showDangerMoves();
+    else if (a === 'dtrials') this.showDangerTrials();
+    else if (a === 'dspar') this.showDangerSpar();
+    else if (a === 'demo') this.A.demoMove(d.id);
+    else if (a === 'try') this.A.tryTrial(+d.i);
+    else if (a === 'tdemo') this.A.demoTrial(+d.i);
+    else if (a === 'spar') { this.A.spar(d.k, d.v); this.showDangerSpar(); }
+    else if (a === 'boxes') { SETTINGS.hitboxes = !SETTINGS.hitboxes; saveSettings(); this.showDanger(); }
   }
   // Out of a sub-page (controls, settings, a confirmation) to the page it came from. False when not on one.
   back() {
@@ -92,9 +107,9 @@ export class UI {
     this.parentPage();
     return true;
   }
-  subPage() { return this.pageKind === 'settings' || this.pageKind === 'confirm'; }
+  subPage() { return ['settings', 'confirm', 'dmoves', 'dtrials', 'dspar'].includes(this.pageKind); }
   parentPage() {
-    if (this.paused) this.showPause();
+    if (this.paused) this.showPause();   // (the Danger Room's own page, in the room)
     else if (this.results) this.showResults(this.results);
     else if (this.lobby) this.showLobby(this.lobby);
     else if (!this.started) this.showStart();
@@ -124,7 +139,7 @@ export class UI {
       <p class="lede touchnote">This game needs a keyboard and mouse or a gamepad; touch controls are not supported.</p>
       <div class="roster">${cards}</div>
       <p class="lede"><b>Alone</b>, you run all three as a squad: tap <kbd>Team</kbd> to tag the next hero in, hold it to call a benched hero's assist. <b>With friends</b> (up to four, each on a gamepad or the keyboard), stand together and press <kbd>Team</kbd> for that pair's team-up.</p>
-      <div class="btns"><button class="btn" data-act="help">Controls</button><button class="btn" data-act="settings">Settings</button></div>
+      <div class="btns"><button class="btn" data-act="danger">The Danger Room</button><button class="btn" data-act="help">Controls</button><button class="btn" data-act="settings">Settings</button></div>
       <p class="fine">An unofficial, non-commercial fan prototype made with placeholder art and synthesized sound. Not affiliated with, endorsed or sponsored by Marvel. X-Men, Cyclops, Wolverine, Jean Grey and the Sentinels are trademarks of Marvel Characters, Inc.</p>`, 'start');
   }
   hideStart() { this.started = true; this.lobby = null; this.results = null; this.closePage(); this.hudTop.hidden = this.hudBottom.hidden = false; }
@@ -195,7 +210,65 @@ export class UI {
     if (on) this.page(this.helpHtml(), 'help');
     else this.parentPage();
   }
+  // ---- The Danger Room -----------------------------------------------------------------------------------------
+  // Its pages stand in for the pause menu while the room is open (setDanger). this.A.dangerInfo() says which hero
+  // is training, the sparring settings and the trials passed.
+  setDanger(on) { this.danger = on; }
+  showDanger() {
+    const I = this.A.dangerInfo(), H = HERO_LOOKS[I.hero];
+    const done = TRIALS[I.hero].filter((t, i) => I.done.has(`${I.hero}:${i}`)).length;
+    this.page(`<span class="caption">Training</span><h2>The Danger Room</h2>
+      <p class="lede">Practise every move against sparring Sentinels, watch any move or combo played for you, and take the combo trials. Nothing here can fail; leave whenever you like.</p>
+      <div class="pick"><button class="btn arrow" data-act="dhero" data-dir="-1" aria-label="Previous hero">◀</button>
+        <b style="color:${H.energy}">${H.name}</b> <span class="fine">trials passed: ${done} of ${TRIALS[I.hero].length}</span>
+        <button class="btn arrow" data-act="dhero" data-dir="1" aria-label="Next hero">▶</button></div>
+      <div class="btns" style="flex-direction:column;align-items:flex-start">
+        <button class="btn" data-act="resume">Train</button><button class="btn" data-act="dmoves">Move list</button>
+        <button class="btn" data-act="dtrials">Combo trials</button><button class="btn" data-act="dspar">Sparring Sentinels</button>
+        <button class="btn" data-act="boxes">Hitboxes: ${SETTINGS.hitboxes ? 'shown' : 'hidden'}</button>
+        <button class="btn" data-act="help">Controls</button><button class="btn" data-act="title">Leave the Danger Room</button></div>`, 'danger');
+  }
+  showDangerMoves() {
+    const I = this.A.dangerInfo(), rows = moveRows(I.hero);
+    this.page(`<span class="caption">The Danger Room</span><h2>${HERO_LOOKS[I.hero].name}: every move</h2>
+      <p class="fine">Frames: startup / active / recovery, in sixtieths of a second. Demo plays the move for you.</p>
+      <div class="movelist"><table><tr><th>Move</th><th>Input</th><th>Frames</th><th>Damage</th><th>Reaction</th><th></th></tr>
+      ${rows.map(r => `<tr><td><b>${r.id}</b></td><td>${r.input}</td><td>${r.frames}</td><td>${r.dmg}</td><td>${r.react}</td><td><button class="btn small" data-act="demo" data-id="${r.id}">Demo</button></td></tr>`).join('')}
+      </table></div><div class="btns"><button class="btn" data-act="back">Back</button></div>`, 'dmoves');
+  }
+  showDangerTrials() {
+    const I = this.A.dangerInfo();
+    this.page(`<span class="caption">The Danger Room</span><h2>${HERO_LOOKS[I.hero].name}: combo trials</h2>
+      <p class="fine">Land the route in one combo. Try sets the trial up and shows the inputs in the top band; Demo plays it for you.</p>
+      <table>${TRIALS[I.hero].map((t, i) => `<tr><td>${I.done.has(`${I.hero}:${i}`) ? '★' : '☆'} <b>${t.name}</b></td><td>${t.inputs.map(inputLabel).join(', ')}</td><td>${t.route.join(' → ')}</td>
+        <td><button class="btn small" data-act="try" data-i="${i}">Try</button> <button class="btn small" data-act="tdemo" data-i="${i}">Demo</button></td></tr>`).join('')}</table>
+      <div class="btns"><button class="btn" data-act="back">Back</button></div>`, 'dtrials');
+  }
+  showDangerSpar() {
+    const I = this.A.dangerInfo(), D = I.spar;
+    const opt = (k, v, label) => `<button class="btn small${D[k] === v ? ' on' : ''}" data-act="spar" data-k="${k}" data-v="${v}">${label}</button>`;
+    this.page(`<span class="caption">The Danger Room</span><h2>Sparring Sentinels</h2>
+      <div class="setting"><span>Sentinel</span>${FOES.map(f => opt('foe', f, f[0].toUpperCase() + f.slice(1))).join('')}</div>
+      <div class="setting"><span>How many</span>${[1, 2, 3].map(n => opt('count', n, n)).join('')}</div>
+      <div class="setting"><span>They</span>${opt('behaviour', 'stand', 'Stand still')}${opt('behaviour', 'fight', 'Fight back')}</div>
+      <div class="setting"><span>Health</span>${opt('sturdy', true, 'Sturdy (heals)')}${opt('sturdy', false, 'Normal (rebuilt)')}</div>
+      <div class="setting"><span>Your meter</span>${opt('meter', true, 'Always full')}${opt('meter', false, 'Earned')}</div>
+      <div class="btns"><button class="btn" data-act="back">Back</button></div>`, 'dspar');
+  }
+  // The top band's line while training: the move in progress with its frame data, and the combo
+  dangerReadout(S) {
+    const p = S.players[0]; if (!p) return '';
+    const m = p.move && MOVES[p.hero][p.move.id];
+    const phase = m ? (p.move.t <= m.su ? 'startup' : p.move.t <= m.su + m.ac ? 'ACTIVE' : 'recovery') : '';
+    const mv = m ? `${p.move.id} · ${m.su}/${m.ac}/${m.rc} · t ${Math.floor(p.move.t)} ${phase}` : p.state;
+    const K = p.streak;
+    return `Danger Room · ${mv}${K && K.n ? ` · ${K.n} hits, ${STYLE_RANKS[K.rank]}, ${Math.round(K.dmg)} dmg` : ''}`;
+  }
+  // A trial's inputs in the top band while it is being tried, the inputs done so far marked
+  trialLine(html) { this.trialHtml = html; if (html) { this.tipEl.innerHTML = html; this.tipEl.hidden = false; this.tipT = 0; } else this.tipEl.hidden = true; }
+
   showPause() {
+    if (this.danger) { this.showDanger(); return; }
     this.page(`<span class="caption">Paused</span><h2>Meanwhile, at the Sentinel Works...</h2>
       <div class="btns" style="flex-direction:column;align-items:flex-start"><button class="btn" data-act="resume">Resume</button>
       <button class="btn" data-act="help">Controls</button><button class="btn" data-act="settings">Settings</button>
@@ -278,10 +351,10 @@ export class UI {
     if (!S) return;
     this.devices = devices;
     if (this.tipT > 0 && (this.tipT -= dt) <= 0) this.tipEl.hidden = true;
-    this.hints(S);
+    if (!this.danger) this.hints(S);
     if (this.bannerEl && (this.bannerT -= dt) <= 0) { this.bannerEl.remove(); this.bannerEl = null; }
     const M = S.mission;
-    this.missionEl.textContent = `${MISSION_NAME} · ${SECTIONS[M.sec] ? SECTIONS[M.sec].name : ''}`;
+    this.missionEl.textContent = S.danger ? this.dangerReadout(S) : `${MISSION_NAME} · ${SECTIONS[M.sec] ? SECTIONS[M.sec].name : ''}`;
     // The X-Gauge
     const full = S.gauge >= GAUGE.max;
     this.gauge.querySelector('i').style.width = pct(S.gauge, GAUGE.max);

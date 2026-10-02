@@ -131,6 +131,17 @@ export class Overlay {
       g.restore();
     }
 
+    // The Danger Room's hitbox readout: this tick's hitboxes (heroes' in yellow, Sentinels' in magenta) over the
+    // Sentinels' bodies (thin white)
+    if (S.danger && SETTINGS.hitboxes) {
+      const box = (x0, x1, y0, y1, col, w, fill) => { const a = sc(x0, y1), b = sc(x1, y0); g.strokeStyle = col; g.lineWidth = w; g.strokeRect(a.x, a.y, b.x - a.x, b.y - a.y); if (fill) { g.globalAlpha = 0.18; g.fillStyle = col; g.fillRect(a.x, a.y, b.x - a.x, b.y - a.y); g.globalAlpha = 1; } };
+      g.save(); g.setLineDash([4, 3]);
+      for (const e of S.enemies) if (!e.dead) box(e.x - e.w / 2, e.x + e.w / 2, e.y, e.y + e.h, '#ffffff', 1, false);
+      g.setLineDash([]);
+      for (const h of S.hitboxes) box(h.x0, h.x1, h.y0, h.y1, h.team === 'p' ? '#ffd23f' : HOSTILE, 2.5, true);
+      g.restore();
+    }
+
     // Speed lines behind a hero moving fast (a lunge, a dash strike, a drill, a throw)
     for (const p of S.players) {
       const v = Math.hypot(p.vx, p.vy);
