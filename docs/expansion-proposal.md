@@ -26,8 +26,8 @@ grammar and combat fidelity. Depth of space is how the world wraps around the fi
 The engine stays. The 60 Hz deterministic simulation, the six buttons, team play and the adapting Sentinels all
 carry over. The work runs in six phases, and each one ends in a playable build that passes its own checks.
 
-**Decision needed:** approve building this on a new branch, `v2-expansion`, cut from V2 and tagged `v2.0`, in
-the phase order under Build plan. A new chat then starts phase 0 from the handoff in the repo.
+**Decision needed:** approve building this on a new branch, `v2-expansion`, cut from V2, which stays frozen on
+`v2-first-proposal`, in the phase order under Build plan. A new chat then starts phase 0 from the handoff in the repo.
 
 ## Where V2 stands
 

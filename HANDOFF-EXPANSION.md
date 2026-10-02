@@ -9,7 +9,7 @@
 |---|---|
 | Proposal (live, with comments) | https://claude.ai/code/artifact/d44cd592-96ae-468d-aadf-b8784ff3bdba |
 | Proposal (copy in the repo) | `docs/expansion-proposal.md` |
-| Where V2 started | tag `v2.0` (branch `v2-first-proposal`, frozen); its notes are in `HANDOFF.md` |
+| Where V2 started | branch `v2-first-proposal`, frozen at `7ba3a51`; its notes are in `HANDOFF.md` |
 | V2 as published | https://claude.ai/artifact/MzaN97QpEmcpV11n83Aq7A |
 | Rules | `CLAUDE.md` |
 | Tools | `tools/README.md` |
@@ -107,7 +107,7 @@ features.
   - every hero has the slots V2 had.
 - [ ] **The gate.**
   - The golden test matches, all 78 checks and the new ones pass, and the bot finishes.
-  - `tools/plans/rooms.mjs` screenshots look the same as `v2.0` (compare by eye; rendering is not pixel-exact).
+  - `tools/plans/rooms.mjs` screenshots look the same as on `v2-first-proposal` (compare by eye; rendering is not pixel-exact).
   - Push. No publish is needed: nothing changed for a player.
 
 ## 4. Phases 1 to 5: checklists
@@ -449,7 +449,7 @@ V2's adaptation rule stays: one counter at a time, and team hits are never count
 |---|---|---|
 | `main` | README with links to every version | update the links when a build is published |
 | `v1-original` | V1: Nova Striker V9 converted to five X-Men | frozen |
-| `v2-first-proposal` (tag `v2.0`) | V2: the Team Edition slice | frozen |
+| `v2-first-proposal` | V2: the Team Edition slice, at `7ba3a51` | frozen |
 | `v2-expansion` | this work | the working branch |
 | `v3-sentinel-war` | V3: not started, **paused by the user** | do not start it unless asked; it may later branch from `v2-expansion` to inherit the engine |
 
@@ -464,7 +464,7 @@ V2's adaptation rule stays: one counter at a time, and team hits are never count
 
 | Date | What happened |
 |---|---|
-| 2026-10-02 | Proposal written (doc linked above) and copied to `docs/`. V2 tagged `v2.0`. `v2-expansion` created with `CLAUDE.md`, this handoff and `tools/`. The tools were verified from the repo: the six example screenshots, the playtest (menus, race, debrief, clean console) and the co-op check (pad join, team-up, pad pause, rumble). 78 checks pass. Next: phase 0. |
+| 2026-10-02 | Proposal written (doc linked above) and copied to `docs/`. A `v2.0` tag could not be pushed (this session's git proxy dropped tag pushes, while branch pushes worked), so the frozen `v2-first-proposal` marks V2 instead. `v2-expansion` created with `CLAUDE.md`, this handoff and `tools/`. The tools were verified from the repo: the six example screenshots, the playtest (menus, race, debrief, clean console) and the co-op check (pad join, team-up, pad pause, rumble). 78 checks pass. Next: phase 0. |
 
 ## A prompt to start the next chat
 

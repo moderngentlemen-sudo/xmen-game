@@ -41,7 +41,8 @@ docs/              the expansion proposal
   `tools/playtest.mjs` and `tools/coop.mjs`, open the screenshots, and get zero console errors.
 - **Keep `window.__X` working** (`game/js/main.js`): every browser tool drives the game through it.
 - **Git**: work on `v2-expansion`. The container is ephemeral, so commit and push after every meaningful step.
-  Never rewrite `main`, `v1-original` or `v2-first-proposal`; tag `v2.0` marks where the expansion started.
+  Never rewrite `main`, `v1-original` or `v2-first-proposal`; the last stays frozen at `7ba3a51`, where the
+  expansion started.
   End commit messages with the attribution lines your session gives you. Beyond those lines, keep model names
   out of commits, code and docs.
 - **The repo stays private.** These are unofficial fan prototypes: keep the fan notices, add no Marvel logos,
