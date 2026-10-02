@@ -6,6 +6,7 @@ import { moveBody, rayCast, BOXES } from './level.js';
 import { emit, newId, ent } from './world.js';
 import { invulnerable, perfectWindow, perfectDefence, stagger, downPlayer, isDown } from './player.js';
 import { HERO } from './heroes/index.js';
+import { react, hittable } from './reactions.js';
 
 export function spawnHitbox(S, h) { S.hitboxes.push(h); return h; }
 const overlap = (h, x0, x1, y0, y1) => h.x0 < x1 && h.x1 > x0 && h.y0 < y1 && h.y1 > y0;
@@ -16,7 +17,7 @@ export function resolveHitboxes(S) {
   for (const h of S.hitboxes) {
     if (h.team === 'p') {
       for (const e of S.enemies) {
-        if (e.dead || seen(e, h.inst) || (h.only && h.only !== e.id) || (h.skip && h.skip === e.id)) continue;
+        if (e.dead || !hittable(e) || seen(e, h.inst) || (h.only && h.only !== e.id) || (h.skip && h.skip === e.id)) continue;
         if (!overlap(h, e.x - e.w / 2, e.x + e.w / 2, e.y, e.y + e.h)) continue;
         remember(e, h.inst); hitEnemy(S, e, h);
       }
@@ -58,25 +59,11 @@ export function hitEnemy(S, e, h) {
   if (isPlayer) HERO[by.hero].onDealt(S, by, e, dmg, h);
   emit(S, 'hit', { id: e.id, by: h.owner, x: e.x, y: e.y + e.h * 0.6, dmg, power: teamHit ? 'team' : power, heavy: !!h.heavy, resisted, kind: h.kind || '' });
   if (e.hp <= 0) { killEnemy(S, e, h); return; }
-  // Poise: enough of it breaks a guard (heavy hits break armour plates); light enemies get knocked about
-  const T = ENEMIES[e.type];
-  e.poise += (h.poise || 0) * (resisted ? 0.3 : 1);
+  // Poise: enough of it breaks a guard (heavy hits break armour plates); then the reaction (reactions.js)
+  const poise = (h.poise || 0) * (resisted ? 0.3 : 1);
+  e.poise += poise;
   if (e.armour > 0 && h.heavy) { e.armour--; emit(S, 'armourBreak', { id: e.id, x: e.x, y: e.y + e.h * 0.7, left: e.armour }); }
-  const lifted = e.liftT > 0, carrying = e.carry;
-  if (e.poise >= T.poise || (h.launch && T.mass <= 1) || lifted) {
-    if (!lifted) e.poise = 0;
-    if (carrying) dropCarried(S, e);
-    if (!T.boss || e.poise === 0) {
-      e.atk = null; releaseToken(S, e);
-      const kb = h.kb || [0, 0], m = T.mass;
-      e.vx = kb[0] / m; e.vy = lifted ? Math.max(e.vy, 1.5) : kb[1] / m;
-      if (e.vy > 0) e.onGround = false;
-      e.state = (h.launch || e.vy > 6) && !lifted ? 'launched' : 'stagger'; e.st = 0; e.staggerT = h.heavy ? 50 : 30;
-      emit(S, 'stagger', { id: e.id, x: e.x, y: e.y + e.h * 0.6 });
-    }
-  } else if (T.mass <= 1 && !T.boss) {
-    e.vx += (h.kb ? h.kb[0] : 0) * 0.35;   // light shove
-  }
+  react(S, e, h, poise);
 }
 export function killEnemy(S, e, h) {
   e.hp = 0; e.dead = true; e.deathT = 0; e.atk = null; releaseToken(S, e);
@@ -150,7 +137,7 @@ export function updateProjectiles(S) {
     const targets = pr.team === 'p' ? S.enemies : [...S.players, ...(S.kid ? [S.kid] : [])];
     for (const t of targets) {
       if (pr.dead || pr.hit.includes(t.id)) continue;
-      if (t.kind === 'enemy' && t.dead) continue;
+      if (t.kind === 'enemy' && (t.dead || !hittable(t))) continue;
       if (t.kind === 'player' && isDown(t)) continue;
       if (t === S.kid && !kidExposed(t)) continue;
       if (Math.abs(pr.x - t.x) > t.w / 2 + pr.r || pr.y < t.y - pr.r || pr.y > t.y + t.h + pr.r) continue;

@@ -371,3 +371,21 @@ function playRandom(seed, players, ticks, every) {
   removePlayer(S, ps[0].slot);
   assert(S.players.length === 1 && S.players[0].state === 'normal' && !S.players[0].heldBy, 'a player leaving mid-Fastball lets Wolverine go');
 }
+
+// ---- Tagging out lets go (phase 1 found this: the kid stayed in Jean's grip for ever after she tagged out) ----------
+{
+  const { S, p, run } = setup({ heroes: ['jean'] });
+  S.kid = makeKid(p.x + 3, 0, 'follow');
+  run({ b: bits('power'), aim: [1, 0] }, 20, () => S.kid.state === 'held');
+  const held = S.kid.state === 'held';
+  run({ b: bits('power', 'team'), aim: [1, 0] }); run({ b: bits('power'), aim: [1, 0] }, 3);
+  assert(held && p.hero !== 'jean' && S.kid.state === 'follow' && !S.kid.heldBy, `tagging Jean out while she holds the kid lets the kid go (held: ${held}, now ${p.hero}, kid ${S.kid.state})`);
+}
+{
+  // And the kid frees herself if her holder is gone some other way
+  const { S, p, run } = setup({ heroes: ['jean'] });
+  S.kid = makeKid(p.x + 3, 0, 'follow');
+  run({ b: bits('power'), aim: [1, 0] }, 20, () => S.kid.state === 'held');
+  p.tk = null; run({}, 2);
+  assert(S.kid.state === 'follow', 'a kid held by nobody is free again');
+}

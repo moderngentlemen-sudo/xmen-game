@@ -29,6 +29,8 @@ export function makePlayer(S, slot, hero, x, y) {
 
 // Swap the hero a player is running (solo tag): body and resources change, position and facing stay
 export function setHero(S, p, hero, hp) {
+  // The hero leaving lets go of whatever they were doing first (Jean's grip on the kid once stayed shut for ever)
+  HERO[p.hero].cancel(S, p);
   const H = HEROES[hero];
   p.hero = hero; p.w = H.w; p.h = H.h; p.maxHp = H.hp; p.hp = hp === undefined ? H.hp : hp;
   p.move = null; p.evade = null; p.combo = 0; p.state = 'normal'; p.st = 0; p.jumpsLeft = H.airJumps;

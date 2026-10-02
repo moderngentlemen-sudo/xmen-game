@@ -53,6 +53,20 @@ export const CUES = {
     fx.sparks(ev.x, ev.y, col, ev.heavy ? 12 : 6, ev.heavy ? 12 : 8, ev.heavy ? 0.35 : 0.25);
     fx.flash(ev.x, ev.y, col, ev.heavy ? 1.8 : 1.1, 0.09, ev.resisted ? 'ring' : 'star');
   },
+  // Hit reactions (sim/reactions.js)
+  react(fx, ev) {
+    switch (ev.react) {
+      case 'launch': fx.ring(ev.x, ev.y - 0.6, '#ffffff', 0.3, 2, 0.2, true); break;
+      case 'crumple': fx.flash(ev.x, ev.y, '#ffffff', 2.2, 0.16, 'star'); break;
+      case 'stun': fx.ring(ev.x, ev.y + 1.2, '#ffd23f', 0.3, 1.4, 0.4); fx.sparks(ev.x, ev.y + 1.2, '#ffd23f', 8, 4, 0.5); break;
+      case 'flipOut': fx.ring(ev.x, ev.y, '#ffffff', 0.4, 2.2, 0.22); break;
+      case 'otg': fx.sparks(ev.x, ev.y, '#ffffff', 8, 7); break;
+      case 'down': fx.smoke(ev.x, ev.y - 0.3, 4, '#cfc8d8', 0.9); break;
+      case 'spinOut': fx.ring(ev.x, ev.y, '#ffffff', 0.3, 1.8, 0.2); break;
+    }
+  },
+  wallBounce(fx, ev) { fx.ring(ev.x - ev.dir * 0.5, ev.y, '#ffffff', 0.5, 3, 0.25); fx.sparks(ev.x, ev.y, '#ffd27a', 14, 10); fx.chunks(ev.x, ev.y, 'steel', 4, 7); },
+  groundBounce(fx, ev) { fx.ring(ev.x, ev.y + 0.05, '#ffffff', 0.5, 3.4, 0.28, true); fx.smoke(ev.x, ev.y, 6, '#cfc8d8', 1.2); fx.chunks(ev.x, ev.y, 'grey', 4, 8); },
   armourBreak(fx, ev) { fx.chunks(ev.x, ev.y, 'grey', 6, 9); fx.flash(ev.x, ev.y, '#ffffff', 2.5, 0.15, 'star'); },
   kill(fx, ev) {
     const big = ev.unit === 'mk2' || ev.unit === 'collector';

@@ -127,5 +127,20 @@ export const ENEMIES = {
     beam: { wind: 56, ticks: 50, dmg: 2.2, band: [0.25, 0.85] } },
 };
 
+// ---- Hit reactions (sim/reactions.js) ------------------------------------------------------------------------
+export const REACTIONS = ['flinch', 'stagger', 'knockdown', 'launch', 'airHit', 'wallBounce', 'groundBounce', 'crumple', 'spinOut', 'stun', 'held', 'thrown'];
+// Juggle weight: added per hit in the air (a launcher adds more); gravity on a juggled Sentinel grows by weight / 100,
+// and at the limit it flips out, untouchable for `flipOut` ticks
+export const JUGGLE = { hit: 10, launcher: 20, limit: 100, flipOut: 20 };
+// The stun bar fills with poise damage up to `bar` × the Sentinel's poise; full, the next grounded hit stuns for
+// `ticks`. Left alone for `calm` ticks, it drains by `drain` a tick
+export const STUN = { ticks: 120, bar: 3, calm: 90, drain: 0.5 };
+// Reaction timings (ticks) and speeds (m/s): flinch recoil, lying down, the crumple's fold; a wall bounce keeps
+// `wallKeep` of its speed and looks for a wall for `wallTicks`; a spike drives down at `spikeVy` and the floor sends
+// it back up at `groundVy`; an air hit pops up at least `airPop`; a spin-out slides at `spinSpeed` for `spinTicks`,
+// dealing `spinDmg` to what it bowls over
+export const REACT = { flinch: 10, down: 30, crumple: 40, wallKeep: 0.6, wallSpeed: 14, wallTicks: 30, groundVy: 9, spikeVy: 14, airPop: 4,
+  spinSpeed: 12, spinTicks: 36, spinDmg: 3 };
+
 // The young mutant the team is there to bring home
 export const KID = { hp: 60, w: 0.5, h: 1.15, speed: 6.4, follow: [1.6, 3.2], jumpV: 13.5, revive: 90 };

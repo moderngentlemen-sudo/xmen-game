@@ -144,6 +144,9 @@ export function buildSentinelRig(e) {
   return R;
 }
 
+// The hit reactions (sim/reactions.js) that throw the body about
+const REACTING = ['stagger', 'launched', 'knockdown', 'wallBounce', 'groundBounce', 'crumple', 'spinOut', 'stun', 'flipOut'];
+
 // Pose for this frame. Telegraphs show in the eyes (they flare through a windup) and in the body (raised arms).
 export function animateSentinel(R, e, dt, t) {
   const P = R.parts, T = ENEMIES[e.type], st = e.state, k = 1 - Math.exp(-dt * 16);
@@ -158,12 +161,12 @@ export function animateSentinel(R, e, dt, t) {
     const d = Math.min(1, e.deathT / 30);
     R.body.rotation.z = -d * 1.4; R.body.position.y = -d * 0.4 * (e.h / 2); return;
   }
-  R.body.rotation.z = 0; R.body.position.y = 0;
+  R.body.rotation.z = 0; R.body.position.y = 0; R.body.rotation.y = 0;
   const moving = Math.abs(e.vx) > 0.4 && e.onGround;
   if (moving) R.phase += dt * Math.abs(e.vx) * (e.type === 'mk2' ? 1.1 : 2.4);
   const s = Math.sin(R.phase);
-  const stag = st === 'stagger' || st === 'launched' || st === 'thrown' || st === 'held' || e.liftT > 0;
-  let lean = stag ? -0.35 : windup ? -0.12 * wk : moving ? 0.12 : 0;
+  const stag = REACTING.includes(st) || st === 'thrown' || st === 'held' || e.liftT > 0;
+  let lean = st === 'crumple' ? 0.4 : st === 'stun' ? 0.15 : stag ? -0.35 : e.flinchT > 0 ? -0.25 : windup ? -0.12 * wk : moving ? 0.12 : 0;
   if (P.legs) {
     const amp = moving ? 0.55 : 0.05;
     P.legs[0].hip.rotation.z = s * amp; P.legs[1].hip.rotation.z = -s * amp;
@@ -189,7 +192,8 @@ export function animateSentinel(R, e, dt, t) {
   }
   if (st === 'carry') { aN = 2.4; eN = 1.2; aF = -s * 0.5; }
   if (st === 'roar') { aN = aF = 2.6 + Math.sin(t * 30) * 0.1; eN = eF = 0.6; lean = -0.4; }
-  if (stag) { aN = 1.9; aF = 2.2; eN = eF = 0.8; }
+  if (stag && st !== 'stun' && st !== 'crumple') { aN = 1.9; aF = 2.2; eN = eF = 0.8; }
+  if (st === 'stun' || st === 'crumple') { aN = 0.35; aF = 0.15; eN = eF = 0.9; }   // arms hanging, dazed
   if (P.armN) { P.armN.sh.rotation.z += (aN - P.armN.sh.rotation.z) * k; P.armN.el.rotation.z += (eN - P.armN.el.rotation.z) * k; }
   if (P.armF) { P.armF.sh.rotation.z += (aF - P.armF.sh.rotation.z) * k; P.armF.el.rotation.z += (eF - P.armF.el.rotation.z) * k; }
   R.lean += (lean - R.lean) * k;
@@ -208,4 +212,13 @@ export function animateSentinel(R, e, dt, t) {
   // Lifted (Jean's hold): a slow helpless turn
   R.body.rotation.x = e.liftT > 0 ? Math.sin(t * 2) * 0.3 : 0;
   if (st === 'thrown') R.body.rotation.z = -(e.st || 0) * 0.35;
+  // Hit reactions: on its back, folding, spinning, flipping, swaying dazed
+  if (st === 'knockdown') { R.body.rotation.z = e.lying ? -1.45 : -0.7; R.body.position.y = e.lying ? -0.25 * (e.h / 2) : 0; }
+  else if (st === 'launched' && e.juggle > 0) R.body.rotation.z = -0.5 - Math.min(0.6, e.juggle / 150);
+  else if (st === 'crumple') { const f = 1 - Math.max(0, e.crumpleT || 0) / 40; R.body.rotation.z = 0.15 + f * 0.75; R.body.position.y = -f * 0.5 * (e.h / 2); }   // folds forward
+  else if (st === 'spinOut') R.body.rotation.y = (e.st || 0) * 0.55;
+  else if (st === 'groundBounce') R.body.rotation.z = 0.9;
+  else if (st === 'wallBounce') R.body.rotation.z = -1.1;
+  else if (st === 'flipOut') R.body.rotation.z = ((e.st || 0) / 20) * Math.PI * 2;
+  else if (st === 'stun') { R.body.rotation.z = Math.sin(t * 5) * 0.14; R.body.rotation.x = Math.sin(t * 3.3) * 0.12; }
 }

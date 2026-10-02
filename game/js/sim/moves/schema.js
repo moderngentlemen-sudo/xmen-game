@@ -28,10 +28,16 @@
 //              move fires when Attack is let go, or by itself once the hold reaches `hold + release`, and deals
 //              dmg × dmgMult. (V2 only posed after the hold was reached, which the first strike never lived to see,
 //              so V2's charge never fired; phase 1 fixed it.)
-//   counter    optional, { dmgMult, poiseMult }: what it deals extra as the counter out of a perfect defence
+//   counter    optional, { dmgMult, poiseMult, react? }: what it deals extra as the counter out of a perfect defence,
+//              and the reaction it causes then instead of `react`
+//   react      the reaction a hit causes (REACTIONS in config.js, run by reactions.js; not held or thrown)
+//   juggle     optional, juggle weight a hit adds in the air (JUGGLE in config.js: 10, a launcher 20)
 //   hitstop    optional, 'light', 'heavy', 'super' (HITSTOP in config.js) or whole ticks: how long a hit freezes
 //              the hero and the target together. Without it: heavy for a `heavy` move, else light
-const FIELDS = ['input', 'su', 'ac', 'rc', 'dmg', 'poise', 'kb', 'boxes', 'step', 'cancel', 'launch', 'heavy', 'lift', 'charge', 'counter', 'hitstop'];
+const FIELDS = ['input', 'su', 'ac', 'rc', 'dmg', 'poise', 'kb', 'boxes', 'step', 'cancel', 'launch', 'heavy', 'lift', 'charge', 'counter', 'hitstop', 'react', 'juggle'];
+import { REACTIONS } from '../config.js';
+// The reactions a move may cause (read when validating: config.js imports the tables, so not at load time)
+const moveReacts = () => REACTIONS.filter(r => r !== 'held' && r !== 'thrown');
 const CTX = ['ground', 'air', 'counter'], DIRS = ['neutral', 'up', 'any'], CANCEL_INTO = ['evade', 'attack'];
 
 // Shorthands for the tables
@@ -88,6 +94,9 @@ export function validateMoves(set) {
     }
     if ('counter' in m && !(m.counter && num(m.counter.dmgMult) && m.counter.dmgMult > 0 && num(m.counter.poiseMult) && m.counter.poiseMult > 0))
       bad.push(`${at}: counter must be { dmgMult, poiseMult }, both above 0`);
+    if (!moveReacts().includes(m.react)) bad.push(`${at}: react must be one of ${moveReacts().join(', ')}`);
+    if ('juggle' in m && !(tick(m.juggle))) bad.push(`${at}: juggle must be whole weight, 0 or more`);
+    if (m.counter && 'react' in m.counter && !moveReacts().includes(m.counter.react)) bad.push(`${at}: counter.react must be a reaction`);
     if ('hitstop' in m && !(['light', 'heavy', 'super'].includes(m.hitstop) || tick(m.hitstop))) bad.push(`${at}: hitstop must be light, heavy, super or whole ticks`);
     if (I && I.ctx === 'counter' && !m.counter) bad.push(`${at}: the counter move needs its counter bonus`);
   }

@@ -6,9 +6,12 @@
 //   collector  goes for the kid, grabs her (heavy telegraph) and carries her toward an exit; stagger or destroy
 //              it to make it let go. If it gets out with her, the mission fails back to the checkpoint.
 //   mk2        the Mk-II Sentinel at the hangar: a stomp (jump it), a sweep (heavy), a floor-raking eye beam
-// Shared states: held (in Jean's grip), thrown (by her), lifted (Lift and hold), launched, stagger.
+// Shared states: held (in Jean's grip), thrown (by her), lifted (Lift and hold), and the hit reactions
+// (reactions.js: stagger, launched, knockdown, wall and ground bounces, crumple, spin-out, stun, flip-out; a flinch
+// is a timer, flinchT, that pauses the brain).
 // A director caps how many attack at once, so a crowd still reads.
-import { DT, GRAVITY, MAX_FALL, ENEMIES, HEROES, TEAM } from './config.js';
+import { DT, GRAVITY, MAX_FALL, ENEMIES, HEROES, TEAM, STUN } from './config.js';
+import { updateReaction } from './reactions.js';
 import { moveBody, rayCast, groundBelow, segmentBlocked, EXITS } from './level.js';
 import { rand, randRange } from './rng.js';
 import { emit, newId, ent } from './world.js';
@@ -20,7 +23,8 @@ export function createEnemy(S, type, x, y, extra = {}) {
   return { kind: 'enemy', id: newId(S), type, x, y, vx: 0, vy: 0, w: T.w, h: T.h, facing: -1, onGround: false,
     hp: T.hp, maxHp: T.hp, poise: 0, armour: T.armour || 0, state: 'idle', st: 0, atk: null, cd: 30 + Math.floor(rand(S) * 40),
     target: 0, token: null, flash: 0, hitstop: 0, dead: false, deathT: 0, liftT: 0, liftBy: 0, heldBy: 0, thrownBy: 0,
-    slowT: 0, carry: 0, staggerT: 0, phase: 1, hitInst: [], ...extra };
+    slowT: 0, carry: 0, staggerT: 0, phase: 1, hitInst: [],
+    juggle: 0, stun: 0, calmT: 0, flinchT: 0, flipT: 0, lying: false, otgUsed: false, wallBounced: false, groundBounced: false, ...extra };
 }
 
 const caps = S => ({ melee: Math.min(3, 1 + S.players.length), ranged: 2 });
@@ -48,6 +52,10 @@ export function updateEnemies(S) {
     if (e.flash > 0) e.flash--;
     if (e.hitstop > 0) { e.hitstop--; continue; }
     if (e.slowT > 0) { e.slowT--; if (e.slowT % 2) continue; }   // a perfect defence slows the attacker
+    // The stun bar drains once the Sentinel is left alone
+    if (++e.calmT > STUN.calm && e.stun > 0) e.stun = Math.max(0, e.stun - STUN.drain);
+    // A flinch pauses the brain (and its attack's clock) for a moment
+    if (e.flinchT > 0) { e.flinchT--; physics(S, e, 0.8); continue; }
     e.st++;
     if (e.cd > 0) e.cd--;
     if (e.dropNow) { e.dropNow = false; if (e.carry) dropCarried(S, e); }
@@ -55,18 +63,18 @@ export function updateEnemies(S) {
     switch (e.state) {
       case 'held': held(S, e); continue;
       case 'thrown': thrown(S, e); continue;
-      case 'stagger': case 'launched':
-        if (--e.staggerT <= 0 && e.onGround) setE(e, 'idle');
-        physics(S, e, 0.9); continue;
     }
+    if (updateReaction(S, e, physics)) continue;   // stagger, launched and the other reactions (reactions.js)
     AI[e.type](S, e);
   }
   S.enemies = S.enemies.filter(e => !e.dead || e.deathT < 60);
 }
 
+const FALLING = ['stagger', 'launched', 'thrown', 'knockdown', 'wallBounce', 'groundBounce', 'crumple', 'spinOut', 'stun', 'flipOut'];
 function physics(S, e, friction = 1) {
   const T = ENEMIES[e.type];
-  if (!T.flier || e.state === 'stagger' || e.state === 'launched' || e.state === 'thrown') e.vy = Math.max(e.vy - GRAVITY * DT * (e.state === 'launched' ? 0.8 : 1), -MAX_FALL);
+  // Juggled Sentinels fall faster as their juggle weight builds (reactions.js); fliers fall only when knocked about
+  if (!T.flier || FALLING.includes(e.state)) e.vy = Math.max(e.vy - GRAVITY * DT * (e.state === 'launched' ? 0.8 * (1 + e.juggle / 100) : 1), -MAX_FALL);
   if (e.onGround && friction < 1) e.vx *= friction;
   const want = e.vx;
   if (e.dropT > 0) e.dropT--;

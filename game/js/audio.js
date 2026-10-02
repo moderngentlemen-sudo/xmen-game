@@ -108,6 +108,14 @@ export class Sound {
       case 'hit': if (this.limit('hit', 0.03)) { if (ev.resisted) { this.tone(1450, 0, 0.05, 'square', 0.035); this.tone(1950, 0, 0.07, 'square', 0.03, 0.01); } else { this.noise(0.06 + (ev.heavy ? 0.06 : 0), ev.heavy ? 900 : 1800, ev.heavy ? 0.14 : 0.08, 'bandpass'); if (ev.heavy) this.tone(140, 60, 0.12, 'sine', 0.1); } } break;
       case 'armourBreak': this.noise(0.35, 1200, 0.22, 'lowpass'); this.tone(200, 55, 0.35, 'sawtooth', 0.1); break;
       case 'stagger': if (this.limit('stagger', 0.1)) this.tone(880, 440, 0.2, 'sine', 0.05); break;
+      case 'wallBounce': this.noise(0.25, 700, 0.2, 'lowpass'); this.tone(180, 70, 0.22, 'sine', 0.14); break;
+      case 'groundBounce': this.noise(0.3, 400, 0.22, 'lowpass'); this.tone(120, 50, 0.28, 'sine', 0.16); break;
+      case 'react':
+        if (ev.react === 'stun' && this.limit('stun', 0.2)) { this.tone(1320, 990, 0.3, 'triangle', 0.04); this.tone(1760, 1320, 0.3, 'triangle', 0.03, 0.08); }
+        else if (ev.react === 'crumple') this.tone(330, 110, 0.4, 'sawtooth', 0.05);
+        else if (ev.react === 'flipOut') this.noise(0.18, 3000, 0.07, 'bandpass', 900);
+        else if (ev.react === 'down' && this.limit('down', 0.08)) this.noise(0.18, 300, 0.12, 'lowpass');
+        break;
       case 'kill': this.noise(0.4, 400, 0.22, 'lowpass', 80); this.tone(160, 40, 0.35, 'sine', 0.16); this.noise(0.08, 3000, 0.08, 'highpass'); break;
       case 'playerHit': this.tone(230, 110, 0.14, 'sawtooth', 0.12); this.noise(0.1, 800, 0.1, 'lowpass'); break;
       case 'downed': this.tone(440, 220, 0.45, 'sine', 0.1); break;

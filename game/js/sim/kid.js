@@ -4,7 +4,7 @@
 // which keeps her out of reach. At the end she runs for the X-Jet.
 import { DT, GRAVITY, MAX_FALL, KID } from './config.js';
 import { moveBody, CELL, JET } from './level.js';
-import { emit } from './world.js';
+import { emit, ent } from './world.js';
 import { isDown } from './player.js';
 
 export function makeKid(x, y, state = 'caged') {
@@ -22,7 +22,13 @@ export function updateKid(S) {
       if (!S.gates.cell) { k.state = 'follow'; k.st = 0; emit(S, 'kidReleased', { x: k.x, y: k.y }); }
       else { k.vx = Math.sin(S.tick * 0.03) * 0.6; body(S, k); }   // pacing the cell
       return;
-    case 'carried': case 'held': case 'boarded': return;
+    case 'carried': case 'boarded': return;
+    case 'held': {
+      // In Jean's grip: she moves her. If nobody is holding her any more, she is free
+      const j = ent(S, k.heldBy);
+      if (!j || !j.tk || j.tk.id !== k.id) { k.heldBy = 0; k.state = 'follow'; k.st = 0; }
+      return;
+    }
     case 'downed': {
       k.vx *= 0.8; body(S, k);
       const near = S.players.some(p => !isDown(p) && Math.abs(p.x - k.x) < 1.5 && Math.abs(p.y - k.y) < 1.5);
