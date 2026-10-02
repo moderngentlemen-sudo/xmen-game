@@ -7,7 +7,14 @@ import * as THREE from 'three';
 import { HOSTILE, TELL, POWER_COLORS } from './looks.js';
 import { HEROES, ENEMIES } from './sim/config.js';
 import { groundBelow } from './sim/level.js';
-import { CUES } from './vfx/cues.js';
+import { CUES, MOVE_FX } from './vfx/cues.js';
+import { MOVES } from './sim/config.js';
+import { GpuParticles } from './vfx/particles.js';
+import { LightPool } from './vfx/lights.js';
+import { Decals } from './vfx/decals.js';
+import { Trails } from './vfx/trails.js';
+import { DistortRings } from './vfx/post.js';
+import { SETTINGS } from './settings.js';
 
 function tex(size, draw) {
   const c = document.createElement('canvas'); c.width = c.height = size;
@@ -39,7 +46,18 @@ export class FX {
     this.debrisMats = { sentinel: new THREE.MeshToonMaterial({ color: '#6d3aa8' }), grey: new THREE.MeshToonMaterial({ color: '#b2bac8' }), wood: new THREE.MeshToonMaterial({ color: '#8a5a32' }), steel: new THREE.MeshToonMaterial({ color: '#7d8698' }) };
     // The shield bubble, the grip aura and the mark reticle are reused per entity
     this.shieldGeo = new THREE.SphereGeometry(1, 28, 18);
+    // Phase 1's effect tools (vfx/): GPU sparks, the fixed light pool, floor decals, bone trails, distortion rings
+    this.gpu = new GpuParticles(scene);
+    this.lights = new LightPool(scene);
+    this.decals = new Decals(scene);
+    this.trails = new Trails(scene);
+    this.distort = new DistortRings();
   }
+  // Clarity thins the particles out so a crowded fight stays readable; Reduce flashing tames flashes and lights
+  get thin() { return SETTINGS.clarity ? 0.5 : 1; }
+  light(x, y, color, intensity = 4, reach = 8, life = 0.2) { this.lights.flash(x, y, color, intensity * (SETTINGS.reduceFlashing ? 0.35 : 1), reach, life); }
+  decal(x, y, size = 2, life = 8) { this.decals.add(x, y, size, life); }
+  ripple(x, y, strength = 1, life = 0.45, size = 0.35) { this.distort.add(x, y, strength * (SETTINGS.reduceFlashing ? 0.5 : 1), life, size); }
 
   // ---- Particles --------------------------------------------------------------------------------------------
   spawn(o) {
@@ -56,11 +74,17 @@ export class FX {
     this.parts.push(p);
     return p;
   }
+  // Sparks go to the GPU pool: one draw call however many there are
   sparks(x, y, color, n = 8, speed = 9, life = 0.3) {
-    for (let i = 0; i < n; i++) { const a = Math.random() * Math.PI * 2, v = speed * (0.4 + Math.random() * 0.8); this.spawn({ x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v + 2, g: 18, color, s0: 0.28, s1: 0.02, life: life * (0.6 + Math.random() * 0.6), tex: 'glow', stretch: 1 }); }
+    n = Math.max(1, Math.round(n * this.thin));
+    for (let i = 0; i < n; i++) { const a = Math.random() * Math.PI * 2, v = speed * (0.4 + Math.random() * 0.8); this.gpu.add(x, y, 0.3 + (Math.random() - 0.5) * 0.4, Math.cos(a) * v, Math.sin(a) * v + 2, 18, 2, color, 0.3, 0.03, life * (0.6 + Math.random() * 0.6)); }
   }
-  flash(x, y, color, size = 2, life = 0.12, tex = 'glow') { this.spawn({ x, y, color, s0: size, s1: size * 1.4, life, tex }); }
+  flash(x, y, color, size = 2, life = 0.12, tex = 'glow') {
+    if (SETTINGS.reduceFlashing) { size = Math.min(size, 2.4) * 0.7; color = color === '#ffffff' ? '#c8c8c8' : color; }
+    this.spawn({ x, y, color, s0: size, s1: size * 1.4, life, tex, op: SETTINGS.reduceFlashing ? 0.5 : 1 });
+  }
   smoke(x, y, n = 6, color = '#4a4458', size = 1.4) {
+    n = SETTINGS.clarity ? Math.ceil(n / 3) : n;
     for (let i = 0; i < n; i++) this.spawn({ x: x + (Math.random() - 0.5), y: y + Math.random() * 0.6, vx: (Math.random() - 0.5) * 3, vy: 1 + Math.random() * 2, drag: 1.5, color, normal: true, tex: 'smoke', s0: size * 0.5, s1: size * (1.2 + Math.random()), life: 0.7 + Math.random() * 0.5, op: 0.6 });
   }
   ring(x, y, color, r0 = 0.3, r1 = 3, life = 0.3, flat = false) {
@@ -101,8 +125,7 @@ export class FX {
   // ---- Per-frame: state-driven effects and the particle pool ------------------------------------------------
   update(dt, S, t) {
     // Projectiles: Sentinel bolts in magenta, returned shots and edge waves in the team's colours
-    this.syncProjectiles(S);
-    this.syncPersistent(S, t);
+    this.gpu.update(dt); this.lights.update(dt); this.decals.update(dt);
     for (let i = this.parts.length - 1; i >= 0; i--) {
       const p = this.parts[i]; p.life += dt;
       if (p.life >= p.max) { p.s.visible = false; this.parts.splice(i, 1); this.free.push(p); continue; }
@@ -128,10 +151,14 @@ export class FX {
       const d = this.debris[i]; d.life += dt;
       if (d.life >= d.max) { this.scene.remove(d.m); this.debris.splice(i, 1); continue; }
       d.vy -= 26 * dt; d.m.position.x += d.vx * dt; d.m.position.y += d.vy * dt; d.m.position.z += d.vz * dt;
-      if (d.m.position.y < 0.1 && d.vy < 0 && Math.abs(d.m.position.x) < 1e9) { const g = groundAt(d.m.position.x); if (d.m.position.y < g) { d.m.position.y = g; d.vy *= -0.35; d.vx *= 0.6; } }
+      // Bounce on whatever floor is below (walkways and the hangar included), then settle there
+      if (d.vy < 0) { const g = groundAt(d.m.position.x, d.m.position.y); if (d.m.position.y < g + 0.08) { d.m.position.y = g + 0.08; d.vy *= -0.35; d.vx *= 0.6; d.vz *= 0.6; d.sx *= 0.5; d.sz *= 0.5; } }
       d.m.rotation.x += d.sx * dt; d.m.rotation.z += d.sz * dt;
       const sc = d.life > d.max - 0.25 ? (d.max - d.life) / 0.25 : 1; d.m.scale.multiplyScalar(sc < 1 ? 0.96 : 1);
     }
+    // State-driven effects last, after the fading above, so a short-lived ribbon made this frame is drawn at least once
+    this.syncProjectiles(S);
+    this.syncPersistent(S, t);
   }
 
   syncProjectiles(S) {
@@ -162,6 +189,9 @@ export class FX {
     const get = (key, make) => { want.add(key); let o = this.persist.get(key); if (!o) { o = make(); this.persist.set(key, o); } return o; };
     const sprite = (map, color, blend = THREE.AdditiveBlending) => { const s = new THREE.Sprite(new THREE.SpriteMaterial({ map, color, transparent: true, depthWrite: false, blending: blend })); this.scene.add(s); return s; };
     for (const p of [...S.players, ...S.assists]) {
+      // A move's own visual over its active ticks (vfx/cues.js, MOVE_FX)
+      const mfx = p.move && p.state === 'attack' && MOVE_FX[p.hero] && MOVE_FX[p.hero][p.move.id];
+      if (mfx) { const m = MOVES[p.hero][p.move.id]; if (p.move.t > m.su && p.move.t <= m.su + m.ac) mfx(this, p, m, (p.move.t - m.su) / m.ac); }
       if (p.shieldT > 0) {
         const o = get('shield' + p.id, () => {
           const m = new THREE.Mesh(this.shieldGeo, new THREE.MeshBasicMaterial({ color: POWER_COLORS.tk, transparent: true, opacity: 0.18, blending: THREE.AdditiveBlending, depthWrite: false }));
@@ -236,4 +266,4 @@ function entOf(S, id) {
 }
 // The floor under a point, for debris to bounce on (a simple lookup of the level's surfaces)
 const OPEN = { G1: false, G2: false, G3: false, cell: false };
-function groundAt(x) { const g = groundBelow(x, 12, OPEN); return g > -Infinity ? g : -20; }
+function groundAt(x, y = 12) { const g = groundBelow(x, y + 0.3, OPEN); return g > -Infinity ? g : -20; }

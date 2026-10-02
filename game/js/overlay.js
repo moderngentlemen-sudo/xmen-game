@@ -25,7 +25,6 @@ const WORDS = {
   snikt: () => ['SNIKT!', '#dfe9f5', 1],
   styleRank: ev => ['A', 'S', 'X'].includes(ev.rank) ? [ev.rank === 'X' ? 'X-TREME!' : ev.rank + ' RANK!', '#ffd23f', ev.rank === 'X' ? 1.5 : 1.1] : null,
   wallBounce: () => ['WHAM!', '#ffffff', 1],
-  super: ev => [(SUPER_NAMES[ev.hero] || {})[ev.ult ? 'ult' : 'super'] || 'SUPER!', '#fff1b8', ev.ult ? 2 : 1.6],
   throw: () => ['HRAAH!', '#ffffff', 1],
   groundBounce: () => ['KRAK!', '#ffffff', 1],
 };
@@ -60,7 +59,12 @@ export class Overlay {
     const w = f(ev); if (!w) return;
     const x = ev.x !== undefined ? ev.x : this.view.cam.x, y = (ev.y !== undefined ? ev.y : this.view.cam.y) + 1.2;
     this.word(w[0], x, y, w[1], w[2], ev.type === 'ultStrike' || ev.type === 'super');
+    if (ev.type === 'super') { this.cutIn(ev); this.focus = { x: ev.x, y: ev.y, t: 0, dur: ev.ult ? 0.6 : 0.4 }; }
   }
+
+  // A super's cut-in: a slanted band across the panel with the hero's face colour and the move's name, sliding in
+  // and out over 0.7 s (the world is in slow motion meanwhile)
+  cutIn(ev) { this.cut = { hero: ev.hero, name: (SUPER_NAMES[ev.hero] || {})[ev.ult ? 'ult' : 'super'] || 'SUPER!', ult: ev.ult, t: 0, dur: 0.7 }; }
 
   // An impact panel: the moment held in a tilted comic panel, speed lines converging on the hit
   impact(x, y, k = 1) {
@@ -127,6 +131,60 @@ export class Overlay {
       g.restore();
     }
 
+    // Speed lines behind a hero moving fast (a lunge, a dash strike, a drill, a throw)
+    for (const p of S.players) {
+      const v = Math.hypot(p.vx, p.vy);
+      if (v < 10 || p.state === 'downed') continue;
+      const s = sc(p.x, p.y + p.h * 0.55); if (!s.vis) continue;
+      const ux = p.vx / v, uy = -p.vy / v, len = unit * (1.2 + v * 0.06);
+      g.save(); g.strokeStyle = '#ffffff'; g.lineCap = 'round';
+      for (let i = 0; i < 6; i++) {
+        const off = (i - 2.5) * unit * 0.22, jit = ((i * 37 + Math.floor(this.time * 30)) % 7) / 7;
+        const x0 = s.x - ux * unit * (0.4 + jit * 0.4) - uy * off, y0 = s.y - uy * unit * (0.4 + jit * 0.4) + ux * off;
+        g.globalAlpha = 0.35 + jit * 0.3; g.lineWidth = Math.max(1.5, unit * 0.05);
+        g.beginPath(); g.moveTo(x0, y0); g.lineTo(x0 - ux * len, y0 - uy * len); g.stroke();
+      }
+      g.restore();
+    }
+    // Focus lines round a super, closing in on the hero
+    const F = this.focus;
+    if (F) {
+      F.t += dt; const k = F.t / F.dur;
+      if (k >= 1) this.focus = null;
+      else {
+        const s = sc(F.x, F.y), n = 48, inner = Math.min(W, H) * (0.5 - 0.3 * k), outer = Math.hypot(W, H);
+        g.save(); g.globalAlpha = (1 - k) * 0.7; g.fillStyle = '#120d1a';
+        for (let i = 0; i < n; i++) {
+          const a = (i / n) * Math.PI * 2 + (i % 2) * 0.03, wdt = 0.008 + (i % 3) * 0.005;
+          g.beginPath(); g.moveTo(s.x + Math.cos(a - wdt) * outer, s.y + Math.sin(a - wdt) * outer);
+          g.lineTo(s.x + Math.cos(a) * inner, s.y + Math.sin(a) * inner);
+          g.lineTo(s.x + Math.cos(a + wdt) * outer, s.y + Math.sin(a + wdt) * outer); g.fill();
+        }
+        g.restore();
+      }
+    }
+    // The super's cut-in band
+    const C = this.cut;
+    if (C) {
+      C.t += dt; const k = C.t / C.dur;
+      if (k >= 1) this.cut = null;
+      else {
+        const slide = k < 0.2 ? 1 - k / 0.2 : k > 0.8 ? -(k - 0.8) / 0.2 : 0, col = (HERO_LOOKS[C.hero] || {}).energy || '#ffffff';
+        const bh = H * 0.2, y = H * 0.3;
+        g.save(); g.translate(slide * W, y); g.transform(1, -0.08, 0, 1, 0, 0);
+        g.fillStyle = '#120d1a'; g.fillRect(-W * 0.1, -bh / 2 - 6, W * 1.2, bh + 12);
+        g.fillStyle = col; g.fillRect(-W * 0.1, -bh / 2, W * 1.2, bh);
+        g.globalAlpha = 0.35; g.fillStyle = '#ffffff';
+        for (let i = 0; i < 14; i++) g.fillRect(((i * 97 + C.t * 1600) % (W * 1.3)) - W * 0.15, -bh / 2 + (i % 5) * bh * 0.2, W * 0.12, 2);
+        g.globalAlpha = 1;
+        const size = Math.round(bh * (C.ult ? 0.5 : 0.42));
+        g.font = `${size}px ${this.font}`; g.textAlign = 'center'; g.textBaseline = 'middle'; g.lineJoin = 'round';
+        g.lineWidth = Math.max(5, size * 0.14); g.strokeStyle = '#120d1a'; g.strokeText(C.name, W / 2, 0);
+        g.fillStyle = '#fff1b8'; g.fillText(C.name, W / 2, 0);
+        g.restore();
+      }
+    }
+
     // The impact panel
     const P = this.panel;
     if (P) {
@@ -145,7 +203,7 @@ export class Overlay {
           g.lineTo(cx + Math.cos(a + wdt) * outer, cy + Math.sin(a + wdt) * outer); g.fill();
         }
         // The white flash, then the panel border: a thick ink frame inside a white gutter, tilted
-        if (k2 < 0.18) { g.globalAlpha = (1 - k2 / 0.18) * 0.85; g.fillStyle = '#ffffff'; g.fillRect(0, 0, W, H); }
+        if (k2 < 0.18 && !SETTINGS.reduceFlashing) { g.globalAlpha = (1 - k2 / 0.18) * 0.85; g.fillStyle = '#ffffff'; g.fillRect(0, 0, W, H); }
         g.globalAlpha = Math.min(1, (1 - k2) * 2.2);
         g.translate(W / 2, H / 2); g.rotate(P.tilt);
         const m = Math.min(W, H) * 0.035, bw = W * 1.04 - m * 2, bh = H * 1.04 - m * 2;

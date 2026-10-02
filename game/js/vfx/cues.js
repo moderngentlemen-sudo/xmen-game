@@ -8,6 +8,29 @@ import { HOSTILE, TELL, POWER_COLORS, HERO_LOOKS } from '../looks.js';
 
 const pc = POWER_COLORS;
 
+// Visuals that last as long as a move's active ticks, drawn every frame from the move's state (FX.syncPersistent
+// calls these): keyed by hero, then move id; `k` runs 0 to 1 over the active ticks
+const eyeOf = p => [p.x + p.facing * 0.15, p.y + p.h * 0.9];
+export const MOVE_FX = {
+  cyclops: {
+    // Optic Overdrive: the full beam, swept across the room, wider and whiter at its heart
+    super(fx, p, m, k) { const [x, y] = eyeOf(p), len = m.boxes[0][1]; fx.ribbon([[x, y], [x + p.facing * len, y + Math.sin(k * 6) * 0.15]], 1.3, pc.optic, 0.05); fx.ribbon([[x, y], [x + p.facing * len, y]], 0.45, '#ffffff', 0.05); },
+    pFwd(fx, p) { const [x, y] = eyeOf(p); for (const a of [-0.25, 0, 0.25]) fx.ribbon([[x, y], [x + p.facing * 3.6, y + a * 3.6]], 0.5, pc.optic, 0.06); },
+    pUp(fx, p) { const [x, y] = eyeOf(p); fx.ribbon([[x, y], [x + p.facing * 0.4, y + 4.5]], 0.7, pc.optic, 0.06); },
+  },
+  wolverine: {
+    pFwd(fx, p) { fx.sparks(p.x + p.facing * 0.8, p.y + 1, pc.claws, 3, 9, 0.2); },
+    super(fx, p) { fx.sparks(p.x + p.facing * 0.9, p.y + 1.1, pc.rage, 4, 11, 0.2); },
+    ult(fx, p) { fx.sparks(p.x, p.y + 1, pc.rage, 6, 14, 0.25); },
+  },
+  jean: {
+    // Psychic Crush: the Sentinels pressed into a ball of telekinetic force ahead of her
+    super(fx, p, m, k) { fx.flash(p.x + p.facing * 3, p.y + 1.6, pc.tk, 2.5 + k * 2, 0.06, 'ring'); fx.sparks(p.x + p.facing * 3, p.y + 1.6, pc.tk, 3, 6, 0.2); },
+    // Phoenix Rising: a firestorm round her
+    ult(fx, p) { for (let i = 0; i < 3; i++) { const a = Math.random() * 6.28, r = 2 + Math.random() * 8; fx.sparks(p.x + Math.cos(a) * r, p.y + 0.5 + Math.abs(Math.sin(a)) * 3, i ? '#ff8a1f' : '#ffd23f', 2, 7, 0.4); } },
+  },
+};
+
 export const CUES = {
   optic(fx, ev) {
     // The beam: a wide red ribbon, a hot white core, flares where it banks and where it ends
@@ -50,8 +73,10 @@ export const CUES = {
   ultStrike(fx, ev) { fx.ring(ev.x, ev.y, pc.team, 1, 30, 0.6); fx.flash(ev.x, ev.y, '#ffffff', 30, 0.3); },
   hit(fx, ev) {
     const col = ev.resisted ? '#9aa4b4' : pc[ev.power] || '#ffffff';
-    fx.sparks(ev.x, ev.y, col, ev.heavy ? 12 : 6, ev.heavy ? 12 : 8, ev.heavy ? 0.35 : 0.25);
+    // Light hits: a few sparks. Heavy hits: about 40 sparks and metal, a flash of the power's colour, a ripple
+    fx.sparks(ev.x, ev.y, col, ev.heavy ? 40 : 12, ev.heavy ? 13 : 8, ev.heavy ? 0.4 : 0.25);
     fx.flash(ev.x, ev.y, col, ev.heavy ? 1.8 : 1.1, 0.09, ev.resisted ? 'ring' : 'star');
+    if (ev.heavy && !ev.resisted) { fx.light(ev.x, ev.y, col, 5, 7, 0.18); fx.chunks(ev.x, ev.y, 'grey', 3, 8); fx.ripple(ev.x, ev.y, 0.6, 0.3, 0.2); }
   },
   // Hit reactions (sim/reactions.js)
   react(fx, ev) {
@@ -68,19 +93,25 @@ export const CUES = {
   // Supers and ultimates, their areas and volleys, throws (phase 1's moves)
   super(fx, ev) {
     const col = HERO_LOOKS[ev.hero] ? HERO_LOOKS[ev.hero].energy : '#fff';
-    fx.ring(ev.x, ev.y, col, 0.5, ev.ult ? 8 : 5, 0.45); fx.flash(ev.x, ev.y, '#ffffff', ev.ult ? 6 : 4, 0.2, 'star'); fx.sparks(ev.x, ev.y, col, ev.ult ? 40 : 24, 14, 0.5);
+    fx.ring(ev.x, ev.y, col, 0.5, ev.ult ? 8 : 5, 0.45); fx.flash(ev.x, ev.y, '#ffffff', ev.ult ? 6 : 4, 0.2, 'star'); fx.sparks(ev.x, ev.y, col, ev.ult ? 200 : 120, 16, 0.6);
+    fx.light(ev.x, ev.y, col, ev.ult ? 14 : 9, ev.ult ? 26 : 16, 0.6); fx.ripple(ev.x, ev.y, ev.ult ? 1.4 : 1, 0.55, ev.ult ? 0.6 : 0.4);
   },
-  area(fx, ev) { const col = HERO_LOOKS[ev.hero] ? HERO_LOOKS[ev.hero].energy : '#fff1b8'; fx.ring(ev.x, ev.y, col, 1, ev.r, 0.5); fx.ring(ev.x, ev.y, '#ffffff', 0.5, ev.r * 0.6, 0.35, true); },
+  area(fx, ev) {
+    const col = HERO_LOOKS[ev.hero] ? HERO_LOOKS[ev.hero].energy : '#fff1b8';
+    fx.ring(ev.x, ev.y, col, 1, ev.r, 0.5); fx.ring(ev.x, ev.y, '#ffffff', 0.5, ev.r * 0.6, 0.35, true);
+    fx.light(ev.x, ev.y, col, 10, ev.r * 1.2, 0.5); fx.ripple(ev.x, ev.y, 1.2, 0.6, 0.7);
+  },
   shots(fx, ev) { fx.flash(ev.x + ev.facing * 0.7, ev.y, pc.tk, 1.6, 0.14, 'star'); },
   throw(fx, ev) { fx.flash(ev.x, ev.y, '#ffffff', 2.2, 0.14, 'star'); fx.sparks(ev.x, ev.y, '#ffffff', 10, 9); },
-  wallBounce(fx, ev) { fx.ring(ev.x - ev.dir * 0.5, ev.y, '#ffffff', 0.5, 3, 0.25); fx.sparks(ev.x, ev.y, '#ffd27a', 14, 10); fx.chunks(ev.x, ev.y, 'steel', 4, 7); },
-  groundBounce(fx, ev) { fx.ring(ev.x, ev.y + 0.05, '#ffffff', 0.5, 3.4, 0.28, true); fx.smoke(ev.x, ev.y, 6, '#cfc8d8', 1.2); fx.chunks(ev.x, ev.y, 'grey', 4, 8); },
+  wallBounce(fx, ev) { fx.ring(ev.x - ev.dir * 0.5, ev.y, '#ffffff', 0.5, 3, 0.25); fx.sparks(ev.x, ev.y, '#ffd27a', 24, 10); fx.chunks(ev.x, ev.y, 'steel', 4, 7); fx.light(ev.x, ev.y, '#ffd27a', 4, 6, 0.2); fx.ripple(ev.x, ev.y, 0.7, 0.35, 0.25); },
+  groundBounce(fx, ev) { fx.ring(ev.x, ev.y + 0.05, '#ffffff', 0.5, 3.4, 0.28, true); fx.smoke(ev.x, ev.y, 6, '#cfc8d8', 1.2); fx.chunks(ev.x, ev.y, 'grey', 4, 8); fx.decal(ev.x, ev.y, 2.2); fx.ripple(ev.x, ev.y, 0.7, 0.35, 0.25); },
   armourBreak(fx, ev) { fx.chunks(ev.x, ev.y, 'grey', 6, 9); fx.flash(ev.x, ev.y, '#ffffff', 2.5, 0.15, 'star'); },
   kill(fx, ev) {
     const big = ev.unit === 'mk2' || ev.unit === 'collector';
     fx.flash(ev.x, ev.y, HOSTILE, big ? 8 : 4, 0.25); fx.flash(ev.x, ev.y, '#ffe9a8', big ? 5 : 2.5, 0.35);
     fx.chunks(ev.x, ev.y, 'sentinel', big ? 18 : 9, big ? 14 : 10); fx.chunks(ev.x, ev.y, 'grey', big ? 10 : 4, 10);
     fx.smoke(ev.x, ev.y, big ? 16 : 7, '#3a3348', big ? 2.4 : 1.4); fx.ring(ev.x, ev.y, '#ffb547', 0.5, big ? 9 : 4, 0.35);
+    fx.light(ev.x, ev.y, '#ffb547', big ? 10 : 6, big ? 16 : 9, 0.35); fx.decal(ev.x, ev.y, big ? 4 : 2.6, 12);
   },
   telegraph(fx, ev) {
     const col = TELL[ev.cat] || TELL.standard;
@@ -89,7 +120,8 @@ export const CUES = {
   },
   enemyShot(fx, ev) { fx.flash(ev.x, ev.y, HOSTILE, 0.9, 0.08); },
   projWall(fx, ev) { fx.sparks(ev.x, ev.y, ev.team === 'e' ? HOSTILE : POWER_COLORS.tk, 5, 6, 0.2); },
-  slam(fx, ev) { fx.ring(ev.x, ev.y + 0.05, ev.big ? TELL.unblockable : HOSTILE, 0.5, ev.big ? 7 : 3.4, 0.3, true); fx.smoke(ev.x, ev.y, ev.big ? 10 : 5, '#cfc8d8', ev.big ? 1.8 : 1.1); },
+  slam(fx, ev) {
+    fx.decal(ev.x, ev.y, ev.big ? 5 : 3); fx.ring(ev.x, ev.y + 0.05, ev.big ? TELL.unblockable : HOSTILE, 0.5, ev.big ? 7 : 3.4, 0.3, true); fx.smoke(ev.x, ev.y, ev.big ? 10 : 5, '#cfc8d8', ev.big ? 1.8 : 1.1); },
   bossLand(fx, ev) { fx.ring(ev.x, ev.y + 0.05, '#ffffff', 1, 10, 0.5, true); fx.smoke(ev.x, ev.y, 16, '#cfc8d8', 2.4); },
   bossPhase(fx, ev) { fx.ring(ev.x, ev.y, HOSTILE, 1, 12, 0.6); fx.chunks(ev.x, ev.y - 1, 'grey', 10, 12); },
   marked(fx, ev) { fx.flash(ev.x, ev.y + 0.4, HOSTILE, 1.6, 0.25, 'reticle'); },

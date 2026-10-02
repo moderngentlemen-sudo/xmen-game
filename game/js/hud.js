@@ -205,7 +205,7 @@ export class UI {
   showSettings() {
     const rows = [
       ['volume', 'Sound volume', 'range'], ['music', 'Music volume', 'range'], ['shake', 'Screen shake', 'check'], ['impactPanels', 'Impact panels', 'check'],
-      ['sfxWords', 'Lettered sound effects', 'check'], ['rumble', 'Controller rumble', 'check'], ['holdToggle', 'Power hold as a toggle', 'check'], ['hints', 'First-time hints', 'check'], ['quality', 'Quality', 'select'],
+      ['sfxWords', 'Lettered sound effects', 'check'], ['rumble', 'Controller rumble', 'check'], ['holdToggle', 'Power hold as a toggle', 'check'], ['hints', 'First-time hints', 'check'], ['clarity', 'Clarity (fewer particles)', 'check'], ['reduceFlashing', 'Reduce flashing', 'check'], ['quality', 'Quality', 'select'],
     ];
     const html = rows.map(([k, label, kind]) => {
       if (kind === 'range') return `<label class="setting"><span>${label}</span><input type="range" min="0" max="1" step="0.05" value="${SETTINGS[k]}" data-k="${k}"></label>`;

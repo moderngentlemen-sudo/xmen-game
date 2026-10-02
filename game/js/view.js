@@ -6,6 +6,9 @@ import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { ComicShader, toon } from './toon.js';
+import { DistortShader } from './vfx/post.js';
+import { MOVES } from './sim/config.js';
+import { HERO_LOOKS } from './looks.js';
 import { buildSet, updateSet, ROOMS } from './level3d.js';
 import { buildHeroRig, buildKidRig } from './rigs.js';
 import { animateHero, animateKid } from './anim.js';
@@ -59,7 +62,8 @@ export class View {
     this.renderPass = new RenderPass(this.scene, this.camera);
     this.comic = new ShaderPass(ComicShader);
     this.output = new OutputPass();
-    this.composer.addPass(this.renderPass); this.composer.addPass(this.comic); this.composer.addPass(this.output);
+    this.distortPass = new ShaderPass(DistortShader);   // the distortion rings (vfx/post.js)
+    this.composer.addPass(this.renderPass); this.composer.addPass(this.comic); this.composer.addPass(this.distortPass); this.composer.addPass(this.output);
   }
 
   resize(w, h) {
@@ -123,7 +127,12 @@ export class View {
       const mercy = p.mercy > 0 && !['downed', 'ult', 'held', 'thrown', 'teamup'].includes(p.state) && Math.floor(t * 14) % 2 === 0;
       rig.root.visible = p.state !== 'dead' && p.state !== 'tagout' && !blink && !mercy;
       if (rig.ring) rig.ring.visible = p.state !== 'downed' && p.onGround;
+      // A trail behind the striking hand or foot, from just before the strike to just after it
+      const m = p.move && MOVES[p.hero][p.move.id];
+      const striking = p.state === 'attack' && m && m.su !== undefined && p.move.t >= m.su - 2 && p.move.t <= m.su + m.ac + 4;
+      this.fx.trails.track(p.id, rig, striking && rig.root.visible, HERO_LOOKS[p.hero] ? HERO_LOOKS[p.hero].energy : '#ffffff', SETTINGS.clarity ? 0.12 : 0.22);
     }
+    this.fx.trails.keep(seen);
     for (const [id, rig] of this.rigs) if (!seen.has(id)) { this.scene.remove(rig.root); disposeTree(rig.root); this.rigs.delete(id); }
 
     // Sentinels: adapted ones wear their counter-tech's sheen; while they study the team, a magenta pulse
@@ -210,6 +219,10 @@ export class View {
     this.updateCamera(S, dt);
     updateSet(this.set, S, dt, this.time);
     this.fx.update(dt, S, this.time);
+    const U = this.distortPass.uniforms;
+    U.aspect.value = this.w && this.h ? this.w / this.h : 16 / 9;
+    this.fx.distort.update(dt, (x, y) => { const s = this.screenOf(x, y); return [s.x / (this.w || 1), 1 - s.y / (this.h || 1)]; }, U.rings.value);
+    this.distortPass.enabled = U.rings.value.some((v, i) => i % 4 === 3 && v > 0);
     const low = SETTINGS.quality === 'low';
     this.r.shadowMap.enabled = !low;
     this.comic.uniforms.cameraNear.value = this.camera.near; this.comic.uniforms.cameraFar.value = this.camera.far;
