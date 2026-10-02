@@ -49,27 +49,29 @@ function parse(token) {
   return { run, dir, b, jump: s === 'J' };
 }
 
-// Plays a trial; returns { route, hits, ok, S } (S: the world at the end, for the Danger Room). onTick(S), if
-// given, runs after every tick.
-export function runTrial(hero, trial, onTick = null) {
-  const S = createWorld({ seed: 7, players: 1 }), p = S.players[0], U = trial.setup || {};
-  if (p.hero !== hero) setHero(S, p, hero);
-  S.enemies = []; S.mission.phase = 'test'; p.mercy = 0; p.facing = 1; p.meter = U.meter || 0;
-  p.x = U.wall ? -6.5 : 24 - (U.dist || 0); p.y = 0;   // clear rooftop from 16 to 40 (the vent ends at 15.5)
+// Sets a trial up in a world: the hero placed, the trooper where the trial wants it (frozen in its stance: it never
+// attacks), the meter. Returns the trooper. Used headless by runTrial and live by the Danger Room.
+export function setupTrial(S, p, trial) {
+  const U = trial.setup || {};
+  S.enemies = []; S.projectiles = []; p.mercy = 0; p.facing = 1; p.meter = U.meter || 0; p.move = null; p.state = 'normal'; p.st = 0;
+  p.x = U.wall ? -6.5 : 24 - (U.dist || 0); p.y = 0; p.vx = p.vy = 0;   // clear rooftop from 16 to 40 (the vent ends at 15.5)
   if (U.wall) p.facing = -1;
   const e = createEnemy(S, 'trooper', U.wall ? -9.5 : 24 + (U.dist ? 0 : 1.1), 0, { cd: 9999, onGround: true, hp: 999, maxHp: 999 });
   if (U.stunned) { e.state = 'stun'; e.stunT = 999; }
   S.enemies.push(e);
-  const set = MOVESETS[hero], route = [];
-  let hits = 0, held = 0, mx = 0, my = 0, t = 0;
-  const tick = b => {
-    step(S, { [p.slot]: { mx: mx * p.facing, my, ax: 1, ay: 0, aim: false, b: b | held } });
-    for (const v of S.events) if (v.type === 'swing' && v.id === p.id) route.push(v.move);
-    hits = Math.max(hits, p.streak.n);
-    if (onTick) onTick(S);
-    t++;
-  };
-  // Can the next input be taken now? Free, or the move is past its active ticks, or it has hit (cancels on hit)
+  return e;
+}
+
+// The pilot: a generator that plays a trial's inputs, yielding the hero's command for each tick; the caller steps
+// the world between yields (headless in runTrial, live in the Danger Room's demos). Each input is pressed at the first
+// moment it can be taken: free, or the move before it past its active ticks, or hit (cancels on hit); and it waits
+// for the input to be taken before the next (a press still in the buffer is not done, and a second press right on
+// top of it would read as a pair). It returns the route of moves and the hits the combo reached.
+export function* pilot(S, p, trial, tail = 90) {
+  const set = MOVESETS[p.hero], route = [], e = S.enemies[0];
+  let hits = 0, held = 0, mx = 0, my = 0;
+  const cmd = b => ({ mx: mx * p.facing, my, ax: 1, ay: 0, aim: false, b: b | held });
+  const seen = () => { for (const v of S.events) if (v.type === 'swing' && v.id === p.id) route.push(v.move); hits = Math.max(hits, p.streak.n); };
   const ready = () => {
     if (p.hitstop > 0) return false;
     if (!p.move) return p.state === 'normal';
@@ -78,22 +80,44 @@ export function runTrial(hero, trial, onTick = null) {
   };
   for (const token of trial.inputs) {
     const I = parse(token);
-    if (I.wait !== undefined) { for (let i = 0; i < I.wait; i++) tick(0); continue; }
-    for (let i = 0; i < 120 && !ready(); i++) tick(0);
-    if (I.run) { mx = 1; for (let i = 0; i < 40 && Math.abs(e.x - p.x) > 2.2; i++) tick(0); }
+    if (I.wait !== undefined) { for (let i = 0; i < I.wait; i++) { yield cmd(0); seen(); } continue; }
+    for (let i = 0; i < 120 && !ready(); i++) { yield cmd(0); seen(); }
+    if (I.run) { mx = 1; for (let i = 0; i < 40 && e && Math.abs(e.x - p.x) > 2.2; i++) { yield cmd(0); seen(); } }
     [mx, my] = I.dir;
     const before = route.length, move = p.move;
-    tick(I.b);
-    if (I.jump) { held = BTN.jump; for (let i = 0; i < 6; i++) tick(0); held = 0; }   // a jump is held a moment to rise
+    yield cmd(I.b); seen();
+    if (I.jump) { held = BTN.jump; for (let i = 0; i < 6; i++) { yield cmd(0); seen(); } held = 0; }   // a jump is held a moment to rise
     else {
-      // Wait until the input has been taken (a move started) before the next one: a press still in the buffer is
-      // not done, and a second press right on top of it would read as a pair
-      tick(0);
-      for (let i = 0; i < 40 && route.length === before && p.move === move; i++) tick(0);
+      yield cmd(0); seen();
+      for (let i = 0; i < 40 && route.length === before && p.move === move; i++) { yield cmd(0); seen(); }
     }
     mx = 0; my = 0;
   }
-  for (let i = 0; i < 90; i++) tick(0);
-  const ok = route.join(' ') === trial.route.join(' ') && hits >= trial.hits;
-  return { route, hits, ok, S, ticks: t };
+  for (let i = 0; i < tail; i++) { yield cmd(0); seen(); }
+  return { route, hits };
+}
+
+// Plays a trial in a fresh world; returns { route, hits, ok, S, ticks }. onTick(S), if given, runs after every tick.
+export function runTrial(hero, trial, onTick = null) {
+  const S = createWorld({ seed: 7, players: 1 }), p = S.players[0];
+  if (p.hero !== hero) setHero(S, p, hero);
+  S.mission.phase = 'test';
+  setupTrial(S, p, trial);
+  const g = pilot(S, p, trial);
+  let t = 0, r = g.next();
+  while (!r.done) { step(S, { [p.slot]: r.value }); if (onTick) onTick(S); t++; r = g.next(); }
+  const { route, hits } = r.value;
+  return { route, hits, ok: trialPassed(trial, route, hits), S, ticks: t };
+}
+// A trial is passed when the route matches exactly and the combo reached its hits
+export const trialPassed = (trial, route, hits) => route.join(' ') === trial.route.join(' ') && hits >= trial.hits;
+
+// How a trial's inputs read to a player: 'uA' → '↑ Attack'
+const WORD = { A: 'Attack', P: 'Power', S: 'Signature', J: 'Jump' }, ARROW = { f: '→', b: '←', u: '↑', d: '↓' };
+export function inputLabel(token) {
+  if (token[0] === 'w') return 'wait';
+  let s = token, out = '';
+  if (s[0] === 'r') { out += 'run, '; s = s.slice(1); }
+  if (ARROW[s[0]] && s.length > 1) { out += ARROW[s[0]] + ' '; s = s.slice(1); }
+  return out + [...s].map(c => WORD[c]).join(' + ');
 }

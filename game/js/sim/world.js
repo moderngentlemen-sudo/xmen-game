@@ -13,6 +13,7 @@ import { updateTeam } from './team.js';
 import { HERO } from './heroes/index.js';
 import { updateAdapt } from './adapt.js';
 import { updateMission, startMission } from './mission.js';
+import { updateDanger } from './dangerRoom.js';
 
 export const EMPTY_CMD = Object.freeze({ mx: 0, my: 0, ax: 1, ay: 0, aim: false, b: 0 });
 
@@ -24,7 +25,7 @@ export function createWorld({ seed = 1, players = 1 } = {}) {
     gauge: 0, ult: null, rapportT: 0, called: null,
     adapt: { log: { optic: 0, claws: 0, tk: 0 }, warn: null, warnT: 0, active: null, checkT: 0 },
     director: { melee: 0, ranged: 0 },
-    mission: null, cam: { x: 0, y: 3, dist: 16, halfW: 14, halfH: 8 },
+    mission: null, danger: null, cam: { x: 0, y: 3, dist: 16, halfW: 14, halfH: 8 },
     events: [],
   };
   startMission(S);
@@ -84,7 +85,7 @@ export function step(S, cmds = {}) {
   updateTeam(S, cmds);
   resolveHitboxes(S);
   updateAdapt(S);
-  updateMission(S);
+  if (S.danger) updateDanger(S); else updateMission(S);   // the Danger Room (dangerRoom.js) replaces the mission
   updateCamera(S);
   // Anything that falls out of the level comes back to safety (players) or is gone (enemies, props)
   for (const p of S.players) if (p.y < KILL_Y) { const cp = S.mission.spawn; p.x = cp.x; p.y = cp.y + 1; p.vx = p.vy = 0; p.mercy = 60; }
