@@ -170,18 +170,25 @@ they arrive.
 - [x] **1.1 Baseline.** The golden file is now `tests/golden/replays.json`, re-recorded as "V2 (the baseline phase 1
   starts from)" (only its label changed); `record.mjs` takes a label. The gate spec `tests/gate/phase1.mjs`
   (23 checks, 0 green at the start).
-- [ ] **1.2 Hitstop in the simulation.** `HITSTOP = { light: 3, heavy: 8, super: 14 }` in `config.js`; a move's
+- [x] **1.2 Hitstop in the simulation.** Done as planned: `p.hitstop`, `e.hitstop`, `hitstopOf(m)` in `moveEngine.js`,
+  `slowMotion()` in `main.js`. Tests in `tests/feel-test.mjs`. The plan was: `HITSTOP = { light: 3, heavy: 8, super: 14 }` in `config.js`; a move's
   `hitstop` field (a class or ticks; default light, or heavy for `heavy` moves). A melee hit freezes the attacker
   and the target together (`p.hitstop`, `e.hitstop`); shots freeze only the target. A frozen player still banks
   presses (the buffers do not age while frozen), so a press during hitstop comes out after it. Retire `hitPause`
   in `main.js`: the impact panels stay, and the world slows instead of stopping (a **client** time scale, fewer
   ticks per real second; the simulation stays the same). A super will add 0.3 s at half speed the same way.
-- [ ] **1.3 The charged heavy and the step.** The first strike holds its pose at the end of its active ticks while
+- [x] **1.3 The charged heavy and the step.** Done as planned (`M.posed`, `M.letGo`, a `chargeReady` event when the
+  hold is reached, `physics(…, keepVx)`); tested in `moves-test` and `feel-test`. The bot learned to climb (to the
+  kid on a ledge or gantry, to a Sentinel above it): solo seeds stalled there, V2 included. The plan was: The first strike holds its pose at the end of its active ticks while
   Attack is still held from its press; letting go before `charge.hold` lets it recover as normal, and once the
   hold is reached the charged heavy fires on release or by itself at `hold + release`. Evade cancels out of the
   held pose. The step: ground moves keep their step speed through startup and active (`physics` leaves `vx` alone
   while the move steps), so the hero actually travels.
-- [ ] **1.4 Reactions.** `game/js/sim/reactions.js` with the twelve reactions of the proposal (flinch, stagger,
+- [x] **1.4 Reactions.** Done; `sim/reactions.js` documents the rules it settled on (flinch pauses the brain without
+  cancelling the attack; the stun bar is 3 × poise and drains after 90 quiet ticks; OTG pops the Sentinel back into
+  a juggle and is spent until it gets up; bosses and lifted, held or thrown Sentinels keep V2's reaction). Tested in
+  `tests/reactions-test.mjs`; poses checked with `tools/plans/reactions.mjs`. Also fixed: tagging out never called
+  the old hero's `cancel` (the kid stayed in Jean's grip for ever). The plan was: `game/js/sim/reactions.js` with the twelve reactions of the proposal (flinch, stagger,
   knockdown, launch, air hit, wall bounce, ground bounce, crumple, spin-out, stun, held, thrown; the last two exist
   in `enemies.js`), juggle weight with rising gravity, flip-out at the limit, OTG once, wall and ground bounce,
   crumple, spin-out, and stun from a broken poise bar. A move's `react` field picks the reaction; `hitEnemy` in
