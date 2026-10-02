@@ -1,7 +1,6 @@
 // Wolverine's moves: the claw chain; every hit builds rage. V2's moves and numbers, exactly (phase 0 changes no
 // behaviour); the fields are documented in schema.js. Berserk speeds the move clock (attackSpeed), so `t` runs
-// fractional. Holding Attack is meant to charge the heavy from the first slash, but that slash ends at 13 ticks,
-// before the 24-tick hold (see schema.js, charge).
+// fractional. Holding Attack through the first slash charges the heavy (see schema.js, charge).
 import { ON, CANCEL } from './schema.js';
 
 export default {

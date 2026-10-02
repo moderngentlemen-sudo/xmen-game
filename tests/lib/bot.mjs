@@ -47,8 +47,14 @@ export function playMission({ players = 1, seed = 1, maxMin = 25, onStep = null 
     if (!target) {
       // Nothing to fight: walk on (to the jet in the escape), jumping obstacles
       const k = S.kid, wantX = M.phase === 'escape' ? 250 : (sec.start || p.x) + 30;
-      if (k && sec.kid === undefined && k.state === 'downed' && Math.abs(k.x - p.x) > 1) { cmd.mx = Math.sign(k.x - p.x); return cmd; }
-      if (k && k.state === 'downed') return cmd;   // stand by her: it revives her
+      // The kid is down: go to her and stand by her, which revives her. Anywhere, and up onto a ledge or a gantry if
+      // that is where she fell (the bot used to wait beside a crate stack, or under a gantry, for ever)
+      if (k && k.state === 'downed') {
+        if (Math.abs(k.x - p.x) > 0.8) cmd.mx = Math.sign(k.x - p.x);
+        if (k.y > p.y + 1) climb(p, m, cmd);
+        if (p.hitWall && p.onGround) cmd.b |= BTN.jump;
+        return cmd;
+      }
       // Wait for the kid if she lags behind
       if (k && k.state !== 'caged' && k.state !== 'boarded' && p.x - k.x > 9 && M.phase !== 'fight') return cmd;
       cmd.mx = p.x < wantX ? 1 : 0;
@@ -67,11 +73,23 @@ export function playMission({ players = 1, seed = 1, maxMin = 25, onStep = null 
     const ranged = p.hero === 'cyclops' ? dist > 2 && dist < 16 : p.hero === 'jean' ? dist > 2 && dist < 8.5 : dist > 3 && dist < 9;
     if (ranged && r() < 0.08 && !(p.hero === 'cyclops' && p.overheatT > 0)) { m.hold = p.hero === 'wolverine' ? 46 : p.hero === 'jean' ? 30 : 20 + Math.floor(r() * 25); m.holdBtn = BTN.power; cmd.b |= BTN.power; return cmd; }
     if (dist > 1.8) { cmd.mx = Math.sign(dx); if (p.hitWall && p.onGround) cmd.b |= BTN.jump; if (target.y > p.y + 2 && p.onGround && r() < 0.05) cmd.b |= BTN.jump; return cmd; }
+    // Close below a Sentinel standing on something higher: go up to it
+    if (target.y > p.y + 2 && !ENEMIES[target.type].flier) { climb(p, m, cmd); cmd.mx = Math.sign(dx) * 0.5; return cmd; }
     cmd.mx = Math.sign(dx) * 0.2;
     if (++m.press % 5 < 2) cmd.b |= BTN.attack;
     if (p.hero === 'wolverine' && p.rage >= 80 && r() < 0.05) cmd.b |= BTN.sig;
     if (p.hero === 'jean' && p.shieldCd === 0 && S.projectiles.some(q => q.team === 'e' && Math.abs(q.x - p.x) < 5) && r() < 0.1) cmd.b |= BTN.sig;
     return cmd;
+  }
+
+  // Up onto something higher: a fresh press on the ground, held while rising (a jump let go early is cut short), then
+  // a fresh press for the air jump (Jean holds on to levitate)
+  function climb(p, m, cmd) {
+    m.jt = !m.jt;
+    if (p.onGround) { if (m.jt) cmd.b |= BTN.jump; }
+    else if (p.vy > 0.5 || p.hero === 'jean') cmd.b |= BTN.jump;
+    else if (p.jumpsLeft > 0 && m.jt) cmd.b |= BTN.jump;
+    if (p.hitWall && p.onGround) cmd.b |= BTN.jump;
   }
 
   const sections = [], fails = [];

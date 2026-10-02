@@ -89,11 +89,12 @@ export function updatePlayer(S, p, cmd, frozen) {
 export function setState(p, s) { p.state = s; p.st = 0; }
 
 // ---- Movement ----------------------------------------------------------------------------------------
-// run: target speed for the move input (0 to coast). locked: no new jumps or facing changes (hitstun).
-export function physics(S, p, run, cmd, E, locked) {
+// run: target speed for the move input (0 to coast). locked: no new jumps or facing changes (hitstun). keepVx: leave
+// the horizontal speed alone (a move's step forward)
+export function physics(S, p, run, cmd, E, locked, keepVx = false) {
   const H = HEROES[p.hero], mod = HERO[p.hero];
   const target = p.mx * run, accel = p.onGround ? (Math.abs(target) > Math.abs(p.vx) ? H.accel : H.decel) : H.airAccel;
-  if (p.wallLock <= 0 || p.onGround) p.vx += Math.sign(target - p.vx) * Math.min(Math.abs(target - p.vx), accel * DT);
+  if ((p.wallLock <= 0 || p.onGround) && !keepVx) p.vx += Math.sign(target - p.vx) * Math.min(Math.abs(target - p.vx), accel * DT);
   if (!locked && Math.abs(p.mx) > 0.2 && p.wallLock <= 0) p.facing = p.mx > 0 ? 1 : -1;
   // Jumps: buffered presses, coyote time on the ground, then the air jump; down + jump drops through
   if (!locked) {

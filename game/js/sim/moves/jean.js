@@ -1,6 +1,6 @@
 // Jean Grey's moves: psychic strikes, short telekinetic pulses that reach a little further. V2's moves and numbers,
-// exactly (phase 0 changes no behaviour); the fields are documented in schema.js. Holding Attack is meant to charge
-// the heavy from the first palm, but that palm ends at 17 ticks, before the 28-tick hold (see schema.js, charge).
+// exactly (phase 0 changed no behaviour; phase 1 grows them); the fields are documented in schema.js. Holding Attack
+// through the first palm charges the heavy (see schema.js, charge).
 import { ON, CANCEL } from './schema.js';
 
 export default {

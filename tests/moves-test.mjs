@@ -113,28 +113,28 @@ for (const hero of HERO_IDS) {
 }
 
 // ---- The charge rule --------------------------------------------------------------------------------------------------
-// In V2 holding Attack never reaches the charge (the first strike ends before the hold does; phase 1 fixes that), so
-// these give the hold a head start to check the rule itself: once the hold reaches `hold` and the first strike is past
-// its active ticks it holds its pose; letting go, or holding on to `hold + release`, fires the charged heavy.
+// Holding Attack from the press: the first strike holds its pose at the end of its active ticks; letting go once the hold
+// is reached fires the charged heavy, holding on fires it by itself at `hold + release`, and letting go early just lets
+// the strike recover (no charge). Phase 1 made this reachable (V2's pose came only after the hold, which the strike never
+// lived to see).
 for (const hero of HERO_IDS) {
   const set = MOVESETS[hero], heavy = set.moves.heavy, C = heavy.charge, from = set.moves[C.from];
-  const attempt = letGo => {
+  const attempt = letGoAt => {
     const { S, p, run, log } = setup(hero);
-    run({ b: BTN.attack });   // the first strike starts
-    p.atkHeld = C.hold;       // the head start: the hold is reached
-    let after = 0;
-    while (after < 200 && !log.some(e => e.type === 'charged')) {
-      const posed = p.move && p.move.id === C.from && p.move.t === from.su + from.ac;
-      run({ b: letGo && posed ? 0 : BTN.attack }); after++;
+    let ticks = 0, posed = 0;
+    while (ticks < 200 && !log.some(e => e.type === 'charged') && (p.move || ticks === 0)) {
+      run({ b: letGoAt !== null && ticks >= letGoAt ? 0 : BTN.attack }); ticks++;
+      if (p.move && p.move.id === C.from && p.move.posed) posed++;
     }
     let box = null;
-    for (let i = 0; i < 40 && !box; i++) { run(); box = S.hitboxes.find(h => h.owner === p.id); }
-    return { after, charged: p.move && p.move.charged, box };
+    for (let i = 0; i < 40 && !box; i++) { run(); box = S.hitboxes.find(h => h.owner === p.id && h.dmg > from.dmg); }
+    return { ticks, posed, charged: !!(p.move && p.move.charged) || log.some(e => e.type === 'charged'), box, swings: log.filter(e => e.type === 'swing').length };
   };
-  const release = attempt(true), hold = attempt(false);
+  const release = attempt(C.hold + 2), hold = attempt(null), early = attempt(from.su + from.ac + 3);
   const dmg = heavy.dmg * 1 * C.dmgMult;
-  assert(release.charged && release.box && release.box.dmg === dmg && hold.charged && hold.box && hold.box.dmg === dmg && hold.after === C.release,
-    `${hero}: with the hold reached, letting go fires the charged heavy (${dmg.toFixed(1)} damage), and holding on fires it ${C.release} ticks later`);
+  assert(release.charged && release.box && release.box.dmg === dmg && hold.charged && hold.box && hold.box.dmg === dmg && hold.ticks === 1 + C.hold + C.release
+    && !early.charged && early.swings === 1 && early.posed > 0,
+    `${hero}: holding Attack poses the first strike; letting go after ${C.hold} ticks fires the charged heavy (${dmg.toFixed(1)} damage), holding on fires it at ${C.hold + C.release}, letting go early just recovers`);
 }
 
 // ---- Every move has its animation clip -------------------------------------------------------------------------------

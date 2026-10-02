@@ -67,20 +67,29 @@ export function startMove(S, p, id, counter) {
 export function runMove(S, p, cmd, E) {
   const M = p.move, set = MOVESETS[p.hero], m = set.moves[M.id], speed = 1 / HERO[p.hero].attackSpeed(p);
   M.t += speed;
-  // Holding Attack through a move another charges from winds that one up instead
+  // Holding Attack through a move another charges from winds that one up instead. The hold counts from the press
+  // that started the move and breaks for good once Attack is let go. While it lasts, the move holds its pose at
+  // the end of its active ticks (`posed`: no hitbox, no step; Evade still gets out). Let go before `hold` and the
+  // move recovers as usual; once the hold is reached the charged move fires on release, or by itself at
+  // `hold + release`.
   const into = RULES[p.hero].chargeInto[M.id];
+  M.posed = false;
   if (into) {
-    const C = set.moves[into].charge;
-    if (holding(p, 'attack')) p.atkHeld++;
-    if (p.atkHeld >= C.hold && M.t >= m.su + m.ac) {
-      if (!holding(p, 'attack') || p.atkHeld >= C.hold + C.release) { startMove(S, p, into, false); p.move.charged = true; emit(S, 'charged', { id: p.id, x: p.x, y: p.y + 1 }); return; }
-      M.t = m.su + m.ac;   // hold the pose while charging
-    }
+    const C = set.moves[into].charge, down = holding(p, 'attack');
+    if (!down) M.letGo = true; else if (!M.letGo) p.atkHeld++;
+    if (M.t >= m.su + m.ac && p.atkHeld >= C.hold) {
+      if (!down || p.atkHeld >= C.hold + C.release) { startMove(S, p, into, false); p.move.charged = true; emit(S, 'charged', { id: p.id, x: p.x, y: p.y + 1 }); return; }
+      M.t = m.su + m.ac; M.posed = true;
+    } else if (M.t >= m.su + m.ac && down && !M.letGo) { M.t = m.su + m.ac; M.posed = true; }
+    if (p.atkHeld === C.hold && down && !M.letGo) emit(S, 'chargeReady', { id: p.id, x: p.x, y: p.y + 1 });
+    if (M.posed && tryEvade(S, p, cmd)) return;
   }
   const t = M.t;
-  // Air moves keep the body moving; on the ground the hero steps forward through startup and active
-  if (t <= m.su + m.ac && p.onGround) p.vx = p.facing * m.step;
-  if (t > m.su && t <= m.su + m.ac) {
+  // Air moves keep the body moving; on the ground the hero steps forward through startup and active, and the step
+  // is kept (physics leaves vx alone while stepping), so the hero travels
+  const stepping = t <= m.su + m.ac && p.onGround && !M.posed;
+  if (stepping) p.vx = p.facing * m.step;
+  if (t > m.su && t <= m.su + m.ac && !M.posed) {
     const [x0, w, y0, h] = m.boxes[0], bonus = m.counter, charge = m.charge;
     spawnHitbox(S, {
       owner: p.id, team: 'p', inst: M.inst, power: HEROES[p.hero].power,
@@ -91,7 +100,7 @@ export function runMove(S, p, cmd, E) {
     });
     if (m.lift && t <= m.su + m.lift.ticks) p.vy = Math.max(p.vy, m.lift.vy);   // the launcher carries the hero up a little
   }
-  physics(S, p, 0, cmd, E, true);
+  physics(S, p, 0, cmd, E, true, stepping);
   if (t >= m.su + m.ac + m.rc) { p.move = null; p.comboT = COMBO_WINDOW; setState(p, 'normal'); return; }
   // Cancels, in the table's order: into Evade, or into the next Attack (taken at the start of recovery, so a chain
   // flows)

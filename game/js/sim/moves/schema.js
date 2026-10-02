@@ -16,17 +16,18 @@
 //   dmg, poise damage, and poise damage, per hit
 //   kb         knockback [x, y] in m/s, x pointing forward
 //   boxes      [[x0, width, y0, height]]: the hitbox (m) for every active tick, from the feet, facing +x
-//   step       forward speed (m/s) while on the ground, through startup and active
+//   step       forward speed (m/s) while on the ground, through startup and active (kept: no deceleration then)
 //   cancel     [{ into, when }]: what the move can cancel into, tried in order. `into` lists 'evade' (the hero's
 //              Evade) and 'attack' (whatever Attack would start now); `when` is 'recovery' (after the active ticks)
 //   launch     optional, true: launches light Sentinels
 //   heavy      optional, true: a heavy hit (it breaks armour plates and staggers longer)
 //   lift       optional, { vy, ticks }: the hero rises at no less than vy (m/s) in the first `ticks` active ticks
 //   charge     optional, { from, hold, release, dmgMult }: holding Attack through the move `from` winds this one up.
-//              Once the hold reaches `hold` ticks and `from` is past its active ticks, `from` holds its pose; this
+//              While Attack stays down from the press that started `from`, `from` holds its pose at the end of its
+//              active ticks. Let go before `hold` ticks and it recovers as usual; once the hold reaches `hold`, this
 //              move fires when Attack is let go, or by itself once the hold reaches `hold + release`, and deals
-//              dmg × dmgMult. (In V2 the first strike always ends before the hold reaches `hold`, so a charge never
-//              happens by holding alone; phase 1 fixes that, and the tests check the rule itself.)
+//              dmg × dmgMult. (V2 only posed after the hold was reached, which the first strike never lived to see,
+//              so V2's charge never fired; phase 1 fixed it.)
 //   counter    optional, { dmgMult, poiseMult }: what it deals extra as the counter out of a perfect defence
 //   hitstop    optional, 'light', 'heavy', 'super' (HITSTOP in config.js) or whole ticks: how long a hit freezes
 //              the hero and the target together. Without it: heavy for a `heavy` move, else light

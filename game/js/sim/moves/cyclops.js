@@ -1,6 +1,6 @@
 // Cyclops's moves: martial-arts strikes that knock Sentinels into blast lines. V2's moves and numbers, exactly
-// (phase 0 changes no behaviour); the fields are documented in schema.js. Holding Attack is meant to charge the
-// heavy from the first strike, but that strike ends at 16 ticks, before the 26-tick hold (see schema.js, charge).
+// (phase 0 changed no behaviour; phase 1 grows them); the fields are documented in schema.js. Holding Attack through
+// the first strike charges the heavy (see schema.js, charge).
 import { ON, CANCEL } from './schema.js';
 
 export default {

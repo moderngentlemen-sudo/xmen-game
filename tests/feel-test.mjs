@@ -65,3 +65,12 @@ function arena(hero = 'cyclops', { trooper = true, dist = 1.2 } = {}) {
   B.until(() => B.p.state === 'hitstun', 20);
   assert(both && B.p.hitstop > 0 && g.hitstop === 0, 'a Sentinel\'s blow freezes it and the hero together; a shot freezes only the hero');
 }
+
+// ---- 1.3 The step forward ----------------------------------------------------------------------------------------
+// A ground strike's step speed is kept through startup and active (V2 lost it to deceleration in the same tick)
+for (const hero of ['cyclops', 'wolverine', 'jean']) {
+  const { p, run } = arena(hero, { trooper: false });
+  const x0 = p.x;
+  run({ b: BTN.attack }); run({}, 30);
+  assert(p.x - x0 >= 0.15, `${hero}: the first strike steps forward ${(p.x - x0).toFixed(2)} m (at least 0.15)`);
+}
