@@ -9,6 +9,7 @@ tools are what you use on top of them to look at the game.
 | `playtest.mjs` | Plays with real keyboard and mouse input, drives the menus, races the mission to the debrief, reports console errors | `NODE_USE_ENV_PROXY=1 node tools/playtest.mjs` |
 | `coop.mjs` | Two players: keyboard and mouse plus a scripted gamepad. Joins, a team-up with real inputs, pad-driven pause | `NODE_USE_ENV_PROXY=1 node tools/coop.mjs` |
 | `probe.mjs` | The test bot plays the mission with no cheats and prints time, failures, kills, team-ups and damage by power | `node tools/probe.mjs 2 1,4,7` |
+| `layout.mjs` | Checks that no HUD element covers the game view, spills out of its band or covers another HUD item, across five window sizes and the HUD's busiest states; saves `layout-<w>x<h>.png` | `NODE_USE_ENV_PROXY=1 node tools/layout.mjs` |
 | `sidebyside.mjs` | Runs this tree beside a reference tree (a worktree of another commit) tick by tick: the simulation, the heroes' poses and the effect calls. Proves a refactor changes nothing, or finds where a golden replay diverged | `node tools/sidebyside.mjs ../ref all` |
 | `publish-prep.mjs` | Copies `game/` into a folder ready to publish as a claude.ai artifact and prints the publish arguments | `node tools/publish-prep.mjs <scratchpad>/publish` |
 

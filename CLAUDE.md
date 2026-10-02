@@ -45,6 +45,9 @@ docs/              the expansion proposal
   commit, and the commit message says so.
 - **Look before you call a phase done**: run `tools/shots.mjs` with a plan for what changed,
   `tools/playtest.mjs` and `tools/coop.mjs`, open the screenshots, and get zero console errors.
+- **No HUD element covers the play area.** The HUD lives in the bands above and below the game view
+  (`#hud-top`, `#hud-bottom` in `game/index.html`); only menus, on a halted game, go over the view.
+  `tools/layout.mjs` must pass after any HUD change.
 - **Keep `window.__X` working** (`game/js/main.js`): every browser tool drives the game through it.
 - **Git**: work on `v2-expansion`. The container is ephemeral, so commit and push after every meaningful step.
   Never rewrite `main`, `v1-original` or `v2-first-proposal`; the last stays frozen at `7ba3a51`, where the

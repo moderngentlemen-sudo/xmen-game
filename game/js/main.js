@@ -12,7 +12,7 @@ import { Music } from './music.js';
 import { Haptics } from './haptics.js';
 
 loadSettings();
-const app = document.getElementById('app'), canvas = document.getElementById('game'), ink = document.getElementById('ink');
+const stage = document.getElementById('stage'), canvas = document.getElementById('game'), ink = document.getElementById('ink');
 const input = new Input(canvas);
 const view = new View(canvas);
 const overlay = new Overlay(ink, view);
@@ -28,11 +28,12 @@ const ui = new UI(document.getElementById('ui'), {
   complete: () => { complete = true; ui.showResults(S); },
 });
 
+// The 3D view and the comic layer fill the stage, between the HUD bands
 function resize() {
-  const r = app.getBoundingClientRect(), w = Math.max(1, Math.floor(r.width)), h = Math.max(1, Math.floor(r.height));
+  const r = stage.getBoundingClientRect(), w = Math.max(1, Math.floor(r.width)), h = Math.max(1, Math.floor(r.height));
   view.resize(w, h); overlay.resize(w, h, Math.min(window.devicePixelRatio || 1, 2));
 }
-new ResizeObserver(resize).observe(app);
+new ResizeObserver(resize).observe(stage);
 resize();
 
 function setPaused(on) { paused = on; ui.setPaused(on); if (!on) { canvas.focus(); input.swallowAll(); } }

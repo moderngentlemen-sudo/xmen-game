@@ -1,6 +1,9 @@
 // The HUD and menus, as comic captions: a plate per player (health, their hero's resource, what is ready),
 // the shared X-Gauge, the Sentinels' adaptation, the mission and the kid, banners for the big beats, and the
 // pages: the cover (start), controls, pause and settings, the debrief.
+// The HUD lives in two bands above and below the game view (#hud-top, #hud-bottom), never over it: banners and
+// the team ultimate's letterbox take over the bands. Only the pages, on a paused or finished game, cover the view.
+// tools/layout.mjs checks that no HUD element reaches into the view.
 import { HEROES, GAUGE, ADAPT, SQUAD } from './sim/config.js';
 import { SECTIONS, MISSION_NAME } from './sim/mission.js';
 import { PLAYER_COLORS, HERO_LOOKS } from './looks.js';
@@ -19,17 +22,23 @@ const pct = (v, m) => `${Math.max(0, Math.min(100, (v / m) * 100)).toFixed(1)}%`
 export class UI {
   constructor(root, actions) {
     this.root = root; this.A = actions;
-    this.hud = el('div', 'hud'); root.appendChild(this.hud);
-    this.missionEl = el('div', 'mission'); this.hud.appendChild(this.missionEl);
-    this.top = el('div', 'topbar'); this.hud.appendChild(this.top);
+    const topBand = document.getElementById('hud-top'), bottomBand = document.getElementById('hud-bottom');
+    this.hudTop = el('div', 'row'); topBand.appendChild(this.hudTop);
+    this.hudBottom = el('div', 'row'); bottomBand.appendChild(this.hudBottom);
+    // Three columns: the mission caption (or the Sentinels' alert in its place), the X-Gauge, the kid
+    const left = el('div', 'left'); this.hudTop.appendChild(left);
+    this.adapt = el('div', 'adapt'); this.adapt.hidden = true; left.appendChild(this.adapt);
+    this.missionEl = el('div', 'mission'); left.appendChild(this.missionEl);
+    this.top = el('div', 'topbar'); this.hudTop.appendChild(this.top);
     this.gauge = el('div', 'gauge', '<div class="lbl"><span>X-Gauge</span><span class="hint"></span></div><div class="meter"><i></i></div>'); this.top.appendChild(this.gauge);
-    this.adapt = el('div', 'adapt'); this.adapt.hidden = true; this.top.appendChild(this.adapt);
-    this.kid = el('div', 'kidplate', '<b>The kid</b><span></span><div class="meter hp"><i></i></div>'); this.hud.appendChild(this.kid);
-    this.plates = el('div', 'plates'); this.hud.appendChild(this.plates);
-    this.letterbox = el('div', 'letterbox', '<i></i><i></i>'); this.hud.appendChild(this.letterbox);
+    const right = el('div', 'right'); this.hudTop.appendChild(right);
+    this.kid = el('div', 'kidplate', '<b>The kid</b><span></span><div class="meter hp"><i></i></div>'); right.appendChild(this.kid);
+    this.plates = el('div', 'plates'); this.hudBottom.appendChild(this.plates);
+    this.topBand = topBand;
+    this.letterbox = [topBand, bottomBand].map(b => { const l = el('div', 'letterbox'); b.appendChild(l); return l; });
     this.bannerEl = null; this.bannerT = 0;
     this.plateEls = new Map();
-    this.hud.hidden = true;
+    this.hudTop.hidden = this.hudBottom.hidden = true;
     this.screen = null; this.paused = false; this.helpOpen = false;
     this.showStart();
   }
@@ -79,7 +88,7 @@ export class UI {
       <div class="btns"><button class="btn" data-act="help">Controls</button><button class="btn" data-act="settings">Settings</button></div>
       <p class="fine">An unofficial, non-commercial fan prototype made with placeholder art and synthesized sound. Not affiliated with, endorsed or sponsored by Marvel. X-Men, Cyclops, Wolverine, Jean Grey and the Sentinels are trademarks of Marvel Characters, Inc.</p>`, 'start');
   }
-  hideStart() { this.started = true; this.closePage(); this.hud.hidden = false; }
+  hideStart() { this.started = true; this.closePage(); this.hudTop.hidden = this.hudBottom.hidden = false; }
 
   helpHtml() {
     const hero = h => `<div class="hero" style="--hc:${HERO_LOOKS[h].energy}"><b>${HERO_LOOKS[h].name}</b><span>${ROLE[h]}</span><p>${BLURB[h]}</p></div>`;
@@ -148,7 +157,7 @@ export class UI {
   banner(text, sub = '', bad = false, secs = 2.2) {
     if (this.bannerEl) this.bannerEl.remove();
     this.bannerEl = el('div', 'banner' + (bad ? ' bad' : ''), `<strong>${text}</strong>${sub ? `<span>${sub}</span>` : ''}`);
-    this.hud.appendChild(this.bannerEl); this.bannerT = secs;
+    this.topBand.appendChild(this.bannerEl); this.bannerT = secs;
   }
 
   onEvent(ev, S) {
@@ -187,7 +196,7 @@ export class UI {
       this.kid.classList.toggle('alarm', k.state === 'carried' || k.state === 'downed');
     }
     // Ultimate letterbox
-    this.letterbox.classList.toggle('on', !!(S.ult && S.ult.phase !== 'end'));
+    for (const l of this.letterbox) l.classList.toggle('on', !!(S.ult && S.ult.phase !== 'end'));
     // Player plates
     const seen = new Set();
     for (const p of S.players) {
@@ -195,7 +204,7 @@ export class UI {
       let P = this.plateEls.get(p.id);
       if (!P) {
         P = el('div', 'plate', `<div class="top"><span class="tag"></span><span class="name"></span><span class="role"></span></div><div class="meter hp"><i></i></div>
-          <div class="meter res r1"><i></i><b></b></div><div class="meter res r2"><i></i><b></b></div><div class="chips"></div><div class="bench"></div>`);
+          <div class="meter res r1"><i></i><b></b></div><div class="meter res r2"><i></i><b></b></div><div class="foot"><div class="chips"></div><div class="bench"></div></div>`);
         P.style.setProperty('--pc', PLAYER_COLORS[p.slot]); this.plates.appendChild(P); this.plateEls.set(p.id, P);
       }
       this.fillPlate(P, p, S);
@@ -231,7 +240,7 @@ export class UI {
     if (ch.innerHTML !== html) ch.innerHTML = html;
     const bench = q('.bench');
     if (p.squad) {
-      const bh = p.squad.map(s => `<span class="${s.hero === p.hero ? 'cur' : ''} ${s.down ? 'down' : ''}">${HEROES[s.hero].name.split(' ')[0]}<i style="width:${pct(s.hero === p.hero ? p.hp : s.hp, HEROES[s.hero].hp)}"></i></span>`).join('');
+      const bh = p.squad.map(s => `<span class="${s.hero === p.hero ? 'cur' : ''} ${s.down ? 'down' : ''}" title="${HEROES[s.hero].name}">${HEROES[s.hero].name.split(' ')[0].slice(0, 3)}<i style="width:${pct(s.hero === p.hero ? p.hp : s.hp, HEROES[s.hero].hp)}"></i></span>`).join('');
       if (bench.innerHTML !== bh) bench.innerHTML = bh;
       bench.hidden = false;
     } else bench.hidden = true;

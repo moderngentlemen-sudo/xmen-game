@@ -8,7 +8,8 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bangers&family=Barlow:wght@400;500;600&family=Saira+Condensed:wght@600;700;800&display=swap">
 <style>
-/* A comic book: ink borders, yellow caption boxes, halftone paper behind the menus. The game fills the page. */
+/* A comic book: ink borders, yellow caption boxes, halftone paper behind the menus. The game view (the stage) sits
+   between two HUD bands, so no HUD element ever covers the play area; only menus, on a paused game, go over it. */
 :root {
   --ink: #120d1a; --paper: #fff8e7; --caption: #ffd23f; --text: #f7f3ff; --muted: #b9b0cf; --plate: rgba(18, 13, 26, 0.86);
   --hostile: #ff2e7e; --gold: #ffd23f; --font-comic: 'Bangers', 'Impact', 'Arial Black', sans-serif;
@@ -18,8 +19,18 @@
 [hidden] { display: none !important; }
 html, body { height: 100%; margin: 0; }
 body { background: #1d1648; color: var(--text); font-family: var(--font-body); overflow: hidden; }
-#app { position: relative; width: 100%; height: 100%; overflow: hidden; background: #1d1648; }
+#app { position: relative; width: 100%; height: 100%; overflow: hidden; background: #1d1648; display: flex; flex-direction: column; }
+#stage { position: relative; flex: 1 1 auto; min-height: 0; overflow: hidden; }
 #game, #ink { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.band { position: relative; flex: none; overflow: hidden; pointer-events: none; font-size: 15px;
+  background: radial-gradient(circle, rgba(255,248,231,0.07) 1px, transparent 1.4px) 0 0 / 6px 6px, var(--ink); }
+#hud-top { height: 54px; border-bottom: 3px solid #000; }
+#hud-bottom { height: 108px; border-top: 3px solid #000; }
+.band > .row { position: absolute; inset: 0; }
+#hud-top > .row { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 10px; padding: 0 10px 3px; }
+#hud-top .left { display: flex; align-items: center; min-width: 0; }
+#hud-top .right { display: flex; justify-content: flex-end; align-items: center; min-width: 0; }
+#hud-top .adapt:not([hidden]) + .mission { display: none; }   /* the Sentinels' alert takes the caption's place */
 #game { outline: none; }
 #ink { pointer-events: none; }
 #ui { position: absolute; inset: 0; pointer-events: none; font-size: 15px; }
@@ -63,46 +74,45 @@ th { font-family: var(--font-display); text-transform: uppercase; letter-spacing
 .setting select { font: inherit; }
 
 /* The HUD: caption boxes */
-.plates { position: absolute; left: 12px; right: 12px; bottom: 12px; display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
-.plate { width: min(250px, 23vw); min-width: 180px; background: var(--paper); color: var(--ink); border: 3px solid var(--ink); box-shadow: 4px 4px 0 var(--ink); padding: 5px 9px 7px; transform: rotate(-0.6deg); }
-.plate:nth-child(even) { transform: rotate(0.6deg); }
-.plate .top { display: flex; align-items: baseline; gap: 7px; }
-.plate .tag { font-family: var(--font-comic); font-size: 20px; color: var(--pc); -webkit-text-stroke: 1px var(--ink); }
-.plate .name { font-family: var(--font-comic); font-size: 22px; letter-spacing: 0.03em; }
-.plate .role { margin-left: auto; font-family: var(--font-display); font-weight: 700; font-size: 11px; text-transform: uppercase; letter-spacing: 0.1em; color: #5a5068; }
-.meter { position: relative; height: 10px; margin: 3px 0; border: 2px solid var(--ink); background: #e9e1cf; overflow: hidden; }
+.plates { position: absolute; left: 8px; right: 8px; top: 8px; bottom: 6px; display: flex; gap: 10px; justify-content: center; align-items: flex-start; flex-wrap: nowrap; }
+.plate { width: min(250px, 24%); min-width: 0; overflow: hidden; background: var(--paper); color: var(--ink); border: 3px solid var(--ink); box-shadow: 3px 3px 0 #000; padding: 2px 8px 4px; transform: rotate(-0.5deg); }
+.plate:nth-child(even) { transform: rotate(0.5deg); }
+.plate .top { display: flex; align-items: baseline; gap: 6px; line-height: 1.05; white-space: nowrap; overflow: hidden; }
+.plate .tag { font-family: var(--font-comic); font-size: 18px; color: var(--pc); -webkit-text-stroke: 1px var(--ink); }
+.plate .name { font-family: var(--font-comic); font-size: 20px; letter-spacing: 0.03em; }
+.plate .role { margin-left: auto; font-family: var(--font-display); font-weight: 700; font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.1em; color: #5a5068; overflow: hidden; text-overflow: ellipsis; }
+.meter { position: relative; height: 9px; margin: 2px 0; border: 2px solid var(--ink); background: #e9e1cf; overflow: hidden; }
 .meter i { position: absolute; left: 0; top: 0; bottom: 0; }
 .meter.hp i { background: #39c46a; } .meter.hp.low i { background: #ff3a24; }
-.meter.res { height: 7px; } .meter.res i { background: var(--rc); }
-.meter.res b { position: absolute; right: 3px; top: -4px; font-family: var(--font-display); font-weight: 800; font-size: 10px; line-height: 1; }
-.chips { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 3px; min-height: 18px; }
-.chip { font-family: var(--font-display); font-weight: 800; font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; padding: 0 5px; border: 2px solid var(--ink); background: #fff; }
+.meter.res { height: 10px; } .meter.res i { background: var(--rc); }
+.meter.res b { position: absolute; right: 3px; top: 0; font-family: var(--font-display); font-weight: 800; font-size: 9px; line-height: 6px; text-transform: uppercase; }
+.foot { display: flex; gap: 6px; align-items: center; margin-top: 3px; min-height: 17px; }
+.chips { display: flex; flex-wrap: nowrap; gap: 3px; overflow: hidden; flex: 1 1 auto; min-width: 0; }
+.chip { font-family: var(--font-display); font-weight: 800; font-size: 10.5px; line-height: 13px; text-transform: uppercase; letter-spacing: 0.05em; padding: 0 4px; border: 2px solid var(--ink); background: #fff; white-space: nowrap; }
 .chip.on { background: var(--caption); } .chip.hot { background: #ff3a24; color: #fff; } .chip.off { opacity: 0.45; }
-.bench { display: flex; gap: 4px; margin-top: 4px; }
-.bench span { flex: 1; font-family: var(--font-display); font-weight: 800; font-size: 11px; text-transform: uppercase; padding: 1px 4px; border: 2px solid var(--ink); background: #fff; position: relative; overflow: hidden; }
+.bench { display: flex; gap: 3px; flex: none; }
+.bench span { font-family: var(--font-display); font-weight: 800; font-size: 10px; line-height: 13px; text-transform: uppercase; padding: 0 4px 1px; border: 2px solid var(--ink); background: #fff; position: relative; overflow: hidden; }
 .bench span i { position: absolute; left: 0; bottom: 0; height: 3px; background: #39c46a; }
 .bench span.cur { background: var(--caption); } .bench span.down { opacity: 0.4; text-decoration: line-through; }
-.topbar { position: absolute; top: 12px; left: 50%; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: 6px; }
-.gauge { width: min(420px, 60vw); background: var(--paper); border: 3px solid var(--ink); box-shadow: 4px 4px 0 var(--ink); padding: 3px 8px 5px; color: var(--ink); }
+.topbar { display: flex; align-items: center; }
+.gauge { width: min(380px, 38vw); background: var(--paper); border: 3px solid var(--ink); box-shadow: 4px 4px 0 var(--ink); padding: 3px 8px 5px; color: var(--ink); }
 .gauge .lbl { display: flex; justify-content: space-between; font-family: var(--font-comic); font-size: 17px; letter-spacing: 0.04em; }
 .gauge .meter i { background: linear-gradient(90deg, #ffd23f, #fff1b8); }
 .gauge.full .meter i { animation: gaugeGlow 0.5s ease-in-out infinite alternate; }
 @keyframes gaugeGlow { from { background: #ffd23f; } to { background: #ff3a24; } }
-.kidplate { position: absolute; top: 12px; right: 12px; background: var(--paper); color: var(--ink); border: 3px solid var(--ink); box-shadow: 4px 4px 0 var(--ink); padding: 3px 8px 5px; width: 150px; }
+.kidplate { flex: none; background: var(--paper); color: var(--ink); border: 3px solid var(--ink); box-shadow: 4px 4px 0 var(--ink); padding: 3px 8px 5px; width: 150px; }
 .kidplate b { font-family: var(--font-comic); font-size: 17px; letter-spacing: 0.04em; } .kidplate span { float: right; font-family: var(--font-display); font-weight: 800; font-size: 12px; text-transform: uppercase; }
 .kidplate.alarm { background: #ff3a24; color: #fff; }
-.mission { position: absolute; top: 12px; left: 12px; background: var(--caption); color: var(--ink); border: 3px solid var(--ink); box-shadow: 4px 4px 0 var(--ink); padding: 3px 9px; font-family: var(--font-display); font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em; font-size: 13px; max-width: 40vw; }
-.adapt { background: var(--hostile); color: #fff; border: 3px solid var(--ink); box-shadow: 4px 4px 0 var(--ink); padding: 3px 10px; font-family: var(--font-display); font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em; font-size: 13px; text-align: center; }
-.adapt small { display: block; font-weight: 600; text-transform: none; letter-spacing: 0; font-size: 12.5px; }
-.banner { position: absolute; left: 50%; top: 22%; transform: translateX(-50%) rotate(-2deg); text-align: center; pointer-events: none; animation: bannerIn 0.35s cubic-bezier(0.2, 1.5, 0.4, 1); }
-.banner strong { display: block; font-family: var(--font-comic); font-weight: 400; font-size: clamp(40px, 7vw, 86px); letter-spacing: 0.03em; color: var(--caption); -webkit-text-stroke: 3px var(--ink); text-shadow: 6px 6px 0 var(--ink); white-space: nowrap; }
-.banner span { display: inline-block; margin-top: 6px; background: var(--paper); color: var(--ink); border: 3px solid var(--ink); padding: 3px 10px; font-family: var(--font-display); font-weight: 800; text-transform: uppercase; letter-spacing: 0.06em; }
-.banner.bad strong { color: #ff3a24; }
-@keyframes bannerIn { from { transform: translateX(-50%) rotate(-2deg) scale(1.8); opacity: 0; } to { transform: translateX(-50%) rotate(-2deg) scale(1); opacity: 1; } }
-.letterbox { position: absolute; inset: 0; pointer-events: none; }
-.letterbox i { position: absolute; left: 0; right: 0; height: 8vh; background: var(--ink); transition: transform 0.2s; }
-.letterbox i:first-child { top: 0; transform: translateY(-101%); } .letterbox i:last-child { bottom: 0; transform: translateY(101%); }
-.letterbox.on i { transform: none; }
+.mission { box-sizing: border-box; min-width: 0; background: var(--caption); color: var(--ink); border: 3px solid var(--ink); box-shadow: 4px 4px 0 var(--ink); padding: 3px 9px; font-family: var(--font-display); font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em; font-size: 13px; max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.adapt { box-sizing: border-box; min-width: 0; max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; background: var(--hostile); color: #fff; border: 3px solid var(--ink); box-shadow: 4px 4px 0 var(--ink); padding: 1px 8px; font-family: var(--font-display); font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em; font-size: 12px; line-height: 1.2; text-align: center; }
+.adapt small { display: block; font-weight: 600; text-transform: none; letter-spacing: 0; font-size: 11.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.banner { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; gap: 14px; background: var(--caption); pointer-events: none; animation: bannerIn 0.3s cubic-bezier(0.2, 1.5, 0.4, 1); }
+.banner strong { font-family: var(--font-comic); font-weight: 400; font-size: 38px; line-height: 1; letter-spacing: 0.03em; color: #fff; -webkit-text-stroke: 2px var(--ink); text-shadow: 3px 3px 0 var(--ink); white-space: nowrap; }
+.banner span { background: var(--paper); color: var(--ink); border: 3px solid var(--ink); padding: 2px 10px; font-family: var(--font-display); font-weight: 800; text-transform: uppercase; letter-spacing: 0.06em; white-space: nowrap; }
+.banner.bad { background: #ff3a24; }
+@keyframes bannerIn { from { transform: scaleY(0.2); opacity: 0; } to { transform: none; opacity: 1; } }
+.letterbox { position: absolute; inset: 0; background: var(--ink); transform: scaleY(0); transition: transform 0.2s; pointer-events: none; }
+.letterbox.on { transform: none; }
 @media (max-width: 760px) { .plate { min-width: 150px; } .mission { display: none; } }
 @media (prefers-reduced-motion: reduce) { .join, .banner, .gauge.full .meter i { animation: none; } }
 </style>
@@ -115,8 +125,12 @@ th { font-family: var(--font-display); text-transform: uppercase; letter-spacing
 } }
 </script>
 <div id="app">
-  <canvas id="game" tabindex="0" aria-label="X-Men: Sentinel Strike, Team Edition game view"></canvas>
-  <canvas id="ink" aria-hidden="true"></canvas>
+  <div id="hud-top" class="band"></div>
+  <div id="stage">
+    <canvas id="game" tabindex="0" aria-label="X-Men: Sentinel Strike, Team Edition game view"></canvas>
+    <canvas id="ink" aria-hidden="true"></canvas>
+  </div>
+  <div id="hud-bottom" class="band"></div>
   <div id="ui"></div>
 </div>
 <script type="module" src="./js/main.js"></script>
