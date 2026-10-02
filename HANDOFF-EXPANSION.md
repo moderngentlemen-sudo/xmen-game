@@ -1,11 +1,12 @@
 # Handoff: the Team Edition expansion (branch `v2-expansion`)
 
-> **Status, 2 October 2026 (end of the session that started phase 1):** **phase 1's simulation is done; its client
-> work is next.** Done: steps 1.1 to 1.7 (hitstop, the charged heavy, twelve reactions, combo scaling, style and the
-> meter, the input grammar, **all 29 slots for Cyclops, Wolverine and Jean**), the trial half of 1.10 (15 combo trials
-> in `sim/trials.js`, all passing) and 1.11 (`tools/contact.mjs`). `tests/gate/phase1.mjs` is **23 of 23** green and
-> `node tests/run-all.mjs` passes 186 checks. **Next: 1.8 animation, 1.9 effects, then the Danger Room's screens (the
-> rest of 1.10), then the gate (1.12): publish and ask the user to play it.** Nothing of phase 1 is published yet.
+> **Status, 2 October 2026:** **phase 1 is built and published, and waits on the user's play-test** (its gate: they
+> play it and approve the feel). Every step 1.1 to 1.12 is done: in-sim hitstop, twelve reactions, combos with style
+> and a three-bar meter, all 29 move slots for Cyclops, Wolverine and Jean, 19-joint animation with polished clips,
+> the effects (GPU sparks, bone trails, a light pool, decals, distortion rings, cut-ins), and the Danger Room with 15
+> combo trials. `tests/gate/phase1.mjs` is 23 of 23; `node tests/run-all.mjs` passes 200 checks. Build:
+> https://claude.ai/artifact/XrHCiiHD9HSnzyii2eE7vm. **Next: whatever the user says about the feel (tune it in the
+> Danger Room), then phase 2, depth.**
 > **Update this box, the phase checklists and the log at the end of every session.**
 
 | | |
@@ -15,6 +16,7 @@
 | Where V2 started | branch `v2-first-proposal`, frozen at `7ba3a51`; its notes are in `HANDOFF.md` |
 | V2 as published | https://claude.ai/artifact/MzaN97QpEmcpV11n83Aq7A |
 | Ready room build (after phase 0) | https://claude.ai/artifact/UhSDGngLMLnCuq1W4CNjSj |
+| Phase 1 build (at its gate) | https://claude.ai/artifact/XrHCiiHD9HSnzyii2eE7vm |
 | Rules | `CLAUDE.md` |
 | Tools | `tools/README.md` |
 
@@ -42,8 +44,8 @@ on their own laptop) and phase 5 (they sign off the release).
 | Phase | Delivers | Gate | State |
 |---|---|---|---|
 | 0. Foundations | one move engine; V2's three heroes moved onto tables; animation clips and effect cues, still in V2's look | the same inputs give the same behaviour as V2 (golden replays); all 78 checks and the bot pass | done 2 Oct, gate passed |
-| 1. Feel | about 30 moves each for Cyclops, Wolverine and Jean; in-sim hitstop, 12 reactions, the new effects; the Danger Room | every move tested; 15 combo trials pass; the user approves the feel | next |
-| 2. Depth | the play line on a 3D path; five layers; light, fog, depth of field; Extraction rebuilt in the new set, with depth knockbacks | the bot finishes Extraction in the set; 60 fps at Medium on the user's laptop | |
+| 1. Feel | about 30 moves each for Cyclops, Wolverine and Jean; in-sim hitstop, 12 reactions, the new effects; the Danger Room | every move tested; 15 combo trials pass; the user approves the feel | built and published 2 Oct; waits on the user's play-test |
+| 2. Depth | the play line on a 3D path; five layers; light, fog, depth of field; Extraction rebuilt in the new set, with depth knockbacks | the bot finishes Extraction in the set; 60 fps at Medium on the user's laptop | next |
 | 3. Roster wave 1 | Storm, Colossus and Nightcrawler, with their team-ups; Bulwarks, Lancers and swarm drones | 29 move tests and 5 trials per hero; bots finish with random squads | |
 | 4. Roster wave 2 | Psylocke, Gambit and Rogue; team-ups for all 36 pairs; Wardens and siege walkers; mission 2, the Foundry Line | a test for every pair's team-up; bots finish both missions with all nine | |
 | 5. Content and polish | mission 3, Downtown, and the Giant; the full Danger Room; quality tiers; balance from bot stats; the release | 45 trials pass; bots finish all 3 missions; the user signs off | |
@@ -237,20 +239,36 @@ they arrive.
     its `reach`. The plan was: Fill the 29 slots for the three heroes from section 5.4, with a suite that walks every move of
   every table (it carries the marker `EVERY_MOVE_TESTED`, which the gate looks for): each move starts from its
   input, puts out its hitbox on its active ticks, and causes its reaction on a trooper.
-- [ ] **1.8 Animation.** Grow the skeleton to 19 joints (neck, chest, both wrists, both ankles) and add spring chains
+- [x] **1.8 Animation.** Done: `chestAndNeck()` in `rigs.js` adds a chest joint (mid-back) and a neck after a builder
+  has dressed the rig, so the builders are unchanged (19 joints with wrists and ankles); `anim.js` splits the spine's
+  pitch between lower back and chest, keeps feet flat while standing, lags wrists behind elbows, smears the body
+  for a frame on the strike, swings hair locks on springs, and `polish()` adds anticipation, overshoot and settle keys
+  to every clip (6 to 10 keys; `moves-test` checks). The new moves' poses are still the shared ones from
+  `anim/clips/shared.js`: hand-made clips per move are polish for later. The plan was: Grow the skeleton to 19 joints (neck, chest, both wrists, both ankles) and add spring chains
   for hair. Clips get 6 to 10 keys with helpers for anticipation, smear, overshoot and settle. The pose is driven by
   the move's tick.
-- [ ] **1.9 Effects** under `game/js/vfx/`: instanced GPU particles; ribbon trails from bones; smear stretch; speed
+- [x] **1.9 Effects.** Done under `game/js/vfx/`: `particles.js` (GPU sparks), `trails.js` (bone ribbons), `lights.js`
+  (8 pooled lights), `decals.js`, `post.js` (the distortion pass, added to the composer in `view.js`), `MOVE_FX` in
+  `cues.js` (per-move visuals: Cyclops's beams, Jean's crush and firestorm), and in `overlay.js` speed lines, focus
+  lines and the super cut-in. Settings: Clarity and Reduce flashing. Check with `tools/plans/effects.mjs`. The plan: under `game/js/vfx/`: instanced GPU particles; ribbon trails from bones; smear stretch; speed
   and focus lines (overlay); a screen-space distortion ring (post); **a fixed pool of 8 lights** (see the lessons);
   floor decals and Sentinel debris; super cut-ins; Clarity and Reduce flashing settings.
-- [ ] **1.10 The Danger Room.** Half done: the 15 trials (`game/js/sim/trials.js`, `runTrial` plays one the way a
+- [x] **1.10 The Danger Room.** Done. Simulation: `sim/dangerRoom.js` (`S.danger` replaces the mission's tick; sparring
+  settings), the trial pilot (`pilot()` generator in `trials.js`, shared by the tests and the live demos; tokens in its
+  header). Client: `danger.js` (each move's input in words and its demo), the pages in `hud.js` (`showDanger*`), the
+  wiring in `main.js` (`enterDanger`, `demo`, `tryTrial`, `trackTrial`), the readout in the top band and the hitbox
+  outlines in `overlay.js`. Tests: `tests/danger-test.mjs` (the room, every trial and every move's demo played the
+  way the client plays them). Check with `tools/plans/danger.mjs`. Earlier half: the 15 trials (`game/js/sim/trials.js`, `runTrial` plays one the way a
   sharp player would and returns the world, for demos; `tests/trials-test.mjs`). Still to build: the mode itself. The
   plan: (a mode, not a mission): the move list with live demos; frame data and hitbox
   readouts; sparring Sentinels with settings; 5 combo trials per hero in `game/js/sim/trials.js`, each also a test
   (`tests/trials-test.mjs`: scripted inputs, then the expected route and hit count).
 - [x] **1.11 A contact-sheet tool**, done ahead of order (the new moves needed it): `tools/contact.mjs`. The plan:, `tools/contact.mjs`. It screenshots every move on its first active tick, one
   page per hero. Reuse one page for many shots: a fresh page per shot costs 20 s or more in software GL.
-- [ ] **1.12 Gate.** `tests/gate/phase1.mjs` all green, every move has a test, the 15 trials pass, contact sheets
+- [x] **1.12 Gate**, all but the user's part: the gate spec is 23 of 23, every move is tested (`movelist-test`), the
+  15 trials pass, the contact sheets were reviewed, the golden replays were re-recorded at the end ("phase 1 complete"),
+  and the build is published (linked above; the published copy's title is "Team Edition Phase 1"). **Waiting on the
+  user to play it and approve the feel.** The plan was: `tests/gate/phase1.mjs` all green, every move has a test, the 15 trials pass, contact sheets
   are reviewed, the golden replays re-recorded at the end, and the build is published. Then ask the user to play it
   and approve the feel.
 
@@ -518,6 +536,9 @@ V2's adaptation rule stays: one counter at a time, and team hits are never count
 
 ### Client and three.js
 
+- **An effect made each frame must outlive the frame.** In software GL a frame is 50 to 100 ms, so a ribbon with a 50 ms
+  life was removed in the update that made it. `FX.update` now fades first and makes state-driven effects last.
+
 - **Bake merged geometry correctly.** Call `group.updateMatrixWorld(true)` before baking a group into one
   geometry, or every part lands at the origin.
 - **Keep a fixed light pool.** Changing the number of lights in a three.js scene recompiles every material's
@@ -601,6 +622,7 @@ V2's adaptation rule stays: one counter at a time, and team hits are never count
 
 | Date | What happened |
 |---|---|
+| 2026-10-02 | **Phase 1 built and published** (same session, after "please continue"): 1.8 animation (19 joints, polished clips, hair springs), 1.9 effects (`game/js/vfx/`), 1.10 the Danger Room (simulation, pilot, screens), 1.12 the gate's checks. Found on the way: short-lived ribbons were removed before they were ever drawn (state effects now run after the fading pass), a trail index ran past its history. 200 checks pass; gate spec 23 of 23. Published: https://claude.ai/artifact/XrHCiiHD9HSnzyii2eE7vm (also in the README on `main`). Next: the user's play-test of the feel, then phase 2. |
 | 2026-10-02 | **Phase 1, same session, continued:** 1.7 finished (powers as module moves, directional specials on Power taps, supers and ultimates on Signature with the meter, the cancel ladder; all 29 slots for all three heroes), 1.10's 15 combo trials (`sim/trials.js`, `tests/trials-test.mjs`). The trials found that the wall bounce lost its speed to the collision (fixed). `tests/gate/phase1.mjs` 23 of 23; 186 checks pass; bot seeds tried all finish. The solo bot is slower since the power counter (it re-presses Power after its evades); see 1.7. Not published. Next: 1.8 animation, 1.9 effects, the Danger Room's screens, then the gate. |
 | 2026-10-02 | **Phase 1 started.** No new comments on the proposal doc (only our own approval question). Refined phase 1 into steps 1.1 to 1.12 and wrote its gate as `tests/gate/phase1.mjs` (23 checks). Done: 1.1 baseline (golden file renamed `replays.json`, labelled), 1.2 in-sim hitstop (`hitPause` retired for a client slow motion), 1.3 the charged heavy fires and the step is kept, 1.4 twelve reactions (`sim/reactions.js`), 1.5 combo scaling, style rank and meter (`sim/combo.js`, plate HUD), 1.6 the input grammar and slot ids, 1.7 in two of three parts (strikes; throws, executions, power counter), 1.11 `tools/contact.mjs`. Found and fixed: tagging out never called the old hero's `cancel` (the kid stayed in Jean's grip for ever); the bot could not climb to, or drop down to, a downed kid, nor reach a Sentinel above it; HUD class `r2` clashed with Jean's resource bar. New suites: `feel-test`, `reactions-test`, `movelist-test`. 163 checks pass; every bot seed tried finishes (solo 1 to 15, co-op 2 to 4 players). Gate 18 of 23. Not published yet. Next: 1.7's powers and Signature. |
 | 2026-10-02 | **Menus and HUD pass** (section 3b), asked for by the user before phase 1: HUD bands so nothing covers play, `tools/layout.mjs`, the ready room, honest controls text, confirmations, debrief routes, first-time hints, key rebinding. Tests (107), layout check, playtest and co-op clean. Published: https://claude.ai/artifact/UhSDGngLMLnCuq1W4CNjSj (also in the README on `main`). Next: phase 1. |
