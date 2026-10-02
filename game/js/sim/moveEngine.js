@@ -6,10 +6,10 @@
 // relative to facing, the dash and air chain contexts, cancel windows in ticks, cancels on hit). Its state on the
 // player: p.move = { id, t, inst, counter, charged, hit, posed, letGo }, p.combo (the ground chain's index),
 // p.airCombo (the air chain's), p.chainOf (which chain the last strike belonged to), p.comboT (the window to continue a chain) and p.atkHeld (the charge hold).
-import { ACTION_BUFFER, BTN, COMBO_WINDOW, DASH, ENEMIES, EXEC, HEROES, HITSTOP, JUMP_BUFFER, PAIR, STICK, THROW } from './config.js';
+import { ACTION_BUFFER, BTN, COMBO_WINDOW, DASH, ENEMIES, EXEC, HEROES, HITSTOP, JUMP_BUFFER, PAIR, STICK, THROW, METER } from './config.js';
 import { MOVESETS } from './moves/index.js';
 import { emit, newId, ent } from './world.js';
-import { spawnHitbox, hitEnemy, releaseToken } from './combat.js';
+import { spawnHitbox, spawnProjectile, hitEnemy, releaseToken } from './combat.js';
 import { hittable } from './reactions.js';
 import { physics, setState, tryEvade } from './player.js';
 import { HERO } from './heroes/index.js';
@@ -20,19 +20,21 @@ const DIRS = ['neutral', 'fwd', 'back', 'up', 'down'];
 // counter move, and which move holding Attack through another winds up
 const RULES = {};
 for (const [hero, set] of Object.entries(MOVESETS)) {
-  const start = { ground: {}, air: {}, dash: {} }, chargeInto = {}, pair = { beside: {}, air: {}, stunned: {} };
+  const start = { ground: {}, air: {}, dash: {} }, chargeInto = {}, pair = { beside: {}, air: {}, stunned: {} }, special = {}, sigMove = {};
   let counter = null, counterP = null;
   const chains = [...set.chain, ...(set.airChain || [])];
   for (const pass of ['any', 'specific']) for (const [id, m] of Object.entries(set.moves)) {
+    if (m.module) continue;   // run by the hero's module
     if (pass === 'any' && m.charge) chargeInto[m.charge.from] = id;
-    if (m.input.btn === 'power') { counterP = id; continue; }
+    if (m.input.btn === 'power') { if (m.input.ctx === 'counter') counterP = id; else special[m.input.dir] = id; continue; }
+    if (m.input.btn === 'sig') { sigMove[m.input.dir] = id; continue; }
     if (m.input.btn === 'pair') { if ((m.input.dir === 'any') === (pass === 'any')) for (const dir of m.input.dir === 'any' ? DIRS : [m.input.dir]) pair[m.input.ctx][dir] = id; continue; }
     if (chains.includes(id) || m.input.ctx === 'hold' || m.input.ctx === 'alt') continue;
     if (m.input.ctx === 'counter') { counter = id; continue; }
     if ((m.input.dir === 'any') !== (pass === 'any')) continue;
     for (const dir of m.input.dir === 'any' ? DIRS : [m.input.dir]) start[m.input.ctx][dir] = id;
   }
-  RULES[hero] = { start, counter, counterP, chargeInto, pair };
+  RULES[hero] = { start, counter, counterP, chargeInto, pair, special, sigMove };
 }
 const holding = (p, name) => (p.held & BTN[name]) !== 0;
 // A move's hitstop in ticks (moves/schema.js, hitstop)
@@ -43,6 +45,32 @@ export const counterMove = p => RULES[p.hero].counter;
 export const counterPowerMove = p => RULES[p.hero].counterP;
 // A move's invulnerability window covers the hero now
 export const moveInvuln = p => { const m = p.move && MOVESETS[p.hero].moves[p.move.id]; return !!(m && m.invuln && p.move.t >= m.invuln[0] && p.move.t <= m.invuln[1]); };
+
+// ---- Specials, supers and ultimates ------------------------------------------------------------------------------
+// A Power tap with forward or up held: the directional special, instead of whatever the hero's module would have done
+// with the tap (the module's power is cancelled first). Returns true if one started.
+export function trySpecial(S, p) {
+  const id = RULES[p.hero].special[dirOf(p)];
+  if (!id) return false;
+  if (p.move || p.state !== 'normal') p.move = null;
+  HERO[p.hero].cancel(S, p); setState(p, 'normal');
+  p.buf.power = 99;
+  startMove(S, p, id, false);
+  return true;
+}
+// Signature with forward held: the super; with up: the ultimate. Without the meter for it, false (the caller falls
+// back to the plain Signature) and a meterLow event.
+export function trySigMove(S, p) {
+  const id = RULES[p.hero].sigMove[dirOf(p)];
+  if (!id) return false;
+  const m = MOVESETS[p.hero].moves[id];
+  if (p.meter < m.cost) { emit(S, 'meterLow', { id: p.id, need: m.cost, have: p.meter }); return false; }
+  if (p.move || p.state !== 'normal') p.move = null;
+  HERO[p.hero].cancel(S, p); setState(p, 'normal');
+  p.buf.sig = 99;
+  startMove(S, p, id, false);
+  return true;
+}
 
 // ---- Pairs: Attack and Power together (PAIR in config.js) ------------------------------------------------------------
 // Attack and Power both pressed within PAIR.window ticks, one of them just now (p.lastPress ages the presses: starting
@@ -124,6 +152,10 @@ export function tryAttack(S, p) {
 
 export function startMove(S, p, id, counter, target = 0) {
   p.move = { id, t: 0, inst: newId(S), counter, charged: false, hit: false, target };
+  const mv = MOVESETS[p.hero].moves[id];
+  // A super or an ultimate spends its meter, and a resource it burns, as it starts
+  if (mv.cost) { p.meter = Math.max(0, p.meter - mv.cost); emit(S, 'super', { id: p.id, move: id, hero: p.hero, ult: mv.cost >= METER.ult, x: p.x, y: p.y + p.h * 0.6 }); }
+  if (mv.spend) p[mv.spend] = 0;
   // A grab takes hold of its target at once
   const tgt = target ? ent(S, target) : null;
   if (tgt) { tgt.state = 'held'; tgt.st = 0; tgt.heldBy = p.id; tgt.atk = null; tgt.vx = tgt.vy = 0; releaseToken(S, tgt); }
@@ -147,6 +179,26 @@ function grabTick(S, p, M, m, t) {
   hitEnemy(S, e, { owner: p.id, team: 'p', inst: M.inst, power: HEROES[p.hero].power, dmg: m.dmg, poise: m.poise, kb: [p.facing * m.kb[0], m.kb[1]],
     heavy: !!m.heavy, melee: true, hitstop: hitstopOf(m), react: m.react, juggle: m.juggle, move: M.id, kind: 'grab' });
   emit(S, 'throw', { id: p.id, move: M.id, target: e.id, x: e.x, y: e.y + e.h * 0.5, hero: p.hero });
+}
+
+// The move's shots: fanned around the hero's facing, from chest height
+function fireShots(S, p, m) {
+  const Q = m.shots;
+  for (let i = 0; i < Q.n; i++) {
+    const a = (i - (Q.n - 1) / 2) * Q.spread, dx = Math.cos(a) * p.facing, dy = Math.sin(a);
+    spawnProjectile(S, { team: 'p', owner: p.id, x: p.x + p.facing * 0.6, y: p.y + p.h * 0.6, vx: dx * Q.speed, vy: dy * Q.speed, r: Q.r, dmg: Q.dmg, poise: Q.poise,
+      kind: Q.kind || 'shot', power: HEROES[p.hero].power, ttl: Q.ttl, react: m.react });
+  }
+  emit(S, 'shots', { id: p.id, move: p.move.id, n: Q.n, x: p.x, y: p.y + p.h * 0.6, facing: p.facing });
+}
+// The area: every Sentinel within r of the hero is hit, wherever it is
+function areaHit(S, p, M, m) {
+  for (const e of S.enemies) {
+    if (e.dead || !hittable(e) || Math.hypot(e.x - p.x, e.y + e.h / 2 - (p.y + p.h / 2)) > m.area.r) continue;
+    hitEnemy(S, e, { owner: p.id, team: 'p', inst: M.inst, power: HEROES[p.hero].power, dmg: m.dmg, poise: m.poise, kb: [Math.sign(e.x - p.x || 1) * m.kb[0], m.kb[1]],
+      heavy: !!m.heavy, hitstop: hitstopOf(m), react: m.react, juggle: m.juggle, move: M.id, kind: 'area' });
+  }
+  emit(S, 'area', { id: p.id, move: M.id, hero: p.hero, r: m.area.r, x: p.x, y: p.y + p.h / 2 });
 }
 
 // One tick of the move in progress (the player's 'attack' state)
@@ -175,7 +227,14 @@ export function runMove(S, p, cmd, E) {
   // is kept (physics leaves vx alone while stepping), so the hero travels
   const stepping = t <= m.su + m.ac && p.onGround && !M.posed;
   if (stepping) p.vx = p.facing * m.step;
+  // Rehits: a fresh instance every `rehit` active ticks, so the same targets are hit again
+  if (m.rehit && t > m.su && t <= m.su + m.ac) { const k = Math.floor((t - m.su - 1e-9) / m.rehit); if (k !== (M.rehitK || 0)) { M.rehitK = k; M.inst = newId(S); } }
+  const firstActive = t > m.su && !M.fired;
+  if (firstActive) M.fired = true;
+  if (m.shots && firstActive) fireShots(S, p, m);
+  if (m.area && t > m.su && t <= m.su + m.ac && (firstActive || M.inst !== M.areaInst)) { M.areaInst = M.inst; areaHit(S, p, M, m); }
   if (m.grab) grabTick(S, p, M, m, t);
+  else if (m.shots || m.area) { /* their hits come from the shots or the area */ }
   else if (t > m.su && t <= m.su + m.ac && !M.posed) {
     const [x0, w, y0, h] = m.boxes[0], bonus = m.counter, charge = m.charge;
     spawnHitbox(S, {
@@ -207,6 +266,9 @@ export function runMove(S, p, cmd, E) {
         return;
       }
       else if (into === 'attack' && p.buf.attack <= ACTION_BUFFER) { p.comboT = COMBO_WINDOW; p.move = null; setState(p, 'normal'); tryAttack(S, p); return; }
+      // Up the ladder: Power pressed with forward or up is the special; Signature with forward the super
+      else if (into === 'special' && p.buf.power <= ACTION_BUFFER && RULES[p.hero].special[dirOf(p)]) { if (trySpecial(S, p)) return; }
+      else if (into === 'super' && p.buf.sig <= ACTION_BUFFER && RULES[p.hero].sigMove[dirOf(p)]) { if (trySigMove(S, p)) return; }
     }
   }
 }

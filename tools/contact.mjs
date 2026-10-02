@@ -18,7 +18,7 @@ for (const hero of heroes) {
     const PL = await import('./js/sim/player.js'), ME = await import('./js/sim/moveEngine.js'), MV = await import('./js/sim/moves/index.js');
     X.join('kbm');
     window.__contact = {
-      ids: Object.keys(MV.MOVESETS['${hero}'].moves),
+      ids: Object.entries(MV.MOVESETS['${hero}'].moves).filter(([, m]) => !m.module).map(([id]) => id),   // the module's moves have no clip
       // Puts the hero in move id on its first active tick; returns where the hero is on screen, and the frame data
       pose(id) {
         const w = S(), p = w.players[0], m = MV.MOVESETS['${hero}'].moves[id];

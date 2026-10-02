@@ -40,4 +40,8 @@ export default {
   throwAir: { keys: S.grab({ ...AIR }), base: 'air' },
   exec: { keys: S.burst(PALM), tremble: true },
   counterP: { keys: S.burst(PALM) },
+  pFwd: { keys: S.burst({ shN: 0.6, elN: 1.6, shF: 0.5, elF: 1.6, head: -0.1 }) },   // a hand at the visor
+  pUp: { keys: S.upward({ shN: 2.6, elN: 1.7 }) },
+  super: { keys: S.brace({ shN: 0.7, elN: 1.7, shF: 0.4, elF: 1.6 }), tremble: true },
+  ult: { keys: S.upward({ shN: 2.8, elN: 1.6 }), tremble: true },
 };

@@ -170,11 +170,12 @@ export class UI {
       <table><tr><th>Input</th><th>Keyboard and mouse</th><th>Gamepad</th><th>Does</th></tr>
       <tr><td>Move</td><td>${kb('left')} ${kb('right')}, ${kb('up')} ${kb('down')} to aim up or down (or the arrows)</td><td>Left stick</td><td>Down and Jump drops through a walkway</td></tr>
       <tr><td>Aim</td><td>Mouse</td><td>Right stick</td><td>Without aim, you aim the way you move</td></tr>
-      <tr><td>Attack</td><td>${kb('attack')} or left click</td><td>X</td><td>A string of quick strikes; hold it through the first for a charged heavy. Up and Attack: a launcher (jump straight after a hit to follow it up). In the air, an air strike. Right after a perfect Evade, a heavy counter</td></tr>
-      <tr><td>Power</td><td>${kb('power')} or right click</td><td>RB / RT</td><td>Your hero's core power: tap for a quick one, hold to build it</td></tr>
+      <tr><td>Attack</td><td>${kb('attack')} or left click</td><td>X</td><td>A string of quick strikes (pause before the last for a different finisher); hold it through the first for a charged heavy. Forward, up or down and Attack: a lunge, a launcher (jump straight after a hit to follow it up), a sweep. Attack while running: a dash strike. In the air, two strikes, or down and Attack to dive. Right after a perfect Evade, a heavy counter</td></tr>
+      <tr><td>Power</td><td>${kb('power')} or right click</td><td>RB / RT</td><td>Your hero's core power: tap for a quick one, hold to build it. A tap with forward or up held is a special move. Right after a perfect Evade, a power counter</td></tr>
+      <tr><td>Throw</td><td>Attack and Power together</td><td>X and RB</td><td>Beside a Sentinel: a throw (hold back or up to throw that way). By a stunned Sentinel: an execution</td></tr>
       <tr><td>Jump</td><td>${kb('jump')}</td><td>A</td><td>Jump; hold in the air for your hero's own movement</td></tr>
       <tr><td>Evade</td><td>${kb('evade')}</td><td>B</td><td>Dash through danger; timed into a hit, a perfect defence that opens a counter</td></tr>
-      <tr><td>Signature</td><td>${kb('sig')}</td><td>Y</td><td>Your hero's special move</td></tr>
+      <tr><td>Signature</td><td>${kb('sig')}</td><td>Y</td><td>Your hero's own move. With forward held, your super (one bar of your meter); with up held, your ultimate (two bars)</td></tr>
       <tr><td>Team</td><td>${kb('team')}</td><td>LB / LT</td><td>Next to (or aiming at) an ally: your pair's team-up. Alone: tap to tag, hold for an assist</td></tr>
       <tr><td>Team ultimate</td><td>Team and Signature</td><td>LB and Y</td><td>With a full X-Gauge: To Me, My X-Men</td></tr>
       <tr><td>Pause, controls</td><td><kbd>Esc</kbd>, <kbd>H</kbd></td><td>Start, View</td><td>Keys can be changed in Settings</td></tr></table>
@@ -325,6 +326,8 @@ export class UI {
       if (p.state === 'downed') continue;
       if (S.enemies.some(e => !e.dead && Math.abs(e.x - p.x) < 9 && Math.abs(e.y - p.y) < 5)) this.hint('power-' + p.hero, p, POWER_TIP[p.hero]);
       if (p.squad && p.hp < p.maxHp * 0.5 && p.tagCd === 0) this.hint('tag', p, k => `Hurt? Tap ${k('team')} to tag in a fresh hero; hold it to call an assist`);
+      if (p.meter >= 100) this.hint('super', p, k => `A bar of meter: ${k('sig')} with forward held is your super; two bars and up, your ultimate`);
+      if (S.enemies.some(e => !e.dead && e.state === 'stun' && Math.abs(e.x - p.x) < 4)) this.hint('exec', p, k => `Stunned! ${k('attack')} and ${k('power')} together beside it: an execution`);
       if (!p.squad && p.teamCd === 0 && S.players.some(q => q !== p && q.state !== 'downed' && Math.hypot(q.x - p.x, q.y - p.y) < 3.6)) this.hint('teamup', p, k => `Side by side: press ${k('team')} for your pair's team-up`);
       if (this.tipT > 0) return;
     }

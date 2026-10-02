@@ -145,7 +145,7 @@ export function updateProjectiles(S) {
       if (t === S.kid && !kidExposed(t)) continue;
       if (Math.abs(pr.x - t.x) > t.w / 2 + pr.r || pr.y < t.y - pr.r || pr.y > t.y + t.h + pr.r) continue;
       pr.hit.push(t.id);
-      const h = { owner: pr.owner, team: pr.team, inst: pr.id, dmg: pr.dmg, poise: pr.poise, power: pr.power, kb: [Math.sign(pr.vx) * 5, 3], proj: true, kind: pr.kind, heavy: !!pr.heavy };
+      const h = { owner: pr.owner, team: pr.team, inst: pr.id, dmg: pr.dmg, poise: pr.poise, power: pr.power, kb: [Math.sign(pr.vx) * 5, 3], proj: true, kind: pr.kind, heavy: !!pr.heavy, react: pr.react };
       if (pr.team === 'p') hitEnemy(S, t, h); else if (t === S.kid) hurtKid(S, t, h); else hurtPlayer(S, t, h);
       if (pr.pierce-- <= 0) pr.dead = true;
     }

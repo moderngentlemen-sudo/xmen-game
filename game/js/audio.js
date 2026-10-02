@@ -108,6 +108,10 @@ export class Sound {
       case 'hit': if (this.limit('hit', 0.03)) { if (ev.resisted) { this.tone(1450, 0, 0.05, 'square', 0.035); this.tone(1950, 0, 0.07, 'square', 0.03, 0.01); } else { this.noise(0.06 + (ev.heavy ? 0.06 : 0), ev.heavy ? 900 : 1800, ev.heavy ? 0.14 : 0.08, 'bandpass'); if (ev.heavy) this.tone(140, 60, 0.12, 'sine', 0.1); } } break;
       case 'armourBreak': this.noise(0.35, 1200, 0.22, 'lowpass'); this.tone(200, 55, 0.35, 'sawtooth', 0.1); break;
       case 'stagger': if (this.limit('stagger', 0.1)) this.tone(880, 440, 0.2, 'sine', 0.05); break;
+      case 'super': this.tone(ev.ult ? 196 : 262, ev.ult ? 784 : 1047, 0.5, 'sawtooth', 0.07); this.tone(ev.ult ? 247 : 330, ev.ult ? 988 : 1319, 0.5, 'triangle', 0.05, 0.06); this.noise(0.6, 400, 0.12, 'lowpass', 3000); break;
+      case 'area': this.noise(0.6, 300, 0.25, 'lowpass', 60); this.tone(70, 30, 0.6, 'sine', 0.2); break;
+      case 'throw': this.noise(0.18, 900, 0.14, 'bandpass', 300); this.tone(160, 70, 0.2, 'sine', 0.12); break;
+      case 'meterLow': if (this.limit('nope', 0.2)) this.tone(300, 0, 0.06, 'square', 0.02); break;
       case 'wallBounce': this.noise(0.25, 700, 0.2, 'lowpass'); this.tone(180, 70, 0.22, 'sine', 0.14); break;
       case 'groundBounce': this.noise(0.3, 400, 0.22, 'lowpass'); this.tone(120, 50, 0.28, 'sine', 0.16); break;
       case 'react':

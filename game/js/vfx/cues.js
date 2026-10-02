@@ -65,6 +65,14 @@ export const CUES = {
       case 'spinOut': fx.ring(ev.x, ev.y, '#ffffff', 0.3, 1.8, 0.2); break;
     }
   },
+  // Supers and ultimates, their areas and volleys, throws (phase 1's moves)
+  super(fx, ev) {
+    const col = HERO_LOOKS[ev.hero] ? HERO_LOOKS[ev.hero].energy : '#fff';
+    fx.ring(ev.x, ev.y, col, 0.5, ev.ult ? 8 : 5, 0.45); fx.flash(ev.x, ev.y, '#ffffff', ev.ult ? 6 : 4, 0.2, 'star'); fx.sparks(ev.x, ev.y, col, ev.ult ? 40 : 24, 14, 0.5);
+  },
+  area(fx, ev) { const col = HERO_LOOKS[ev.hero] ? HERO_LOOKS[ev.hero].energy : '#fff1b8'; fx.ring(ev.x, ev.y, col, 1, ev.r, 0.5); fx.ring(ev.x, ev.y, '#ffffff', 0.5, ev.r * 0.6, 0.35, true); },
+  shots(fx, ev) { fx.flash(ev.x + ev.facing * 0.7, ev.y, pc.tk, 1.6, 0.14, 'star'); },
+  throw(fx, ev) { fx.flash(ev.x, ev.y, '#ffffff', 2.2, 0.14, 'star'); fx.sparks(ev.x, ev.y, '#ffffff', 10, 9); },
   wallBounce(fx, ev) { fx.ring(ev.x - ev.dir * 0.5, ev.y, '#ffffff', 0.5, 3, 0.25); fx.sparks(ev.x, ev.y, '#ffd27a', 14, 10); fx.chunks(ev.x, ev.y, 'steel', 4, 7); },
   groundBounce(fx, ev) { fx.ring(ev.x, ev.y + 0.05, '#ffffff', 0.5, 3.4, 0.28, true); fx.smoke(ev.x, ev.y, 6, '#cfc8d8', 1.2); fx.chunks(ev.x, ev.y, 'grey', 4, 8); },
   armourBreak(fx, ev) { fx.chunks(ev.x, ev.y, 'grey', 6, 9); fx.flash(ev.x, ev.y, '#ffffff', 2.5, 0.15, 'star'); },

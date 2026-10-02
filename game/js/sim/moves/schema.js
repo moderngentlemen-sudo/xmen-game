@@ -6,11 +6,18 @@
 // (sim/moveEngine.js) runs them. Phase 0 encoded exactly what V2's melee did; phase 1 grows the format into the move
 // grammar of 29 slots (SLOTS, below; HANDOFF-EXPANSION.md section 5.2).
 //
-// A move's fields (all required unless marked optional):
+// A move is either a table move, run by the move engine with the fields below, or a module move: a slot the hero's
+// own module (sim/heroes/<hero>.js) runs, as V2's powers, Evade and Signature are. A module move has only `slot`,
+// `input`, `module` (what in the module runs it) and `event` (the event it emits when it happens, which the tests
+// look for).
+//
+// A table move's fields (all required unless marked optional):
 //   slot       the grammar slot it fills (SLOTS), or 'extra' for a hero's own addition (Wolverine's g5)
 //   input      how the buttons reach it: { btn, ctx, dir }
-//                btn  'attack'; 'pair' (Attack and Power together: PAIR in config.js); 'power' (only for the second
-//                     counter, out of a perfect defence)
+//                btn  'attack'; 'pair' (Attack and Power together: PAIR in config.js); 'power'; 'sig'; 'evade'
+//                     Power: ctx 'tap' (a press let go within POWER_TAP.ticks; with dir fwd or up it is the table's
+//                     directional special, pFwd or pUp), 'hold', 'air', or 'counter' (out of a perfect defence)
+//                     Signature: dir 'neutral' (the hero's Signature), 'fwd' (the super), 'up' (the ultimate)
 //                ctx  'ground', 'air': where the hero is when Attack is pressed
 //                     'dash': on the ground, running at DASH.speed of run speed or more, the way they face
 //                     'hold': reached by holding Attack through another move (see `charge`)
@@ -42,6 +49,13 @@
 //              is 'held'), keeps it at arm's length, and on its first active tick lets go with the move's hit
 //              (dmg, kb, react...) dealt straight to it: a grab cannot miss what it holds, and has no hitbox
 //   invuln     optional, [from, to]: the hero cannot be hit while the move's clock is in this window
+//   rehit      optional, ticks: the hitbox hits again every `rehit` active ticks (a flurry, a drill, a beam)
+//   shots      optional, { n, speed, spread, dmg, poise, r, ttl, kind }: n projectiles fired on the first active
+//              tick, fanned `spread` radians apart, each causing the move's reaction
+//   area       optional, { r }: on each hit tick (the first active tick, then every `rehit`) it hits every Sentinel
+//              within r m of the hero, wherever they are: the ultimates
+//   cost       optional, meter (METER in config.js): spent when it starts; it cannot start without it
+//   spend      optional, the name of a hero resource it empties as it starts (Jean's Phoenix Rising: 'phoenix')
 //   dive       optional, { vy }: the hero drives down at vy (m/s) from the last startup tick through the active ticks,
 //              while in the air
 //   charge     optional, { from, hold, release, dmgMult }: holding Attack through the move `from` winds this one up.
@@ -61,11 +75,12 @@ import { REACTIONS } from '../config.js';
 export const SLOTS = Object.freeze(['g1', 'g2', 'g3', 'g4', 'g4alt', 'fwd', 'up', 'down', 'heavy', 'dash', 'air1', 'air2', 'airDown',
   'throwF', 'throwB', 'throwU', 'throwAir', 'pTap', 'pHold', 'pFwd', 'pUp', 'pAir', 'evade', 'counter', 'counterP', 'sig', 'super', 'ult', 'exec']);
 
-const FIELDS = ['slot', 'input', 'su', 'ac', 'rc', 'dmg', 'poise', 'kb', 'boxes', 'step', 'cancel', 'react', 'launch', 'heavy', 'lift', 'charge', 'counter', 'hitstop', 'juggle', 'dive', 'grab', 'invuln'];
+const FIELDS = ['slot', 'input', 'su', 'ac', 'rc', 'dmg', 'poise', 'kb', 'boxes', 'step', 'cancel', 'react', 'launch', 'heavy', 'lift', 'charge', 'counter', 'hitstop', 'juggle', 'dive', 'grab', 'invuln', 'rehit', 'shots', 'area', 'cost', 'spend'];
+const MODULE_FIELDS = ['slot', 'input', 'module', 'event'];
 // The reactions a move may cause (read when validating: config.js imports the tables, so not at load time)
 const moveReacts = () => REACTIONS.filter(r => r !== 'held' && r !== 'thrown');
 const CTX = ['ground', 'air', 'dash', 'hold', 'alt', 'counter'], PAIR_CTX = ['beside', 'air', 'stunned'], DIRS = ['neutral', 'fwd', 'back', 'up', 'down', 'any'];
-const CANCEL_INTO = ['evade', 'attack', 'jump'], CANCEL_ON = ['any', 'hit'];
+const CANCEL_INTO = ['evade', 'attack', 'jump', 'special', 'super'], CANCEL_ON = ['any', 'hit'];
 
 // Shorthands for the tables
 const on = (ctx, dir) => Object.freeze({ btn: 'attack', ctx, dir });
@@ -74,6 +89,11 @@ export const ON = Object.freeze({
   dash: on('dash', 'any'), hold: on('hold', 'any'), alt: on('alt', 'any'),
   air: on('air', 'neutral'), airDown: on('air', 'down'),
   counter: on('counter', 'any'), counterP: Object.freeze({ btn: 'power', ctx: 'counter', dir: 'any' }),
+  pTap: Object.freeze({ btn: 'power', ctx: 'tap', dir: 'neutral' }), pFwd: Object.freeze({ btn: 'power', ctx: 'tap', dir: 'fwd' }),
+  pUp: Object.freeze({ btn: 'power', ctx: 'tap', dir: 'up' }), pHold: Object.freeze({ btn: 'power', ctx: 'hold', dir: 'any' }),
+  pAir: Object.freeze({ btn: 'power', ctx: 'air', dir: 'down' }), evade: Object.freeze({ btn: 'evade', ctx: 'any', dir: 'any' }),
+  sig: Object.freeze({ btn: 'sig', ctx: 'any', dir: 'neutral' }), super: Object.freeze({ btn: 'sig', ctx: 'any', dir: 'fwd' }),
+  ult: Object.freeze({ btn: 'sig', ctx: 'any', dir: 'up' }),
   throwF: Object.freeze({ btn: 'pair', ctx: 'beside', dir: 'fwd' }), throwB: Object.freeze({ btn: 'pair', ctx: 'beside', dir: 'back' }),
   throwU: Object.freeze({ btn: 'pair', ctx: 'beside', dir: 'up' }), throwAir: Object.freeze({ btn: 'pair', ctx: 'air', dir: 'any' }),
   exec: Object.freeze({ btn: 'pair', ctx: 'stunned', dir: 'any' }),
@@ -82,6 +102,10 @@ const cancels = (...into) => Object.freeze([Object.freeze({ into: Object.freeze(
 export const CANCEL = Object.freeze({
   evadeOrAttack: cancels('evade', 'attack'),   // V2: every strike but the heavy, from its recovery
   evade: cancels('evade'),                     // V2: the heavy, which ends a chain
+  // A strike: on hit, up the ladder into a special (Power with a direction) or the super; else as V2's strikes
+  strike: Object.freeze([Object.freeze({ into: Object.freeze(['special', 'super']), on: 'hit' }), ...cancels('evade', 'attack')]),
+  // A special: on hit, into the super; else only Evade
+  special: Object.freeze([Object.freeze({ into: Object.freeze(['super']), on: 'hit' }), ...cancels('evade')]),
   // The launcher: on hit, from its first active tick, into a jump to follow the Sentinel up; else as a strike
   launcher: Object.freeze([Object.freeze({ into: Object.freeze(['jump']), on: 'hit' }), ...cancels('evade', 'attack')]),
 });
@@ -99,6 +123,15 @@ export function validateMoves(set) {
   const taken = {}, slots = {};
   for (const id of ids) {
     const m = set.moves[id], at = `${who}.${id}`;
+    if (m.module !== undefined) {
+      // A module move: its slot, its input and what shows it happened
+      for (const k of Object.keys(m)) if (!MODULE_FIELDS.includes(k)) bad.push(`${at}: a module move takes only ${MODULE_FIELDS.join(', ')}, not ${k}`);
+      if (!SLOTS.includes(m.slot)) bad.push(`${at}: slot must be one of the grammar's slots`);
+      else { if (slots[m.slot]) bad.push(`${at}: slot ${m.slot} is already filled by ${slots[m.slot]}`); slots[m.slot] = id; }
+      if (typeof m.module !== 'string' || typeof m.event !== 'string') bad.push(`${at}: module and event must be names`);
+      if (!m.input || !['power', 'sig', 'evade'].includes(m.input.btn)) bad.push(`${at}: a module move is reached by Power, Signature or Evade`);
+      continue;
+    }
     for (const k of Object.keys(m)) if (!FIELDS.includes(k)) bad.push(`${at}: unknown field ${k}`);
     if (m.slot !== 'extra' && !SLOTS.includes(m.slot)) bad.push(`${at}: slot must be one of the grammar's slots, or 'extra'`);
     else if (m.slot !== 'extra') { if (slots[m.slot]) bad.push(`${at}: slot ${m.slot} is already filled by ${slots[m.slot]}`); slots[m.slot] = id; }
@@ -108,9 +141,15 @@ export function validateMoves(set) {
       else { const key = 'pair ' + I.ctx + ' ' + I.dir; if (taken[key]) bad.push(`${at}: ${key} already starts ${taken[key]}`); else taken[key] = id; }
       if (!m.grab) bad.push(`${at}: a pair move is a grab (grab: true)`);
     } else if (I && I.btn === 'power') {
-      if (I.ctx !== 'counter') bad.push(`${at}: Power reaches a table move only as the counter (ctx 'counter')`);
-      else if (taken['power counter']) bad.push(`${at}: power counter already starts ${taken['power counter']}`); else taken['power counter'] = id;
-      if (!m.counter) bad.push(`${at}: the counter move needs its counter bonus`);
+      if (I.ctx === 'counter') { if (!m.counter) bad.push(`${at}: the counter move needs its counter bonus`); }
+      else if (!(I.ctx === 'tap' && (I.dir === 'fwd' || I.dir === 'up'))) bad.push(`${at}: Power reaches a table move as the counter, or a tap forward or up`);
+      const key = `power ${I.ctx} ${I.dir}`;
+      if (taken[key]) bad.push(`${at}: ${key} already starts ${taken[key]}`); else taken[key] = id;
+    } else if (I && I.btn === 'sig') {
+      if (!(I.dir === 'fwd' || I.dir === 'up')) bad.push(`${at}: Signature reaches a table move forward (the super) or up (the ultimate)`);
+      if (!(Number.isFinite(m.cost) && m.cost > 0)) bad.push(`${at}: a super or an ultimate needs its cost`);
+      const key = `sig ${I.dir}`;
+      if (taken[key]) bad.push(`${at}: ${key} already starts ${taken[key]}`); else taken[key] = id;
     } else if (!I || I.btn !== 'attack' || !CTX.includes(I.ctx) || !DIRS.includes(I.dir)) bad.push(`${at}: input must be { btn: 'attack', ctx: ${CTX.join('|')}, dir: ${DIRS.join('|')} }`);
     else {
       const inChain = chain.includes(id), inAir = airChain.includes(id);
@@ -147,12 +186,17 @@ export function validateMoves(set) {
     if (I && I.btn === 'attack' && I.ctx === 'counter' && !m.counter) bad.push(`${at}: the counter move needs its counter bonus`);
     if ('grab' in m && m.grab !== true) bad.push(`${at}: grab must be true`);
     if ('invuln' in m && !(Array.isArray(m.invuln) && m.invuln.length === 2 && m.invuln.every(num) && m.invuln[0] <= m.invuln[1])) bad.push(`${at}: invuln must be [from, to]`);
+    if ('rehit' in m && !(Number.isInteger(m.rehit) && m.rehit >= 1)) bad.push(`${at}: rehit must be whole ticks, 1 or more`);
+    if ('shots' in m && !(m.shots && ['n', 'speed', 'spread', 'dmg', 'poise', 'r', 'ttl'].every(k => num(m.shots[k])) && m.shots.n >= 1)) bad.push(`${at}: shots must be { n, speed, spread, dmg, poise, r, ttl, kind }`);
+    if ('area' in m && !(m.area && num(m.area.r) && m.area.r > 0)) bad.push(`${at}: area must be { r above 0 }`);
+    if ('cost' in m && !(num(m.cost) && m.cost > 0)) bad.push(`${at}: cost must be meter above 0`);
+    if ('spend' in m && typeof m.spend !== 'string') bad.push(`${at}: spend must name a resource`);
     if ('dive' in m && !(m.dive && num(m.dive.vy) && m.dive.vy > 0)) bad.push(`${at}: dive must be { vy above 0 }`);
     if ('juggle' in m && !tick(m.juggle)) bad.push(`${at}: juggle must be whole weight, 0 or more`);
     if ('hitstop' in m && !(['light', 'heavy', 'super'].includes(m.hitstop) || tick(m.hitstop))) bad.push(`${at}: hitstop must be light, heavy, super or whole ticks`);
   }
   if (set.alt && !(chain.includes(set.alt.at) && set.moves[set.alt.id] && Number.isInteger(set.alt.pause) && set.alt.pause > 0)) bad.push(`${who}: alt must be { at: a chain strike, id: a move, pause: ticks }`);
-  const charges = ids.filter(id => set.moves[id].charge).map(id => set.moves[id].charge.from);
+  const charges = ids.filter(id => !set.moves[id].module && set.moves[id].charge).map(id => set.moves[id].charge.from);
   if (new Set(charges).size !== charges.length) bad.push(`${who}: two moves charge from the same move`);
   if (!taken['air neutral'] && !airChain.length) bad.push(`${who}: nothing starts in the air`);
   if (!taken['counter counter']) bad.push(`${who}: no counter move`);

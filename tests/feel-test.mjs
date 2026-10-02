@@ -219,3 +219,63 @@ for (const hero of ['cyclops', 'wolverine', 'jean']) {
   run({}, 40);
   assert(started && p.hp === hp && (e.dead || e.hp < e.maxHp - 30), `Attack and Power by a stunned Sentinel executes it, and the hero cannot be hit meanwhile (${e.dead ? 'destroyed' : e.hp.toFixed(0) + ' hp left'})`);
 }
+
+// ---- 1.7 Specials, supers and ultimates ----------------------------------------------------------------------------
+{
+  // A Power tap with forward held is the directional special; a plain tap is still the module's power; a hold aims
+  // the module's power whatever the stick says
+  const F = arena('cyclops', { trooper: false });
+  F.run({ mx: 1, b: BTN.power }); F.run({ mx: 1 }, 2);
+  const N = arena('cyclops', { trooper: false });
+  N.run({ b: BTN.power }); N.run({}, 3);
+  const Hh = arena('cyclops', { trooper: false });
+  Hh.run({ mx: 1, b: BTN.power }, 30); Hh.run({ mx: 1 }, 3);
+  assert(F.p.move && F.p.move.id === 'pFwd' && !F.log.some(v => v.type === 'optic') && N.log.some(v => v.type === 'optic') && !N.p.move
+    && Hh.log.some(v => v.type === 'optic' && v.a > 0.5) && !Hh.log.some(v => v.type === 'swing'),
+    'a Power tap forward is the special; a plain tap the optic beam; a hold forward still the wide blast');
+}
+{
+  // Signature forward is the super, for a bar of meter; without it, the plain Signature (and a meterLow event)
+  const A = arena('wolverine', { trooper: false });
+  A.p.meter = 150; A.p.rage = 0;
+  A.run({ mx: 1, b: BTN.sig }); A.run({}, 2);
+  const B = arena('wolverine', { trooper: false });
+  B.p.meter = 50; B.p.rage = 100;
+  B.run({ mx: 1, b: BTN.sig }); B.run({}, 2);
+  assert(A.p.move && A.p.move.id === 'super' && A.p.meter === 50 && A.log.some(v => v.type === 'super')
+    && B.log.some(v => v.type === 'meterLow') && B.log.some(v => v.type === 'berserk') && B.p.meter === 50,
+    'Signature forward spends a bar on the super; short of meter it falls back to the Signature');
+}
+{
+  // The ultimate spends two bars and reaches every Sentinel in its area, wherever they stand; Jean's spends Phoenix
+  const { S, p, run } = arena('jean', { trooper: false });
+  p.meter = 300; p.phoenix = 60;
+  const near = createEnemy(S, 'trooper', p.x - 6, 0, { cd: 9999, onGround: true }), far = createEnemy(S, 'trooper', p.x + 30, 0, { cd: 9999, onGround: true });
+  S.enemies.push(near, far);
+  run({ my: 1, b: BTN.sig });
+  const spent = p.meter === 100 && p.phoenix === 0;   // (its hits feed both again afterwards)
+  run({}, 50);
+  assert(spent && near.hp < near.maxHp && far.hp === far.maxHp, 'the ultimate spends two bars (and Jean\'s Phoenix power) and hits every Sentinel in its area, behind her too');
+}
+{
+  // A super cannot be interrupted: the hero cannot be hit while it plays
+  const { S, p, run } = arena('cyclops', { trooper: false });
+  p.meter = 100;
+  run({ mx: 1, b: BTN.sig }); run({}, 10);
+  const hp = p.hp; p.mercy = 0;
+  hurtPlayer(S, p, { owner: 0, team: 'e', inst: newId(S), dmg: 9, kb: [0, 3] });
+  assert(p.move && p.move.id === 'super' && p.hp === hp, 'the hero cannot be hit during a super');
+}
+{
+  // The cancel ladder: a strike that hits cancels into the special (Power forward), which cancels into the super
+  const { p, run, log, until } = arena('cyclops', { dist: 1.0 });
+  p.meter = 100;
+  run({ b: BTN.attack });
+  until(() => p.move && p.move.hit, 20); until(() => p.hitstop === 0, 10);
+  run({ mx: 1, b: BTN.power });
+  const special = p.move && p.move.id === 'pFwd';
+  until(() => p.move && p.move.hit, 20); until(() => p.hitstop === 0, 10);
+  run({ mx: 1, b: BTN.sig });
+  const swings = log.filter(v => v.type === 'swing').map(v => v.move);
+  assert(special && p.move && p.move.id === 'super', `a strike cancels into the special on hit, and the special into the super (${swings.join(' ')})`);
+}

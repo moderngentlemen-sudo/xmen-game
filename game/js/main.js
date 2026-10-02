@@ -156,6 +156,7 @@ function stepSim() {
     view.onEvent(ev, S); overlay.onEvent(ev); sound.play(ev); ui.onEvent(ev, S); haptics.onEvent(ev, deviceOf, devices);
     const k = panelFor(ev);
     if (k) slowMotion(overlay.impact(ev.x !== undefined ? ev.x : S.cam.x, ev.y !== undefined ? ev.y : S.cam.y, k), 0.4);
+    if (ev.type === 'super') slowMotion(0.3, 0.5);   // a super or an ultimate: 0.3 s at half speed
   }
 }
 

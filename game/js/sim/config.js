@@ -30,6 +30,8 @@ export const DASH = { speed: 0.8 };
 // boss, not armoured), an execution on a stunned one (EXEC.reach, either side). The first press starts its own move
 // as usual; the second, inside the window, cancels it into the throw or the execution. Nothing waits for a pair.
 export const PAIR = { window: 3 };
+// A Power press let go within `ticks` is a tap: with forward or up held, the hero's directional special (pFwd, pUp)
+export const POWER_TAP = { ticks: 10 };
 export const THROW = { reach: 1.2 };
 export const EXEC = { reach: 1.8 };
 

@@ -25,7 +25,15 @@ const WORDS = {
   snikt: () => ['SNIKT!', '#dfe9f5', 1],
   styleRank: ev => ['A', 'S', 'X'].includes(ev.rank) ? [ev.rank === 'X' ? 'X-TREME!' : ev.rank + ' RANK!', '#ffd23f', ev.rank === 'X' ? 1.5 : 1.1] : null,
   wallBounce: () => ['WHAM!', '#ffffff', 1],
+  super: ev => [(SUPER_NAMES[ev.hero] || {})[ev.ult ? 'ult' : 'super'] || 'SUPER!', '#fff1b8', ev.ult ? 2 : 1.6],
+  throw: () => ['HRAAH!', '#ffffff', 1],
   groundBounce: () => ['KRAK!', '#ffffff', 1],
+};
+// The supers' and ultimates' names, lettered as they start
+const SUPER_NAMES = {
+  cyclops: { super: 'OPTIC OVERDRIVE!', ult: 'RICOCHET BARRAGE!' },
+  wolverine: { super: 'BERSERKER BARRAGE!', ult: 'WEAPON X!' },
+  jean: { super: 'PSYCHIC CRUSH!', ult: 'PHOENIX RISING!' },
 };
 const CAP_PER_SEC = 4, MAX_ON = 8;
 
@@ -51,7 +59,7 @@ export class Overlay {
     const f = WORDS[ev.type]; if (!f) return;
     const w = f(ev); if (!w) return;
     const x = ev.x !== undefined ? ev.x : this.view.cam.x, y = (ev.y !== undefined ? ev.y : this.view.cam.y) + 1.2;
-    this.word(w[0], x, y, w[1], w[2], ev.type === 'ultStrike');
+    this.word(w[0], x, y, w[1], w[2], ev.type === 'ultStrike' || ev.type === 'super');
   }
 
   // An impact panel: the moment held in a tilted comic panel, speed lines converging on the hit

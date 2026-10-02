@@ -38,6 +38,26 @@ function reach(hero, id) {
     }
   };
   const I = m.input;
+  // A module move: its input, and the event that shows the module ran it (a target ahead where it needs one)
+  if (m.module) {
+    const e = createEnemy(S, 'trooper', p.x + 4, 0, { cd: 9999, onGround: true, hp: 999, maxHp: 999 }); S.enemies.push(e);
+    e.hitstop = 1e9;
+    const seen = () => log.some(v => v.type === m.event && (v.id === p.id || v.id === undefined));
+    if (I.btn === 'evade') run({ b: BTN.evade });
+    else if (I.btn === 'sig') { p.rage = 100; run({ b: BTN.sig }); }
+    else if (I.ctx === 'tap') { run({ b: BTN.power }); run({}, 3); }
+    else if (I.ctx === 'hold') { run({ b: BTN.power }, 50); run({}, 20); }
+    else if (I.ctx === 'air') {
+      // Down in the air; Jean reaches for the trooper below her
+      if (hero === 'jean') { e.x = p.x + 0.5; }
+      run({ b: BTN.jump }, 6); run({ my: -1, b: BTN.jump | BTN.power }, 2); run({ my: -1 }, 20);
+    }
+    run({}, 4);
+    return seen();
+  }
+  // A table move on Power or Signature: a tap with a direction, or Signature with one (and the meter for it)
+  if (I.btn === 'power' && I.ctx === 'tap') { run({ mx: I.dir === 'fwd' ? 1 : 0, my: I.dir === 'up' ? 1 : 0, b: BTN.power }); run({ mx: I.dir === 'fwd' ? 1 : 0, my: I.dir === 'up' ? 1 : 0 }, 2); return swung(log, id); }
+  if (I.btn === 'sig') { p.meter = 300; run({ mx: I.dir === 'fwd' ? 1 : 0, my: I.dir === 'up' ? 1 : 0, b: BTN.sig }); run({}, 2); return swung(log, id); }
   // A pair needs a Sentinel to take hold of: a stunned one for an execution, one in reach for a throw (in the air
   // for a throw in the air); Attack first, then Power two ticks later, inside the pair's window
   if (I.btn === 'pair') {
@@ -84,11 +104,13 @@ const SHOWS = {
 };
 function hitAndReact(hero, id) {
   const set = MOVESETS[hero], m = set.moves[id], { S, p, run, log } = setup(hero);
-  const air = m.input.ctx === 'air', [x0, w, y0, h] = m.boxes[0];
+  if (m.cost) p.meter = 300;
+  const air = m.input.ctx === 'air' && m.input.btn !== 'power', [x0, w, y0, h] = m.boxes[0];
   if (air) { p.y = m.dive ? 2.6 : 3; p.onGround = false; p.vy = 0; }
   // The trooper stands in the middle of the hitbox (on the floor for a dive, which comes down onto it), frozen in
   // place by a long hitstop so only the hit moves it
-  const e = createEnemy(S, 'trooper', p.x + x0 + w / 2, 0, { cd: 9999, onGround: true, hp: 999, maxHp: 999 });
+  // (ahead by the distance the move steps through its startup, for a drill that travels before it bites)
+  const e = createEnemy(S, 'trooper', p.x + x0 + w / 2 + (m.input.ctx === 'dash' ? 0 : m.step * m.su / 60), 0, { cd: 9999, onGround: true, hp: 999, maxHp: 999 });
   if (air && !m.dive) { e.y = Math.max(0, p.y + y0 + h / 2 - e.h / 2); e.onGround = false; e.state = 'launched'; e.juggle = 20; }
   if (m.input.ctx === 'stunned') { e.state = 'stun'; e.stunT = 999; }
   e.hitstop = 1e9; S.enemies.push(e);
@@ -98,8 +120,13 @@ function hitAndReact(hero, id) {
     run(air && !m.dive ? { b: BTN.jump } : {});
     if (log.some(v => v.type === 'hit' && v.id === e.id)) landedAt = p.move ? p.move.t : -1;
   }
+  // Shots land when they arrive, after the move's active tick: that counts
+  if (m.shots && landedAt !== null) landedAt = -1;
   const want = m.input.ctx === 'counter' && m.counter.react ? m.counter.react : m.react;
-  return { landed: landedAt !== null, inActive: landedAt !== null && (landedAt === -1 || (landedAt > m.su && landedAt <= m.su + m.ac + 0.001)), reacted: landedAt !== null && SHOWS[want](e), want, state: e.state };
+  // The reaction shows in the trooper's state, or in the event it raised (a volley's later shots juggle what the
+  // first one staggered)
+  const raised = log.some(v => v.id === e.id && ((v.type === 'stagger' && want === 'stagger') || (v.type === 'react' && v.react === want)));
+  return { landed: landedAt !== null, inActive: landedAt !== null && (landedAt === -1 || (landedAt > m.su && landedAt <= m.su + m.ac + 0.001)), reacted: landedAt !== null && (SHOWS[want](e) || raised), want, state: e.state };
 }
 const I_COUNTER = m => m.input.ctx === 'counter';   // either counter, by Attack or by Power
 
@@ -107,6 +134,7 @@ for (const hero of Object.keys(MOVESETS)) {
   const set = MOVESETS[hero], ids = Object.keys(set.moves), unreached = [], missed = [], wrong = [];
   for (const id of ids) {
     if (!reach(hero, id)) unreached.push(id);
+    if (set.moves[id].module) continue;   // the module's own suites (engine-test) cover its hits
     const r = hitAndReact(hero, id);
     if (!r.landed || !r.inActive) missed.push(id);
     else if (!r.reacted) wrong.push(`${id} (wanted ${r.want}, got ${r.state})`);

@@ -41,7 +41,7 @@ for (const hero of HERO_IDS) {
 // the hero rising, free.
 for (const hero of HERO_IDS) {
   const set = MOVESETS[hero], problems = [];
-  for (const [id, m] of Object.entries(set.moves)) for (const c of m.cancel) for (const to of c.into) {
+  for (const [id, m] of Object.entries(set.moves)) if (!m.module) for (const c of m.cancel) for (const to of c.into) {
     const from = c.from !== undefined ? c.from : c.on === 'hit' ? m.su : m.su + m.ac;
     for (const how of to === 'attack' ? ['neutral', 'up', 'counter'] : [to]) {
       const { S, p, run } = setup(hero);
@@ -52,8 +52,11 @@ for (const hero of HERO_IDS) {
       if (p.move !== M) { problems.push(`${id} ended before its cancel window`); continue; }
       if (c.on === 'hit') M.hit = true;
       if (how === 'counter') p.counterT = 10;
-      run({ my: how === 'up' ? 1 : 0, b: how === 'evade' ? BTN.evade : how === 'jump' ? BTN.jump : BTN.attack });
+      if (how === 'super') p.meter = 300;
+      const btn = { evade: BTN.evade, jump: BTN.jump, special: BTN.power, super: BTN.sig }[how] || BTN.attack;
+      run({ my: how === 'up' ? 1 : 0, mx: how === 'special' || how === 'super' ? p.facing : 0, b: btn });
       const ok = how === 'evade' ? p.state === 'evade' : how === 'jump' ? p.state === 'normal' && !p.move && p.vy > 0 && !p.onGround
+        : how === 'special' ? p.move && p.move.id === 'pFwd' : how === 'super' ? p.move && p.move.id === 'super'
         : p.move && p.move !== M && set.moves[p.move.id];
       if (!ok) problems.push(`${id} → ${to} (${how}) landed on ${p.state}${p.move ? ' ' + p.move.id : ''}`);
     }
@@ -76,7 +79,8 @@ for (const hero of HERO_IDS) {
 for (const [hero, berserk] of [['cyclops', false], ['wolverine', false], ['wolverine', true], ['jean', false]]) {
   const wrong = [];
   for (const [id, m] of Object.entries(MOVESETS[hero].moves)) {
-    if (m.grab) continue;   // a grab has no hitbox: it deals its hit to what it holds (tests/movelist-test.mjs)
+    // a module move is the hero module's; a grab, shots and an area have no hitbox (tests/movelist-test.mjs covers them)
+    if (m.module || m.grab || m.shots || m.area) continue;
     const { S, p, run } = setup(hero);
     if (berserk) p.berserkT = 9999;
     if (m.input.ctx === 'air') { p.y = 2.5; p.onGround = false; }
@@ -158,6 +162,7 @@ for (const hero of HERO_IDS) {
 for (const hero of HERO_IDS) {
   const set = MOVESETS[hero], clips = CLIPS[hero] || {}, problems = [];
   for (const [id, m] of Object.entries(set.moves)) {
+    if (m.module) continue;   // the hero module animates its own moves
     const clip = clips[id];
     if (!clip) { problems.push(`${id} has no clip`); continue; }
     const ks = clip.keys(m), end = m.su + m.ac + m.rc;

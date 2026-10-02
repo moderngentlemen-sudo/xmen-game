@@ -3,11 +3,11 @@
 // the move engine (moveEngine.js, from the move tables in sim/moves/). What makes each hero different lives in
 // their module (sim/heroes/): Power, Signature, their resource, their own movement, and their states. Team is
 // handled in team.js.
-import { DT, GRAVITY, FALL_MULT, RISE_CUT, MAX_FALL, COYOTE, JUMP_BUFFER, ACTION_BUFFER, MERCY, BTN, BTN_NAMES, HEROES, PERFECT, GAUGE } from './config.js';
+import { DT, GRAVITY, FALL_MULT, RISE_CUT, MAX_FALL, COYOTE, JUMP_BUFFER, ACTION_BUFFER, MERCY, BTN, BTN_NAMES, HEROES, PERFECT, GAUGE, POWER_TAP } from './config.js';
 import { moveBody, hasHeadroom } from './level.js';
 import { emit, newId } from './world.js';
 import { HERO } from './heroes/index.js';
-import { tryAttack, startMove, runMove, counterMove, counterPowerMove, moveInvuln, pairPressed, tryPair } from './moveEngine.js';
+import { tryAttack, startMove, runMove, counterMove, counterPowerMove, moveInvuln, pairPressed, tryPair, trySpecial, trySigMove } from './moveEngine.js';
 import { newStreak, tickStreak, endStreak } from './combo.js';
 
 export function makePlayer(S, slot, hero, x, y) {
@@ -50,6 +50,7 @@ export function updatePlayer(S, p, cmd, frozen) {
   const E = { b, pressed, released };
   // In hitstop the buffers and hold counts do not age, so a press made during the freeze comes out after it
   const stopped = p.hitstop > 0 && !frozen;
+  const powerHeld = p.holdT.power;   // how long Power was down, for a tap let go this tick
   for (const n of BTN_NAMES) {
     p.buf[n] = has(pressed, n) ? 0 : stopped ? p.buf[n] : Math.min(99, p.buf[n] + 1);
     p.holdT[n] = has(b, n) ? (stopped ? p.holdT[n] : p.holdT[n] + 1) : 0;
@@ -77,7 +78,10 @@ export function updatePlayer(S, p, cmd, frozen) {
   if (p.state === 'downed') return;
 
   // Attack and Power together: a throw or an execution, out of whatever the first press started
-  if ((p.state === 'normal' || p.state === 'attack' || (mod.states && mod.states[p.state])) && pairPressed(p) && tryPair(S, p)) return;
+  const free = p.state === 'normal' || (mod.states && mod.states[p.state]);
+  if ((free || p.state === 'attack') && pairPressed(p) && tryPair(S, p)) return;
+  // A Power tap with a direction: the hero's directional special, instead of what the module does with the tap
+  if (free && has(released, 'power') && powerHeld <= POWER_TAP.ticks && trySpecial(S, p)) return;
   if (p.state === 'hitstun') {
     if (--p.hitstunT <= 0) setState(p, 'normal');
     physics(S, p, 0, cmd, E, true);
@@ -89,6 +93,8 @@ export function updatePlayer(S, p, cmd, frozen) {
 
   // Normal: the hero's own buttons first, then the shared ones
   if (tryEvade(S, p, cmd)) return;
+  // Signature: with forward the super, with up the ultimate (if the meter allows), else the hero's own Signature
+  if (p.buf.sig === 0 && !has(b, 'team') && trySigMove(S, p)) return;
   if (mod.sig && p.buf.sig === 0 && !has(b, 'team')) { p.buf.sig = 99; mod.sig(S, p, cmd, E); if (p.state !== 'normal') return; }
   if (mod.power(S, p, cmd, E)) return;
   if (tryAttack(S, p)) return;
