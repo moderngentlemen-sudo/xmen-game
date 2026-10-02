@@ -7,7 +7,7 @@ import { DT, GRAVITY, FALL_MULT, RISE_CUT, MAX_FALL, COYOTE, JUMP_BUFFER, ACTION
 import { moveBody, hasHeadroom } from './level.js';
 import { emit, newId } from './world.js';
 import { HERO } from './heroes/index.js';
-import { tryAttack, startMove, runMove, counterMove } from './moveEngine.js';
+import { tryAttack, startMove, runMove, counterMove, counterPowerMove, moveInvuln, pairPressed, tryPair } from './moveEngine.js';
 import { newStreak, tickStreak, endStreak } from './combo.js';
 
 export function makePlayer(S, slot, hero, x, y) {
@@ -16,7 +16,7 @@ export function makePlayer(S, slot, hero, x, y) {
     kind: 'player', id: newId(S), slot, hero, x, y, vx: 0, vy: 0, w: H.w, h: H.h, facing: 1,
     onGround: true, wallDir: 0, hitWall: 0, hitCeil: false, dropT: 0,
     hp: H.hp, maxHp: H.hp, mercy: 0, state: 'normal', st: 0,
-    held: 0, buf: {}, holdT: {}, mx: 0, my: 0, aimX: 1, aimY: 0, aimFree: false,
+    held: 0, buf: {}, holdT: {}, lastPress: { attack: 99, power: 99 }, mx: 0, my: 0, aimX: 1, aimY: 0, aimFree: false,
     coyote: 0, jumpsLeft: H.airJumps, wallLock: 0, wallSlide: false,
     move: null, combo: 0, airCombo: 0, chainOf: null, comboT: 0, atkHeld: 0, hitstop: 0, streak: newStreak(), meter: 0,
     evade: null, evadeCd: 0, counterT: 0,
@@ -54,6 +54,8 @@ export function updatePlayer(S, p, cmd, frozen) {
     p.buf[n] = has(pressed, n) ? 0 : stopped ? p.buf[n] : Math.min(99, p.buf[n] + 1);
     p.holdT[n] = has(b, n) ? (stopped ? p.holdT[n] : p.holdT[n] + 1) : 0;
   }
+  // When Attack and Power were last pressed (for pairs: starting a move consumes the buffer, not this)
+  for (const n of ['attack', 'power']) p.lastPress[n] = has(pressed, n) ? 0 : stopped ? p.lastPress[n] : Math.min(99, p.lastPress[n] + 1);
   p.mx = Math.max(-1, Math.min(1, cmd.mx || 0)); p.my = Math.max(-1, Math.min(1, cmd.my || 0));
   if (cmd.aim && (cmd.ax || cmd.ay)) { const m = Math.hypot(cmd.ax, cmd.ay); p.aimX = cmd.ax / m; p.aimY = cmd.ay / m; p.aimFree = true; }
   else {
@@ -74,6 +76,8 @@ export function updatePlayer(S, p, cmd, frozen) {
   mod.tick(S, p, cmd, E);
   if (p.state === 'downed') return;
 
+  // Attack and Power together: a throw or an execution, out of whatever the first press started
+  if ((p.state === 'normal' || p.state === 'attack' || (mod.states && mod.states[p.state])) && pairPressed(p) && tryPair(S, p)) return;
   if (p.state === 'hitstun') {
     if (--p.hitstunT <= 0) setState(p, 'normal');
     physics(S, p, 0, cmd, E, true);
@@ -160,8 +164,9 @@ function evade(S, p, cmd, E) {
   if (ev.t >= V.ticks) { p.evade = null; p.evadeCd = V.cd; setState(p, 'normal'); }
   // A counter straight out of a perfect defence
   if (ev.perfect && p.buf.attack <= ACTION_BUFFER) { p.evade = null; setState(p, 'normal'); startMove(S, p, counterMove(p), true); }
+  else if (ev.perfect && p.buf.power <= ACTION_BUFFER && counterPowerMove(p)) { p.buf.power = 99; p.evade = null; setState(p, 'normal'); startMove(S, p, counterPowerMove(p), true); }
 }
-export const invulnerable = p => (p.state === 'evade' && p.evade && p.evade.t < HEROES[p.hero].evade.iframes) || p.mercy > 0 || p.state === 'held' || p.state === 'thrown' || p.state === 'ult' || p.state === 'tagout';
+export const invulnerable = p => (p.state === 'evade' && p.evade && p.evade.t < HEROES[p.hero].evade.iframes) || p.mercy > 0 || (p.state === 'attack' && moveInvuln(p)) || p.state === 'held' || p.state === 'thrown' || p.state === 'ult' || p.state === 'tagout';
 export const perfectWindow = p => p.state === 'evade' && p.evade && p.evade.t < HEROES[p.hero].evade.perfect;
 
 export function perfectDefence(S, p, attacker) {

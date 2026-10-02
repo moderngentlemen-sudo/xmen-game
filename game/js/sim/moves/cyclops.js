@@ -37,5 +37,17 @@ export default {
     // the counter out of a perfect defence: the heavy's strike at once, with its bonus, and it crumples
     counter: { slot: 'counter', input: ON.counter, su: 14, ac: 5, rc: 20, dmg: 9, poise: 90, kb: [14, 6], boxes: [[0.2, 1.7, 0.3, 1.6]], step: 3, cancel: CANCEL.evade, react: 'crumple',
       heavy: true, counter: { dmgMult: 1.5, poiseMult: 1.5 } },
+    // Throws (Attack and Power beside a Sentinel): a judo throw into the wall, a shoulder toss, a toss then an
+    // upward blast, a blast-driven slam in the air. And the execution on a stunned Sentinel: a point-blank blast
+    // through the core
+    throwF: { slot: 'throwF', input: ON.throwF, su: 5, ac: 1, rc: 18, dmg: 6, poise: 60, kb: [14, 3], boxes: [[0.2, 1.0, 0.3, 1.5]], step: 0, cancel: CANCEL.evade, react: 'wallBounce', grab: true, hitstop: 'heavy' },
+    throwB: { slot: 'throwB', input: ON.throwB, su: 5, ac: 1, rc: 18, dmg: 6, poise: 60, kb: [-9, 7], boxes: [[0.2, 1.0, 0.3, 1.5]], step: 0, cancel: CANCEL.evade, react: 'knockdown', grab: true, hitstop: 'heavy' },
+    throwU: { slot: 'throwU', input: ON.throwU, su: 5, ac: 1, rc: 20, dmg: 6, poise: 60, kb: [0, 15], boxes: [[0.2, 1.0, 0.3, 1.5]], step: 0, cancel: CANCEL.evade, react: 'launch', grab: true, hitstop: 'heavy', juggle: 20 },
+    throwAir: { slot: 'throwAir', input: ON.throwAir, su: 5, ac: 1, rc: 16, dmg: 6, poise: 60, kb: [2, -14], boxes: [[0.2, 1.0, 0.3, 1.5]], step: 0, cancel: CANCEL.evade, react: 'groundBounce', grab: true, hitstop: 'heavy' },
+    exec: { slot: 'exec', input: ON.exec, su: 18, ac: 1, rc: 24, dmg: 40, poise: 200, kb: [10, 6], boxes: [[0.2, 1.0, 0.3, 1.5]], step: 0, cancel: CANCEL.evade, react: 'knockdown', grab: true, hitstop: 'super', heavy: true,
+      invuln: [0, 43] },
+    // the second counter, by Power out of a perfect defence: a point-blank blast that crumples
+    counterP: { slot: 'counterP', input: ON.counterP, su: 6, ac: 4, rc: 18, dmg: 9, poise: 90, kb: [12, 4], boxes: [[0.2, 2.2, 0.5, 1.2]], step: 0, cancel: CANCEL.evade, react: 'crumple',
+      heavy: true, counter: { dmgMult: 1.5, poiseMult: 1.5 } },
   },
 };

@@ -36,5 +36,16 @@ export default {
     // the counter out of a perfect defence: the heavy's strike at once, with its bonus, and it crumples
     counter: { slot: 'counter', input: ON.counter, su: 15, ac: 5, rc: 20, dmg: 8, poise: 90, kb: [16, 8], boxes: [[0.2, 2.2, 0.4, 1.6]], step: 3, cancel: CANCEL.evade, react: 'crumple',
       heavy: true, counter: { dmgMult: 1.5, poiseMult: 1.5 } },
+    // Throws (Attack and Power beside a Sentinel): a hurl into the wall, an overhead toss, a lift high, a slam in the
+    // air. And the execution on a stunned Sentinel: she pulls it apart
+    throwF: { slot: 'throwF', input: ON.throwF, su: 5, ac: 1, rc: 18, dmg: 5, poise: 60, kb: [16, 3], boxes: [[0.2, 1.0, 0.3, 1.5]], step: 0, cancel: CANCEL.evade, react: 'wallBounce', grab: true, hitstop: 'heavy' },
+    throwB: { slot: 'throwB', input: ON.throwB, su: 5, ac: 1, rc: 18, dmg: 5, poise: 60, kb: [-10, 9], boxes: [[0.2, 1.0, 0.3, 1.5]], step: 0, cancel: CANCEL.evade, react: 'knockdown', grab: true, hitstop: 'heavy' },
+    throwU: { slot: 'throwU', input: ON.throwU, su: 5, ac: 1, rc: 18, dmg: 5, poise: 60, kb: [0, 18], boxes: [[0.2, 1.0, 0.3, 1.5]], step: 0, cancel: CANCEL.evade, react: 'launch', grab: true, hitstop: 'heavy', juggle: 20 },
+    throwAir: { slot: 'throwAir', input: ON.throwAir, su: 5, ac: 1, rc: 16, dmg: 6, poise: 60, kb: [2, -14], boxes: [[0.2, 1.0, 0.3, 1.5]], step: 0, cancel: CANCEL.evade, react: 'groundBounce', grab: true, hitstop: 'heavy' },
+    exec: { slot: 'exec', input: ON.exec, su: 24, ac: 1, rc: 20, dmg: 40, poise: 200, kb: [0, 6], boxes: [[0.2, 1.0, 0.3, 1.5]], step: 0, cancel: CANCEL.evade, react: 'knockdown', grab: true, hitstop: 'super', heavy: true,
+      invuln: [0, 45] },
+    // the second counter, by Power out of a perfect defence: a telekinetic repel that crumples whoever struck
+    counterP: { slot: 'counterP', input: ON.counterP, su: 6, ac: 5, rc: 18, dmg: 8, poise: 90, kb: [14, 5], boxes: [[-0.6, 3.0, 0.2, 1.8]], step: 0, cancel: CANCEL.evade, react: 'crumple',
+      heavy: true, counter: { dmgMult: 1.5, poiseMult: 1.5 } },
   },
 };

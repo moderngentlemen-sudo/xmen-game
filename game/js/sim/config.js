@@ -26,6 +26,12 @@ export const BTN_NAMES = Object.keys(BTN);
 export const STICK = { up: 0.55 };   // the stick past this reads as a direction for the moves (sim/moves/)
 // A dash strike: Attack while running the way the hero faces at `speed` of their run speed or more
 export const DASH = { speed: 0.8 };
+// Attack and Power pressed within `window` ticks of each other: a throw beside a Sentinel (reach m in front, not a
+// boss, not armoured), an execution on a stunned one (EXEC.reach, either side). The first press starts its own move
+// as usual; the second, inside the window, cancels it into the throw or the execution. Nothing waits for a pair.
+export const PAIR = { window: 3 };
+export const THROW = { reach: 1.2 };
+export const EXEC = { reach: 1.8 };
 
 // Power types: the Sentinels log damage by type and adapt to whatever the team leans on. 'team' (team-ups
 // and the team ultimate) is never countered; 'plain' is environmental and unlogged.

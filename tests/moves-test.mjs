@@ -76,6 +76,7 @@ for (const hero of HERO_IDS) {
 for (const [hero, berserk] of [['cyclops', false], ['wolverine', false], ['wolverine', true], ['jean', false]]) {
   const wrong = [];
   for (const [id, m] of Object.entries(MOVESETS[hero].moves)) {
+    if (m.grab) continue;   // a grab has no hitbox: it deals its hit to what it holds (tests/movelist-test.mjs)
     const { S, p, run } = setup(hero);
     if (berserk) p.berserkT = 9999;
     if (m.input.ctx === 'air') { p.y = 2.5; p.onGround = false; }

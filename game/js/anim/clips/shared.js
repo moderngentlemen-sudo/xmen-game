@@ -36,3 +36,7 @@ export const air2 = arms => m => [k(0, w({ ...AIR, twist: 0.5, spine: -0.2 }, ar
 export const dive = arms => m => [k(0, w({ ...AIR, spine: -0.3, hipN: 1.6, knN: -1.6, hipF: 1.2, knF: -1.6 }, arms)),
   k(m.su, w({ spine: 0.35, hipN: 0.35, knN: -0.1, hipF: -0.1, knF: -0.3, hipY: 0.98, bodyZ: -0.1 }, arms), true),
   k(m.su + m.ac, w({ spine: 0.4, hipN: 0.6, knN: -1.0, hipF: -0.4, knF: -0.8, hipY: 0.82 }, arms)), k(END(m), {})];
+// Arms out to take hold, then a heave the way the throw goes: the throws and the execution
+export const grab = (arms, heave = {}) => m => [k(0, w({ spine: 0.35, shN: 1.4, elN: 0.5, shF: 1.3, elF: 0.6, hipN: 0.6, knN: -0.8, hipF: -0.5, hipY: 0.84 }, arms)),
+  k(m.su, w({ spine: -0.25, twist: -0.4, shN: 2.4, elN: 0.6, shF: 2.3, elF: 0.6, hipN: 0.4, knN: -1.0, hipF: -0.6, hipY: 0.8, ...heave }, arms), true),
+  k(m.su + m.ac + 4, w({ spine: 0.4, twist: 0.4, shN: 1.2, elN: 0.2, shF: 1.0, elF: 0.3, hipN: 0.9, knN: -0.7, hipF: -0.8, hipY: 0.82 }, arms)), k(END(m), {})];

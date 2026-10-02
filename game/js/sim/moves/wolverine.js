@@ -37,5 +37,16 @@ export default {
     // the counter out of a perfect defence: the heavy's strike at once, with its bonus, and it crumples
     counter: { slot: 'counter', input: ON.counter, su: 12, ac: 6, rc: 18, dmg: 10, poise: 95, kb: [15, 7], boxes: [[0.1, 1.9, 0.2, 1.8]], step: 3, cancel: CANCEL.evade, react: 'crumple',
       heavy: true, counter: { dmgMult: 1.5, poiseMult: 1.5 } },
+    // Throws (Attack and Power beside a Sentinel): pounce and slash into the wall, a toss, an uppercut launch, a
+    // piledriver in the air. And the execution on a stunned Sentinel: he climbs it and tears out the core
+    throwF: { slot: 'throwF', input: ON.throwF, su: 5, ac: 1, rc: 16, dmg: 7, poise: 60, kb: [14, 3], boxes: [[0.2, 1.0, 0.3, 1.5]], step: 0, cancel: CANCEL.evade, react: 'wallBounce', grab: true, hitstop: 'heavy' },
+    throwB: { slot: 'throwB', input: ON.throwB, su: 5, ac: 1, rc: 16, dmg: 6, poise: 60, kb: [-10, 6], boxes: [[0.2, 1.0, 0.3, 1.5]], step: 0, cancel: CANCEL.evade, react: 'knockdown', grab: true, hitstop: 'heavy' },
+    throwU: { slot: 'throwU', input: ON.throwU, su: 5, ac: 1, rc: 18, dmg: 6, poise: 60, kb: [1, 15], boxes: [[0.2, 1.0, 0.3, 1.5]], step: 0, cancel: CANCEL.evade, react: 'launch', grab: true, hitstop: 'heavy', juggle: 20 },
+    throwAir: { slot: 'throwAir', input: ON.throwAir, su: 5, ac: 1, rc: 16, dmg: 7, poise: 60, kb: [1, -16], boxes: [[0.2, 1.0, 0.3, 1.5]], step: 0, cancel: CANCEL.evade, react: 'groundBounce', grab: true, hitstop: 'heavy' },
+    exec: { slot: 'exec', input: ON.exec, su: 22, ac: 1, rc: 22, dmg: 42, poise: 200, kb: [6, 8], boxes: [[0.2, 1.0, 0.3, 1.5]], step: 0, cancel: CANCEL.evade, react: 'knockdown', grab: true, hitstop: 'super', heavy: true,
+      invuln: [0, 45] },
+    // the second counter, by Power out of a perfect defence: a counter Drill that pierces
+    counterP: { slot: 'counterP', input: ON.counterP, su: 5, ac: 6, rc: 16, dmg: 8, poise: 80, kb: [10, 3], boxes: [[0.0, 3.2, 0.4, 1.2]], step: 12, cancel: CANCEL.evade, react: 'crumple',
+      heavy: true, counter: { dmgMult: 1.5, poiseMult: 1.5 } },
   },
 };

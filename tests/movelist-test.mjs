@@ -4,7 +4,7 @@
 //   3. the trooper reacts the way the move's `react` says (reactions.js): an air hit on a Sentinel in the air
 // A move added to a table is covered here at once; a new kind of input needs a recipe in `reach`.
 import { createWorld, step } from '../game/js/sim/world.js';
-import { BTN } from '../game/js/sim/config.js';
+import { BTN, ENEMIES } from '../game/js/sim/config.js';
 import { setHero } from '../game/js/sim/player.js';
 import { createEnemy } from '../game/js/sim/enemies.js';
 import { startMove } from '../game/js/sim/moveEngine.js';
@@ -38,6 +38,26 @@ function reach(hero, id) {
     }
   };
   const I = m.input;
+  // A pair needs a Sentinel to take hold of: a stunned one for an execution, one in reach for a throw (in the air
+  // for a throw in the air); Attack first, then Power two ticks later, inside the pair's window
+  if (I.btn === 'pair') {
+    const e = createEnemy(S, 'trooper', p.x + 1.1, 0, { cd: 9999, onGround: true, hp: 999, maxHp: 999 }); S.enemies.push(e);
+    if (I.ctx === 'stunned') { e.state = 'stun'; e.stunT = 999; }
+    if (I.ctx === 'air') { run({ b: BTN.jump }, 6); e.y = p.y; e.onGround = false; e.state = 'launched'; e.juggle = 20; e.hitstop = 1e9; e.x = p.x + 1.0; }
+    const hold = I.ctx === 'air' ? BTN.jump : 0, dir = { mx: I.dir === 'back' ? -1 : I.dir === 'fwd' ? 1 : 0, my: I.dir === 'up' ? 1 : 0 };
+    run({ ...dir, b: hold | BTN.attack }); run({ ...dir, b: hold }); run({ ...dir, b: hold | BTN.power }); run({ b: hold });
+    return swung(log, id);
+  }
+  if (I.btn === 'power') {
+    // Power inside a perfect defence's counter window: a perfect Evade into a trooper's swing first
+    const e = createEnemy(S, 'trooper', p.x + 1.3, 0, { cd: 0, onGround: true, hp: 999, maxHp: 999 }); S.enemies.push(e);
+    for (let i = 0; i < 200 && !log.some(v => v.type === 'perfect'); i++) {
+      const tell = e.state === 'windup' && e.atk && (e.atk.wind || ENEMIES.trooper[e.atk.kind].wind) - e.st <= 2;
+      run(tell ? { b: BTN.evade } : {});
+    }
+    run({ b: BTN.power }); run({}, 2);
+    return swung(log, id);
+  }
   if (set.chain.includes(id)) walkChain(set.chain, id);
   else if (set.airChain && set.airChain.includes(id)) { run({ b: BTN.jump }, 6); walkChain(set.airChain, id, true); }
   else if (I.ctx === 'alt') {
@@ -70,8 +90,9 @@ function hitAndReact(hero, id) {
   // place by a long hitstop so only the hit moves it
   const e = createEnemy(S, 'trooper', p.x + x0 + w / 2, 0, { cd: 9999, onGround: true, hp: 999, maxHp: 999 });
   if (air && !m.dive) { e.y = Math.max(0, p.y + y0 + h / 2 - e.h / 2); e.onGround = false; e.state = 'launched'; e.juggle = 20; }
+  if (m.input.ctx === 'stunned') { e.state = 'stun'; e.stunT = 999; }
   e.hitstop = 1e9; S.enemies.push(e);
-  startMove(S, p, id, I_COUNTER(m));
+  startMove(S, p, id, I_COUNTER(m), m.grab ? e.id : 0);
   let landedAt = null;
   for (let i = 0; i < 80 && landedAt === null && p.move; i++) {
     run(air && !m.dive ? { b: BTN.jump } : {});
@@ -80,7 +101,7 @@ function hitAndReact(hero, id) {
   const want = m.input.ctx === 'counter' && m.counter.react ? m.counter.react : m.react;
   return { landed: landedAt !== null, inActive: landedAt !== null && (landedAt === -1 || (landedAt > m.su && landedAt <= m.su + m.ac + 0.001)), reacted: landedAt !== null && SHOWS[want](e), want, state: e.state };
 }
-const I_COUNTER = m => m.input.ctx === 'counter';
+const I_COUNTER = m => m.input.ctx === 'counter';   // either counter, by Attack or by Power
 
 for (const hero of Object.keys(MOVESETS)) {
   const set = MOVESETS[hero], ids = Object.keys(set.moves), unreached = [], missed = [], wrong = [];

@@ -43,4 +43,10 @@ export default {
   dash: { keys: S.knee({ shN: 0.6, shF: 0.4, elN: 1.4, elF: 1.4 }) },
   air2: { keys: S.air2(PALM), base: 'air' },
   airDown: { keys: S.dive({ shN: 2.9, shF: 2.8, elN: 0.1, elF: 0.1 }), base: 'air' },
+  throwF: { keys: S.grab(PALM) },
+  throwB: { keys: S.grab(PALM, { twist: 1.2, spine: -0.5 }) },
+  throwU: { keys: S.grab(PALM, { spine: -0.6, shN: 3.0, shF: 2.9 }) },
+  throwAir: { keys: S.grab({ ...AIR }), base: 'air' },
+  exec: { keys: S.burst({ shN: 2.9, shF: 2.8, elN: 0.1, elF: 0.1 }), tremble: true },
+  counterP: { keys: S.lunge(PALM) },
 };

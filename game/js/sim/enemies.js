@@ -91,11 +91,13 @@ function lifted(S, e) {
   moveBody(e, DT, S.gates);
   if (e.liftT <= 0) { e.liftBy = 0; e.state = 'stagger'; e.st = 0; e.staggerT = 20; emit(S, 'liftEnd', { id: e.id }); }
 }
-// In Jean's grip: she moves it; if she lets go without a throw it staggers
+// Held: in Jean's grip, or in a hero's grab (a throw or an execution). The holder moves it; if they let go any other
+// way (interrupted, tagged out, the move ended) it staggers free
 function held(S, e) {
   const j = ent(S, e.heldBy);
   releaseToken(S, e);
-  if (!j || !j.tk || j.tk.id !== e.id) { e.heldBy = 0; e.state = 'stagger'; e.st = 0; e.staggerT = 16; }
+  const holds = j && ((j.tk && j.tk.id === e.id) || (j.move && j.move.target === e.id && j.state === 'attack'));
+  if (!holds) { e.heldBy = 0; e.state = 'stagger'; e.st = 0; e.staggerT = 16; }
 }
 // Thrown by Jean: a missile. It hits the first enemy it meets (both are hurt) or the wall (it is hurt).
 function thrown(S, e) {

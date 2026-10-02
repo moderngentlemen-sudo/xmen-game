@@ -8,12 +8,16 @@
 //
 // A move's fields (all required unless marked optional):
 //   slot       the grammar slot it fills (SLOTS), or 'extra' for a hero's own addition (Wolverine's g5)
-//   input      how the buttons reach it: { btn: 'attack', ctx, dir }
+//   input      how the buttons reach it: { btn, ctx, dir }
+//                btn  'attack'; 'pair' (Attack and Power together: PAIR in config.js); 'power' (only for the second
+//                     counter, out of a perfect defence)
 //                ctx  'ground', 'air': where the hero is when Attack is pressed
 //                     'dash': on the ground, running at DASH.speed of run speed or more, the way they face
 //                     'hold': reached by holding Attack through another move (see `charge`)
 //                     'alt': the second ender, reached from the chain after a pause (the moveset's `alt`)
-//                     'counter': Attack inside a perfect defence's counter window (one move per set)
+//                     'counter': inside a perfect defence's counter window (one move per button)
+//                     for a pair: 'beside' (a throw: a Sentinel within THROW.reach in front), 'air' (a throw in the
+//                     air), 'stunned' (an execution: a stunned Sentinel within EXEC.reach)
 //                dir  'neutral', 'fwd', 'back', 'up', 'down' (the stick past STICK.up, read relative to facing) or
 //                     'any'. Inside a chain, fwd and back are not read: only up and down branch out of it
 //              The chain's strikes all take { ctx: 'ground', dir: 'neutral' }, the air chain's { ctx: 'air', dir:
@@ -34,6 +38,10 @@
 //   launch     optional, true: launches light Sentinels
 //   heavy      optional, true: a heavy hit (it breaks armour plates and staggers longer)
 //   lift       optional, { vy, ticks }: the hero rises at no less than vy (m/s) in the first `ticks` active ticks
+//   grab       optional, true: a throw or an execution. The move takes hold of its target as it starts (the target
+//              is 'held'), keeps it at arm's length, and on its first active tick lets go with the move's hit
+//              (dmg, kb, react...) dealt straight to it: a grab cannot miss what it holds, and has no hitbox
+//   invuln     optional, [from, to]: the hero cannot be hit while the move's clock is in this window
 //   dive       optional, { vy }: the hero drives down at vy (m/s) from the last startup tick through the active ticks,
 //              while in the air
 //   charge     optional, { from, hold, release, dmgMult }: holding Attack through the move `from` winds this one up.
@@ -53,10 +61,10 @@ import { REACTIONS } from '../config.js';
 export const SLOTS = Object.freeze(['g1', 'g2', 'g3', 'g4', 'g4alt', 'fwd', 'up', 'down', 'heavy', 'dash', 'air1', 'air2', 'airDown',
   'throwF', 'throwB', 'throwU', 'throwAir', 'pTap', 'pHold', 'pFwd', 'pUp', 'pAir', 'evade', 'counter', 'counterP', 'sig', 'super', 'ult', 'exec']);
 
-const FIELDS = ['slot', 'input', 'su', 'ac', 'rc', 'dmg', 'poise', 'kb', 'boxes', 'step', 'cancel', 'react', 'launch', 'heavy', 'lift', 'charge', 'counter', 'hitstop', 'juggle', 'dive'];
+const FIELDS = ['slot', 'input', 'su', 'ac', 'rc', 'dmg', 'poise', 'kb', 'boxes', 'step', 'cancel', 'react', 'launch', 'heavy', 'lift', 'charge', 'counter', 'hitstop', 'juggle', 'dive', 'grab', 'invuln'];
 // The reactions a move may cause (read when validating: config.js imports the tables, so not at load time)
 const moveReacts = () => REACTIONS.filter(r => r !== 'held' && r !== 'thrown');
-const CTX = ['ground', 'air', 'dash', 'hold', 'alt', 'counter'], DIRS = ['neutral', 'fwd', 'back', 'up', 'down', 'any'];
+const CTX = ['ground', 'air', 'dash', 'hold', 'alt', 'counter'], PAIR_CTX = ['beside', 'air', 'stunned'], DIRS = ['neutral', 'fwd', 'back', 'up', 'down', 'any'];
 const CANCEL_INTO = ['evade', 'attack', 'jump'], CANCEL_ON = ['any', 'hit'];
 
 // Shorthands for the tables
@@ -65,7 +73,10 @@ export const ON = Object.freeze({
   chain: on('ground', 'neutral'), fwd: on('ground', 'fwd'), up: on('ground', 'up'), down: on('ground', 'down'),
   dash: on('dash', 'any'), hold: on('hold', 'any'), alt: on('alt', 'any'),
   air: on('air', 'neutral'), airDown: on('air', 'down'),
-  counter: on('counter', 'any'),
+  counter: on('counter', 'any'), counterP: Object.freeze({ btn: 'power', ctx: 'counter', dir: 'any' }),
+  throwF: Object.freeze({ btn: 'pair', ctx: 'beside', dir: 'fwd' }), throwB: Object.freeze({ btn: 'pair', ctx: 'beside', dir: 'back' }),
+  throwU: Object.freeze({ btn: 'pair', ctx: 'beside', dir: 'up' }), throwAir: Object.freeze({ btn: 'pair', ctx: 'air', dir: 'any' }),
+  exec: Object.freeze({ btn: 'pair', ctx: 'stunned', dir: 'any' }),
 });
 const cancels = (...into) => Object.freeze([Object.freeze({ into: Object.freeze(into), on: 'any' })]);
 export const CANCEL = Object.freeze({
@@ -92,7 +103,15 @@ export function validateMoves(set) {
     if (m.slot !== 'extra' && !SLOTS.includes(m.slot)) bad.push(`${at}: slot must be one of the grammar's slots, or 'extra'`);
     else if (m.slot !== 'extra') { if (slots[m.slot]) bad.push(`${at}: slot ${m.slot} is already filled by ${slots[m.slot]}`); slots[m.slot] = id; }
     const I = m.input;
-    if (!I || I.btn !== 'attack' || !CTX.includes(I.ctx) || !DIRS.includes(I.dir)) bad.push(`${at}: input must be { btn: 'attack', ctx: ${CTX.join('|')}, dir: ${DIRS.join('|')} }`);
+    if (I && I.btn === 'pair') {
+      if (!PAIR_CTX.includes(I.ctx) || !DIRS.includes(I.dir)) bad.push(`${at}: a pair's input must be { btn: 'pair', ctx: ${PAIR_CTX.join('|')}, dir }`);
+      else { const key = 'pair ' + I.ctx + ' ' + I.dir; if (taken[key]) bad.push(`${at}: ${key} already starts ${taken[key]}`); else taken[key] = id; }
+      if (!m.grab) bad.push(`${at}: a pair move is a grab (grab: true)`);
+    } else if (I && I.btn === 'power') {
+      if (I.ctx !== 'counter') bad.push(`${at}: Power reaches a table move only as the counter (ctx 'counter')`);
+      else if (taken['power counter']) bad.push(`${at}: power counter already starts ${taken['power counter']}`); else taken['power counter'] = id;
+      if (!m.counter) bad.push(`${at}: the counter move needs its counter bonus`);
+    } else if (!I || I.btn !== 'attack' || !CTX.includes(I.ctx) || !DIRS.includes(I.dir)) bad.push(`${at}: input must be { btn: 'attack', ctx: ${CTX.join('|')}, dir: ${DIRS.join('|')} }`);
     else {
       const inChain = chain.includes(id), inAir = airChain.includes(id);
       if (inChain !== (I.ctx === 'ground' && I.dir === 'neutral')) bad.push(`${at}: the chain's strikes, and only they, take { ctx: 'ground', dir: 'neutral' }`);
@@ -125,7 +144,9 @@ export function validateMoves(set) {
     if ('counter' in m && !(m.counter && num(m.counter.dmgMult) && m.counter.dmgMult > 0 && num(m.counter.poiseMult) && m.counter.poiseMult > 0
       && (!('react' in m.counter) || moveReacts().includes(m.counter.react))))
       bad.push(`${at}: counter must be { dmgMult, poiseMult, react? }, both multipliers above 0`);
-    if (I && I.ctx === 'counter' && !m.counter) bad.push(`${at}: the counter move needs its counter bonus`);
+    if (I && I.btn === 'attack' && I.ctx === 'counter' && !m.counter) bad.push(`${at}: the counter move needs its counter bonus`);
+    if ('grab' in m && m.grab !== true) bad.push(`${at}: grab must be true`);
+    if ('invuln' in m && !(Array.isArray(m.invuln) && m.invuln.length === 2 && m.invuln.every(num) && m.invuln[0] <= m.invuln[1])) bad.push(`${at}: invuln must be [from, to]`);
     if ('dive' in m && !(m.dive && num(m.dive.vy) && m.dive.vy > 0)) bad.push(`${at}: dive must be { vy above 0 }`);
     if ('juggle' in m && !tick(m.juggle)) bad.push(`${at}: juggle must be whole weight, 0 or more`);
     if ('hitstop' in m && !(['light', 'heavy', 'super'].includes(m.hitstop) || tick(m.hitstop))) bad.push(`${at}: hitstop must be light, heavy, super or whole ticks`);

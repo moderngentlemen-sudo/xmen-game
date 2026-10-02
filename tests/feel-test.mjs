@@ -166,3 +166,56 @@ for (const hero of ['cyclops', 'wolverine', 'jean']) {
   run({ b: BTN.jump }, 8); run({ b: BTN.jump | BTN.attack });
   assert(jumped && p.move && p.move.id === 'air1' && e.state === 'launched', 'a launcher that hits cancels into a full jump, and Attack up there starts the air chain');
 }
+
+// ---- 1.7 Pairs: throws and executions ----------------------------------------------------------------------------
+{
+  // Attack, then Power two ticks later, beside a trooper: the strike Attack started is cancelled into the throw
+  const { p, e, run, log } = arena('cyclops', { dist: 1.1 });
+  run({ b: BTN.attack }); run({}); run({ b: BTN.power }); run({}, 2);
+  const swings = log.filter(v => v.type === 'swing').map(v => v.move);
+  assert(swings.join(' ') === 'g1 throwF' && e.state === 'held' && e.heldBy === p.id, `Attack then Power inside the window cancels the strike into a throw (${swings.join(' ')})`);
+  run({}, 10);
+  assert(log.some(v => v.type === 'throw') && e.state === 'wallBounce' && !e.heldBy, 'the throw lets go with its hit: forward into a wall bounce');
+}
+{
+  // Power first works too; held back, it is the back throw; too far apart, it is no pair
+  const B = arena('wolverine', { dist: 1.1 });
+  B.run({ mx: -0.01, b: BTN.power }); B.run({ mx: -1, b: BTN.power | BTN.attack }); B.run({}, 2);
+  const late = arena('jean', { dist: 1.1 });
+  late.run({ b: BTN.attack }); late.run({}, 4); late.run({ b: BTN.power }); late.run({}, 2);
+  assert(B.log.some(v => v.type === 'swing' && v.move === 'throwB') && !late.log.some(v => v.type === 'swing' && v.move.startsWith('throw')),
+    'Power then Attack (back held) is the back throw; presses 5 ticks apart are no pair');
+}
+{
+  // Nobody in reach: nothing happens, and the first press's move carries on
+  const { p, run, log } = arena('cyclops', { trooper: false });
+  run({ b: BTN.attack }); run({}); run({ b: BTN.power }); run({});
+  assert(p.move && p.move.id === 'g1' && !log.some(v => v.type === 'swing' && v.move !== 'g1'), 'a pair with nothing in reach leaves the first move running');
+}
+{
+  // Armoured Sentinels and bosses cannot be thrown
+  const { S, p, run, log } = arena('cyclops', { trooper: false });
+  const c = createEnemy(S, 'collector', p.x + 1.2, 0, { cd: 9999, onGround: true }); S.enemies.push(c);
+  run({ b: BTN.attack | BTN.power }); run({}, 2);
+  assert(!log.some(v => v.type === 'swing' && v.move.startsWith('throw')) && c.state !== 'held', 'an armoured Collector cannot be thrown');
+}
+{
+  // Every grab has a way out: the hero hit while holding lets go, and the Sentinel staggers free
+  const { S, p, e, run } = arena('jean', { dist: 1.1 });
+  run({ b: BTN.attack | BTN.power }); run({});
+  const held = e.state === 'held';
+  p.mercy = 0; hurtPlayer(S, p, { owner: 0, team: 'e', inst: newId(S), dmg: 5, kb: [0, 2] });
+  run({}, 6);
+  assert(held && p.state === 'hitstun' && e.state === 'stagger' && !e.heldBy, 'a hero hit while holding a Sentinel lets go of it');
+}
+{
+  // An execution: Attack and Power by a stunned Sentinel; the hero cannot be hit while it plays
+  const { S, p, e, run, log } = arena('wolverine', { dist: 1.4 });
+  e.state = 'stun'; e.stunT = 999;
+  run({ b: BTN.attack | BTN.power }); run({}, 3);
+  const started = p.move && p.move.id === 'exec';
+  const hp = p.hp; p.mercy = 0;
+  hurtPlayer(S, p, { owner: 0, team: 'e', inst: newId(S), dmg: 5, kb: [0, 2] });
+  run({}, 40);
+  assert(started && p.hp === hp && (e.dead || e.hp < e.maxHp - 30), `Attack and Power by a stunned Sentinel executes it, and the hero cannot be hit meanwhile (${e.dead ? 'destroyed' : e.hp.toFixed(0) + ' hp left'})`);
+}
