@@ -2,8 +2,13 @@
   "name": "xmen-sentinel-strike-team-edition",
   "private": true,
   "type": "module",
-  "description": "X-Men: Sentinel Strike, Team Edition: the first concept proposal's vertical slice. An unofficial fan prototype (placeholder art and sound).",
+  "description": "X-Men: Sentinel Strike, Team Edition: the first concept proposal's vertical slice, being expanded (branch v2-expansion). An unofficial fan prototype (placeholder art and sound).",
   "scripts": {
-    "test": "node tests/run-all.mjs"
+    "test": "node tests/run-all.mjs",
+    "serve": "python3 -m http.server 8770 --bind 127.0.0.1 --directory game",
+    "shots": "NODE_USE_ENV_PROXY=1 node tools/shots.mjs",
+    "playtest": "NODE_USE_ENV_PROXY=1 node tools/playtest.mjs",
+    "coop": "NODE_USE_ENV_PROXY=1 node tools/coop.mjs",
+    "probe": "node tools/probe.mjs"
   }
 }
