@@ -5,7 +5,7 @@
 // Phase 0 moved V2's melee here with no change in behaviour; phase 1 grows it into the move grammar (directions read
 // relative to facing, the dash and air chain contexts, cancel windows in ticks, cancels on hit). Its state on the
 // player: p.move = { id, t, inst, counter, charged, hit, posed, letGo }, p.combo (the ground chain's index),
-// p.airCombo (the air chain's), p.comboT (the window to continue a chain) and p.atkHeld (the charge hold).
+// p.airCombo (the air chain's), p.chainOf (which chain the last strike belonged to), p.comboT (the window to continue a chain) and p.atkHeld (the charge hold).
 import { ACTION_BUFFER, BTN, COMBO_WINDOW, DASH, HEROES, HITSTOP, JUMP_BUFFER, STICK } from './config.js';
 import { MOVESETS } from './moves/index.js';
 import { emit, newId } from './world.js';
@@ -24,7 +24,7 @@ for (const [hero, set] of Object.entries(MOVESETS)) {
   const chains = [...set.chain, ...(set.airChain || [])];
   for (const pass of ['any', 'specific']) for (const [id, m] of Object.entries(set.moves)) {
     if (pass === 'any' && m.charge) chargeInto[m.charge.from] = id;
-    if (chains.includes(id) || m.input.ctx === 'hold') continue;
+    if (chains.includes(id) || m.input.ctx === 'hold' || m.input.ctx === 'alt') continue;
     if (m.input.ctx === 'counter') { counter = id; continue; }
     if ((m.input.dir === 'any') !== (pass === 'any')) continue;
     for (const dir of m.input.dir === 'any' ? DIRS : [m.input.dir]) start[m.input.ctx][dir] = id;
@@ -65,11 +65,15 @@ export function selectMove(S, p) {
   const ctx = air ? 'air' : !inChain && dashing(p) ? 'dash' : 'ground';
   const id = R.start[ctx][dir] || (ctx === 'dash' && R.start.ground[dir]) || (dir !== 'neutral' && R.start[ctx === 'dash' ? 'ground' : ctx].neutral);
   if (id) return { id, counter: false };
+  // A chain continues only from its own last strike (a launcher or a jump in between starts the next one afresh)
   if (air && set.airChain) {
-    p.airCombo = inChain ? (p.airCombo + 1) % set.airChain.length : 0;
+    p.airCombo = inChain && p.chainOf === 'air' ? (p.airCombo + 1) % set.airChain.length : 0;
     return { id: set.airChain[p.airCombo], counter: false };
   }
-  p.combo = inChain ? (p.combo + 1) % set.chain.length : 0;
+  p.combo = inChain && p.chainOf === 'ground' ? (p.combo + 1) % set.chain.length : 0;
+  // The second ender: the press for the chain's strike `alt.at` that comes after a pause into the chain's window
+  const A = set.alt;
+  if (A && inChain && set.chain[p.combo] === A.at && COMBO_WINDOW - p.comboT >= A.pause) return { id: A.id, counter: false };
   return { id: set.chain[p.combo], counter: false };
 }
 export function tryAttack(S, p) {
@@ -81,6 +85,8 @@ export function tryAttack(S, p) {
 
 export function startMove(S, p, id, counter) {
   p.move = { id, t: 0, inst: newId(S), counter, charged: false, hit: false };
+  const set = MOVESETS[p.hero];
+  p.chainOf = set.chain.includes(id) ? 'ground' : set.airChain && set.airChain.includes(id) ? 'air' : null;
   p.atkHeld = 0;
   if (p.aimFree && Math.abs(p.aimX) > 0.2) p.facing = p.aimX > 0 ? 1 : -1;
   setState(p, 'attack');
@@ -125,6 +131,7 @@ export function runMove(S, p, cmd, E) {
     });
     if (m.lift && t <= m.su + m.lift.ticks) p.vy = Math.max(p.vy, m.lift.vy);   // the launcher carries the hero up a little
   }
+  if (m.dive && !p.onGround && t >= m.su - 1 && t <= m.su + m.ac) p.vy = -m.dive.vy;   // a dive drives the hero down
   physics(S, p, 0, cmd, E, true, stepping);
   if (t >= m.su + m.ac + m.rc) { p.move = null; p.comboT = COMBO_WINDOW; setState(p, 'normal'); return; }
   // Cancel windows, in the table's order: into Evade, a jump (kept as a full jump: the launcher's follow-up), or the

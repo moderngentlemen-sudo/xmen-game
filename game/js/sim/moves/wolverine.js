@@ -5,16 +5,29 @@ import { ON, CANCEL } from './schema.js';
 
 export default {
   hero: 'wolverine',
-  chain: ['g1', 'g2', 'g3', 'g4'],
-  airChain: ['air1'],
+  chain: ['g1', 'g2', 'g3', 'g4', 'g5'],
+  airChain: ['air1', 'air2'],
+  alt: { at: 'g5', id: 'g4alt', pause: 7 },   // pausing before the last press swaps in the second ender
   moves: {
-    // three slashes and a spinning finisher
+    // three slashes, a spinning slash, and his own fifth hit: a double-claw thrust
     g1: { slot: 'g1', input: ON.chain, su: 3, ac: 3, rc: 7, dmg: 3, poise: 16, kb: [3, 1.5], boxes: [[0.1, 1.4, 0.3, 1.5]], step: 1.5, cancel: CANCEL.evadeOrAttack, react: 'flinch' },
     g2: { slot: 'g2', input: ON.chain, su: 3, ac: 3, rc: 7, dmg: 3, poise: 16, kb: [3, 1.5], boxes: [[0.1, 1.4, 0.3, 1.5]], step: 1.5, cancel: CANCEL.evadeOrAttack, react: 'flinch' },
     g3: { slot: 'g3', input: ON.chain, su: 4, ac: 3, rc: 9, dmg: 3.5, poise: 22, kb: [4, 2], boxes: [[0.1, 1.5, 0.2, 1.6]], step: 1.5, cancel: CANCEL.evadeOrAttack, react: 'flinch' },
-    g4: { slot: 'g4', input: ON.chain, su: 5, ac: 4, rc: 15, dmg: 6, poise: 60, kb: [12, 7], boxes: [[0.1, 1.7, 0.2, 1.7]], step: 1.5, cancel: CANCEL.evadeOrAttack, react: 'knockdown' },
+    g4: { slot: 'g4', input: ON.chain, su: 5, ac: 4, rc: 15, dmg: 6, poise: 60, kb: [5, 3], boxes: [[0.1, 1.7, 0.2, 1.7]], step: 1.5, cancel: CANCEL.evadeOrAttack, react: 'stagger' },
+    g5: { slot: 'extra', input: ON.chain, su: 5, ac: 4, rc: 16, dmg: 6.5, poise: 60, kb: [12, 7], boxes: [[0.1, 1.8, 0.4, 1.3]], step: 3, cancel: CANCEL.evadeOrAttack, react: 'knockdown' },
+    // gut slash that crumples (the second ender)
+    g4alt: { slot: 'g4alt', input: ON.alt, su: 7, ac: 4, rc: 18, dmg: 6, poise: 60, kb: [2, 0], boxes: [[0.1, 1.5, 0.5, 1.0]], step: 2, cancel: CANCEL.evadeOrAttack, react: 'crumple' },
+    // lunging thrust (wall-bounce), low claw sweep (knockdown), shoulder barge (the dash strike)
+    fwd: { slot: 'fwd', input: ON.fwd, su: 6, ac: 5, rc: 14, dmg: 5, poise: 40, kb: [14, 2], boxes: [[0.1, 1.9, 0.5, 1.0]], step: 10, cancel: CANCEL.evadeOrAttack, react: 'wallBounce' },
+    down: { slot: 'down', input: ON.down, su: 4, ac: 4, rc: 13, dmg: 3.5, poise: 30, kb: [3, 5], boxes: [[0.0, 1.7, 0.0, 0.6]], step: 1, cancel: CANCEL.evadeOrAttack, react: 'knockdown' },
+    dash: { slot: 'dash', input: ON.dash, su: 3, ac: 6, rc: 14, dmg: 4.5, poise: 45, kb: [10, 5], boxes: [[0.0, 1.2, 0.3, 1.4]], step: 9, cancel: CANCEL.evadeOrAttack, react: 'stagger' },
     // claw swipe
     air1: { slot: 'air1', input: ON.air, su: 3, ac: 6, rc: 8, dmg: 3.5, poise: 22, kb: [5, -1], boxes: [[0.0, 1.5, -0.1, 1.7]], step: 1.5, cancel: CANCEL.evadeOrAttack, react: 'airHit' },
+    // a second swipe in the air
+    air2: { slot: 'air2', input: ON.air, su: 3, ac: 5, rc: 10, dmg: 3.5, poise: 22, kb: [6, 3], boxes: [[0.0, 1.5, -0.1, 1.7]], step: 0, cancel: CANCEL.evadeOrAttack, react: 'airHit' },
+    // claw dive: down and Attack in the air, claws first into whatever is below; it bounces off the floor
+    airDown: { slot: 'airDown', input: ON.airDown, su: 5, ac: 12, rc: 12, dmg: 5, poise: 45, kb: [2, -12], boxes: [[-0.3, 1.3, -0.4, 1.0]], step: 0, cancel: CANCEL.evade, react: 'groundBounce',
+      dive: { vy: 22 } },
     // rising claw, the launcher
     up: { slot: 'up', input: ON.up, su: 4, ac: 5, rc: 14, dmg: 4, poise: 45, kb: [2, 15], boxes: [[0.0, 1.2, 0.5, 2.5]], step: 1.5, cancel: CANCEL.launcher, react: 'launch',
       launch: true, lift: { vy: 7, ticks: 2 } },

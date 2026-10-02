@@ -5,15 +5,28 @@ import { ON, CANCEL } from './schema.js';
 
 export default {
   hero: 'jean',
-  chain: ['g1', 'g2', 'g3'],
-  airChain: ['air1'],
+  chain: ['g1', 'g2', 'g3', 'g4'],
+  airChain: ['air1', 'air2'],
+  alt: { at: 'g4', id: 'g4alt', pause: 7 },   // pausing before the last press swaps in the second ender
   moves: {
-    // palm, palm, push
+    // palm, palm, push, psychic burst
     g1: { slot: 'g1', input: ON.chain, su: 5, ac: 3, rc: 9, dmg: 2.5, poise: 20, kb: [6, 2], boxes: [[0.2, 1.8, 0.6, 1.4]], step: 1.5, cancel: CANCEL.evadeOrAttack, react: 'flinch' },
     g2: { slot: 'g2', input: ON.chain, su: 5, ac: 3, rc: 10, dmg: 2.5, poise: 22, kb: [6, 2], boxes: [[0.2, 1.8, 0.6, 1.4]], step: 1.5, cancel: CANCEL.evadeOrAttack, react: 'flinch' },
-    g3: { slot: 'g3', input: ON.chain, su: 7, ac: 4, rc: 15, dmg: 4.5, poise: 60, kb: [13, 7], boxes: [[0.2, 2.1, 0.5, 1.6]], step: 1.5, cancel: CANCEL.evadeOrAttack, react: 'knockdown' },
+    g3: { slot: 'g3', input: ON.chain, su: 7, ac: 4, rc: 15, dmg: 4.5, poise: 60, kb: [6, 3], boxes: [[0.2, 2.1, 0.5, 1.6]], step: 1.5, cancel: CANCEL.evadeOrAttack, react: 'stagger' },
+    g4: { slot: 'g4', input: ON.chain, su: 8, ac: 4, rc: 16, dmg: 5, poise: 60, kb: [13, 7], boxes: [[0.0, 2.4, 0.3, 1.8]], step: 1, cancel: CANCEL.evadeOrAttack, react: 'knockdown' },
+    // TK slam: lifts it, then drives it into the floor to bounce (the second ender)
+    g4alt: { slot: 'g4alt', input: ON.alt, su: 9, ac: 4, rc: 18, dmg: 5.5, poise: 60, kb: [1, -14], boxes: [[0.2, 2.0, 0.0, 2.2]], step: 0, cancel: CANCEL.evadeOrAttack, react: 'groundBounce' },
+    // TK shove (wall-bounce), TK sweep that trips (knockdown), psychic dash strike
+    fwd: { slot: 'fwd', input: ON.fwd, su: 7, ac: 4, rc: 14, dmg: 4, poise: 45, kb: [15, 2], boxes: [[0.2, 2.4, 0.4, 1.4]], step: 2, cancel: CANCEL.evadeOrAttack, react: 'wallBounce' },
+    down: { slot: 'down', input: ON.down, su: 6, ac: 4, rc: 14, dmg: 3, poise: 35, kb: [3, 5], boxes: [[0.2, 2.2, 0.0, 0.6]], step: 0, cancel: CANCEL.evadeOrAttack, react: 'knockdown' },
+    dash: { slot: 'dash', input: ON.dash, su: 4, ac: 5, rc: 14, dmg: 4, poise: 40, kb: [8, 6], boxes: [[0.0, 1.8, 0.3, 1.4]], step: 8, cancel: CANCEL.evadeOrAttack, react: 'stagger' },
     // air palm
     air1: { slot: 'air1', input: ON.air, su: 5, ac: 5, rc: 10, dmg: 3.5, poise: 25, kb: [7, 1], boxes: [[0.0, 1.7, 0.1, 1.5]], step: 1.5, cancel: CANCEL.evadeOrAttack, react: 'airHit' },
+    // air push
+    air2: { slot: 'air2', input: ON.air, su: 5, ac: 4, rc: 12, dmg: 3.5, poise: 30, kb: [10, 4], boxes: [[0.0, 2.0, 0.1, 1.5]], step: 0, cancel: CANCEL.evadeOrAttack, react: 'airHit' },
+    // downward TK slam: down and Attack in the air; a wide press that bounces what is below off the floor
+    airDown: { slot: 'airDown', input: ON.airDown, su: 6, ac: 8, rc: 14, dmg: 4.5, poise: 45, kb: [1, -12], boxes: [[-0.6, 1.8, -1.4, 1.6]], step: 0, cancel: CANCEL.evade, react: 'groundBounce',
+      dive: { vy: 12 } },
     // lift, the launcher
     up: { slot: 'up', input: ON.up, su: 6, ac: 5, rc: 15, dmg: 3.5, poise: 45, kb: [2, 15], boxes: [[0.0, 1.3, 0.6, 2.5]], step: 1.5, cancel: CANCEL.launcher, react: 'launch',
       launch: true, lift: { vy: 7, ticks: 2 } },

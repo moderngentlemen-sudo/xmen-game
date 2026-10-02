@@ -1,6 +1,9 @@
 // Cyclops's strike clips, keyed by move id: martial-arts strikes. A backhand, an elbow and a driving punch (the
 // heavy reuses the punch), an axe kick in the air, the rising kick. The clip format is in clips/index.js.
 import { k, END, AIR } from './keys.js';
+import * as S from './shared.js';
+
+const PALM = { shN: 1.65, elN: 0.0, shF: 0.4, elF: 1.4 };   // the arms for the shared clips (clips/shared.js)
 
 const backhand = m => [k(0, { spine: 0.05, twist: -0.4, shN: -0.4, elN: 1.7, hipY: 0.9 }), k(m.su, { spine: 0.32, twist: 0.45, shN: 1.75, elN: 0.1, hipN: 0.65, knN: -0.7, hipF: -0.55, hipY: 0.86 }, true),
   k(m.su + m.ac + 3, { spine: 0.28, twist: 0.3, shN: 1.45, elN: 0.35, hipN: 0.6, knN: -0.65, hipF: -0.5 }), k(END(m), {})];
@@ -23,4 +26,12 @@ export default {
   up: { keys: rise },
   heavy: { keys: punch, tremble: true },
   counter: { keys: punch },   // the heavy's strike, at once: no wind-up tremble
+  // Phase 1's new slots, on the shared clips until step 1.8
+  g4: { keys: S.roundhouse(), spin: [1, 'y'] },
+  g4alt: { keys: S.burst(PALM) },
+  fwd: { keys: S.slide() },
+  down: { keys: S.sweep(), spin: [0.5, 'y'] },
+  dash: { keys: S.knee() },
+  air2: { keys: S.air2(), base: 'air' },
+  airDown: { keys: S.dive(), base: 'air' },
 };

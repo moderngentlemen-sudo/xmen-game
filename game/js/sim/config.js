@@ -75,7 +75,7 @@ export const HERO_IDS = ['cyclops', 'wolverine', 'jean'];
 // the move engine (sim/moveEngine.js). MOVES (each hero's moves by id) and COMBO (each hero's chain) are views of
 // the tables, for the client and the tools.
 export { MOVES, COMBO } from './moves/index.js';
-export const COMBO_WINDOW = 14;
+export const COMBO_WINDOW = 20;   // ticks after a strike's recovery in which the next press continues the chain; a pause into it swaps in the second ender (the moveset's `alt`)
 // Combo rules and the personal meter (sim/combo.js). Damage scaling: full for `full` hits, then `step` less a hit
 // to `floor`; `repeat` less per earlier use of the same move in the combo. A combo ends `gap` ticks after its last
 // hit. Style points per hit (`fresh` more for a move new to the combo, `air` more on a Sentinel in the air); the

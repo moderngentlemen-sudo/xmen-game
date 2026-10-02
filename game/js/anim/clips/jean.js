@@ -1,6 +1,9 @@
 // Jean Grey's strike clips, keyed by move id: open-palm telekinetic pushes with the far hand at her temple. Two palms
 // and a push (the heavy reuses the push), a palm in the air, the lift. The clip format is in clips/index.js.
 import { k, END, AIR } from './keys.js';
+import * as S from './shared.js';
+
+const PALM = { shN: 1.6, elN: 0.0, shF: 1.6, elF: 0.0 };   // the arms for the shared clips (clips/shared.js)
 
 const palm1 = m => [k(0, { twist: -0.3, shN: 0.6, elN: 1.6, shF: 2.6, elF: 2.3 }), k(m.su, { spine: 0.22, twist: 0.35, shN: 1.62, elN: 0.04, shF: 2.6, elF: 2.3, hipN: 0.55, knN: -0.6, hipF: -0.45, hipY: 0.88 }, true),
   k(m.su + m.ac + 3, { spine: 0.18, twist: 0.25, shN: 1.55, elN: 0.1, shF: 2.5, elF: 2.2, hipN: 0.5, knN: -0.55, hipF: -0.4 }), k(END(m), {})];
@@ -21,4 +24,12 @@ export default {
   up: { keys: lift },
   heavy: { keys: push, tremble: true },
   counter: { keys: push },   // the heavy's strike, at once: no wind-up tremble
+  // Phase 1's new slots, on the shared clips until step 1.8
+  g4: { keys: S.burst(PALM) },
+  g4alt: { keys: S.burst({ shN: 2.9, elN: 0.1, shF: 2.8, elF: 0.1 }) },
+  fwd: { keys: S.lunge(PALM) },
+  down: { keys: S.sweep({ shN: 0.6, elN: 0.2, shF: 0.4, elF: 0.2 }) },
+  dash: { keys: S.lunge(PALM) },
+  air2: { keys: S.air2(PALM), base: 'air' },
+  airDown: { keys: S.dive({ shN: 0.3, elN: 0.1, shF: 0.3, elF: 0.1 }), base: 'air' },
 };

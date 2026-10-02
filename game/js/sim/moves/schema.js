@@ -1,6 +1,8 @@
 // The move tables' format, the shorthands the tables share, and validateMoves(), which the tests run on every table.
-// A hero's moveset is { hero, chain, airChain?, moves }: `chain` is the order of the ground strikes on Attack,
-// `airChain` the order of the air strikes, and `moves` maps each move id to its fields. The move engine
+// A hero's moveset is { hero, chain, airChain?, alt?, moves }: `chain` is the order of the ground strikes on Attack,
+// `airChain` the order of the air strikes, `alt` the second ender ({ at, id, pause }: a press for the chain's strike
+// `at` that comes `pause` ticks or more into the chain's window starts `id` instead), and `moves` maps each move id
+// to its fields. The move engine
 // (sim/moveEngine.js) runs them. Phase 0 encoded exactly what V2's melee did; phase 1 grows the format into the move
 // grammar of 29 slots (SLOTS, below; HANDOFF-EXPANSION.md section 5.2).
 //
@@ -10,6 +12,7 @@
 //                ctx  'ground', 'air': where the hero is when Attack is pressed
 //                     'dash': on the ground, running at DASH.speed of run speed or more, the way they face
 //                     'hold': reached by holding Attack through another move (see `charge`)
+//                     'alt': the second ender, reached from the chain after a pause (the moveset's `alt`)
 //                     'counter': Attack inside a perfect defence's counter window (one move per set)
 //                dir  'neutral', 'fwd', 'back', 'up', 'down' (the stick past STICK.up, read relative to facing) or
 //                     'any'. Inside a chain, fwd and back are not read: only up and down branch out of it
@@ -31,6 +34,8 @@
 //   launch     optional, true: launches light Sentinels
 //   heavy      optional, true: a heavy hit (it breaks armour plates and staggers longer)
 //   lift       optional, { vy, ticks }: the hero rises at no less than vy (m/s) in the first `ticks` active ticks
+//   dive       optional, { vy }: the hero drives down at vy (m/s) from the last startup tick through the active ticks,
+//              while in the air
 //   charge     optional, { from, hold, release, dmgMult }: holding Attack through the move `from` winds this one up.
 //              While Attack stays down from the press that started `from`, `from` holds its pose at the end of its
 //              active ticks. Let go before `hold` ticks and it recovers as usual; once the hold reaches `hold`, this
@@ -48,17 +53,17 @@ import { REACTIONS } from '../config.js';
 export const SLOTS = Object.freeze(['g1', 'g2', 'g3', 'g4', 'g4alt', 'fwd', 'up', 'down', 'heavy', 'dash', 'air1', 'air2', 'airDown',
   'throwF', 'throwB', 'throwU', 'throwAir', 'pTap', 'pHold', 'pFwd', 'pUp', 'pAir', 'evade', 'counter', 'counterP', 'sig', 'super', 'ult', 'exec']);
 
-const FIELDS = ['slot', 'input', 'su', 'ac', 'rc', 'dmg', 'poise', 'kb', 'boxes', 'step', 'cancel', 'react', 'launch', 'heavy', 'lift', 'charge', 'counter', 'hitstop', 'juggle'];
+const FIELDS = ['slot', 'input', 'su', 'ac', 'rc', 'dmg', 'poise', 'kb', 'boxes', 'step', 'cancel', 'react', 'launch', 'heavy', 'lift', 'charge', 'counter', 'hitstop', 'juggle', 'dive'];
 // The reactions a move may cause (read when validating: config.js imports the tables, so not at load time)
 const moveReacts = () => REACTIONS.filter(r => r !== 'held' && r !== 'thrown');
-const CTX = ['ground', 'air', 'dash', 'hold', 'counter'], DIRS = ['neutral', 'fwd', 'back', 'up', 'down', 'any'];
+const CTX = ['ground', 'air', 'dash', 'hold', 'alt', 'counter'], DIRS = ['neutral', 'fwd', 'back', 'up', 'down', 'any'];
 const CANCEL_INTO = ['evade', 'attack', 'jump'], CANCEL_ON = ['any', 'hit'];
 
 // Shorthands for the tables
 const on = (ctx, dir) => Object.freeze({ btn: 'attack', ctx, dir });
 export const ON = Object.freeze({
   chain: on('ground', 'neutral'), fwd: on('ground', 'fwd'), up: on('ground', 'up'), down: on('ground', 'down'),
-  dash: on('dash', 'any'), hold: on('hold', 'any'),
+  dash: on('dash', 'any'), hold: on('hold', 'any'), alt: on('alt', 'any'),
   air: on('air', 'neutral'), airDown: on('air', 'down'),
   counter: on('counter', 'any'),
 });
@@ -92,12 +97,13 @@ export function validateMoves(set) {
       const inChain = chain.includes(id), inAir = airChain.includes(id);
       if (inChain !== (I.ctx === 'ground' && I.dir === 'neutral')) bad.push(`${at}: the chain's strikes, and only they, take { ctx: 'ground', dir: 'neutral' }`);
       if (airChain.length && inAir !== (I.ctx === 'air' && I.dir === 'neutral')) bad.push(`${at}: the air chain's strikes, and only they, take { ctx: 'air', dir: 'neutral' }`);
-      if (!inChain && !inAir && I.ctx !== 'hold') for (const d of I.ctx === 'counter' ? ['counter'] : I.dir === 'any' ? DIRS.filter(x => x !== 'any') : [I.dir]) {
+      if (!inChain && !inAir && I.ctx !== 'hold' && I.ctx !== 'alt') for (const d of I.ctx === 'counter' ? ['counter'] : I.dir === 'any' ? DIRS.filter(x => x !== 'any') : [I.dir]) {
         const key = I.ctx + ' ' + d;
         if (taken[key] && I.dir === 'any') continue;   // a specific direction elsewhere wins over 'any'
         if (taken[key]) bad.push(`${at}: ${key} already starts ${taken[key]}`); else taken[key] = id;
       }
       if (I.ctx === 'hold' && !m.charge) bad.push(`${at}: a hold move needs its charge`);
+      if (I.ctx === 'alt' && !(set.alt && set.alt.id === id)) bad.push(`${at}: an alt move must be the moveset's alt`);
     }
     if (!tick(m.su) || !tick(m.ac) || m.ac < 1 || !tick(m.rc)) bad.push(`${at}: su and rc must be whole ticks, ac at least 1`);
     if (!num(m.dmg) || m.dmg < 0 || !num(m.poise) || m.poise < 0) bad.push(`${at}: dmg and poise must be numbers, 0 or more`);
@@ -120,9 +126,11 @@ export function validateMoves(set) {
       && (!('react' in m.counter) || moveReacts().includes(m.counter.react))))
       bad.push(`${at}: counter must be { dmgMult, poiseMult, react? }, both multipliers above 0`);
     if (I && I.ctx === 'counter' && !m.counter) bad.push(`${at}: the counter move needs its counter bonus`);
+    if ('dive' in m && !(m.dive && num(m.dive.vy) && m.dive.vy > 0)) bad.push(`${at}: dive must be { vy above 0 }`);
     if ('juggle' in m && !tick(m.juggle)) bad.push(`${at}: juggle must be whole weight, 0 or more`);
     if ('hitstop' in m && !(['light', 'heavy', 'super'].includes(m.hitstop) || tick(m.hitstop))) bad.push(`${at}: hitstop must be light, heavy, super or whole ticks`);
   }
+  if (set.alt && !(chain.includes(set.alt.at) && set.moves[set.alt.id] && Number.isInteger(set.alt.pause) && set.alt.pause > 0)) bad.push(`${who}: alt must be { at: a chain strike, id: a move, pause: ticks }`);
   const charges = ids.filter(id => set.moves[id].charge).map(id => set.moves[id].charge.from);
   if (new Set(charges).size !== charges.length) bad.push(`${who}: two moves charge from the same move`);
   if (!taken['air neutral'] && !airChain.length) bad.push(`${who}: nothing starts in the air`);

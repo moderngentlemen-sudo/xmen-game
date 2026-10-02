@@ -47,11 +47,12 @@ export function playMission({ players = 1, seed = 1, maxMin = 25, onStep = null 
     if (!target) {
       // Nothing to fight: walk on (to the jet in the escape), jumping obstacles
       const k = S.kid, wantX = M.phase === 'escape' ? 250 : (sec.start || p.x) + 30;
-      // The kid is down: go to her and stand by her, which revives her. Anywhere, and up onto a ledge or a gantry if
-      // that is where she fell (the bot used to wait beside a crate stack, or under a gantry, for ever)
+      // The kid is down: go to her and stand by her, which revives her. Anywhere: up onto a ledge or a gantry if that
+      // is where she fell, or down through one if she fell below it (the bot used to wait beside them for ever)
       if (k && k.state === 'downed') {
         if (Math.abs(k.x - p.x) > 0.8) cmd.mx = Math.sign(k.x - p.x);
         if (k.y > p.y + 1) climb(p, m, cmd);
+        else if (k.y < p.y - 1 && p.onGround) { cmd.my = -1; m.jt = !m.jt; if (m.jt) cmd.b |= BTN.jump; }   // down through the walkway
         if (p.hitWall && p.onGround) cmd.b |= BTN.jump;
         return cmd;
       }

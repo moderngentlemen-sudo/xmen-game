@@ -1,6 +1,9 @@
 // Wolverine's strike clips, keyed by move id: the claw chain, a spinning finisher, the claws in the air, the rising
 // slash, a two-claw overhead heavy. The clip format is in clips/index.js.
 import { k, END, AIR } from './keys.js';
+import * as S from './shared.js';
+
+const PALM = { shN: 1.7, elN: 0.0, shF: 1.6, elF: 0.05 };   // the arms for the shared clips (clips/shared.js)
 
 const slash1 = m => [k(0, { spine: -0.05, twist: -0.35, shN: 2.6, elN: 1.0, hipN: 0.35, hipF: -0.25 }),
   k(m.su, { spine: 0.42, twist: 0.5, shN: 0.55, elN: 0.08, shF: -0.4, hipN: 0.78, knN: -0.72, hipF: -0.58, knF: -0.3, hipY: 0.84 }, true),
@@ -32,4 +35,12 @@ export default {
   up: { keys: clawRise },
   heavy: { keys: clawHeavy, tremble: true },
   counter: { keys: clawHeavy },   // the heavy's strike, at once: no wind-up tremble
+  // Phase 1's new slots, on the shared clips until step 1.8
+  g5: { keys: S.lunge(PALM) },
+  g4alt: { keys: S.burst(PALM) },
+  fwd: { keys: S.lunge(PALM) },
+  down: { keys: S.sweep(PALM), spin: [0.5, 'y'] },
+  dash: { keys: S.knee({ shN: 0.6, shF: 0.4, elN: 1.4, elF: 1.4 }) },
+  air2: { keys: S.air2(PALM), base: 'air' },
+  airDown: { keys: S.dive({ shN: 2.9, shF: 2.8, elN: 0.1, elF: 0.1 }), base: 'air' },
 };

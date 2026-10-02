@@ -5,15 +5,29 @@ import { ON, CANCEL } from './schema.js';
 
 export default {
   hero: 'cyclops',
-  chain: ['g1', 'g2', 'g3'],
-  airChain: ['air1'],
+  chain: ['g1', 'g2', 'g3', 'g4'],
+  airChain: ['air1', 'air2'],
+  alt: { at: 'g4', id: 'g4alt', pause: 7 },   // pausing before the last press swaps in the second ender
   moves: {
-    // backhand, elbow, driving punch
+    // backhand, elbow, driving punch, roundhouse kick
     g1: { slot: 'g1', input: ON.chain, su: 4, ac: 3, rc: 9, dmg: 3, poise: 18, kb: [4, 2], boxes: [[0.2, 1.3, 0.6, 1.6]], step: 1.5, cancel: CANCEL.evadeOrAttack, react: 'flinch' },
     g2: { slot: 'g2', input: ON.chain, su: 4, ac: 3, rc: 10, dmg: 3, poise: 20, kb: [4, 2], boxes: [[0.2, 1.35, 0.5, 1.5]], step: 1.5, cancel: CANCEL.evadeOrAttack, react: 'flinch' },
-    g3: { slot: 'g3', input: ON.chain, su: 6, ac: 4, rc: 16, dmg: 5, poise: 55, kb: [11, 6], boxes: [[0.2, 1.55, 0.2, 1.7]], step: 1.5, cancel: CANCEL.evadeOrAttack, react: 'knockdown' },
+    g3: { slot: 'g3', input: ON.chain, su: 6, ac: 4, rc: 16, dmg: 5, poise: 55, kb: [6, 3], boxes: [[0.2, 1.55, 0.2, 1.7]], step: 1.5, cancel: CANCEL.evadeOrAttack, react: 'stagger' },
+    g4: { slot: 'g4', input: ON.chain, su: 6, ac: 4, rc: 16, dmg: 5.5, poise: 55, kb: [11, 6], boxes: [[0.1, 1.7, 0.6, 1.5]], step: 1.5, cancel: CANCEL.evadeOrAttack, react: 'knockdown' },
+    // optic palm: a point-blank blast that wall-bounces (the second ender)
+    g4alt: { slot: 'g4alt', input: ON.alt, su: 8, ac: 3, rc: 18, dmg: 6, poise: 60, kb: [16, 3], boxes: [[0.2, 1.4, 0.7, 1.0]], step: 1, cancel: CANCEL.evadeOrAttack, react: 'wallBounce' },
+    // sliding kick (wall-bounce), leg sweep (knockdown), flying knee (the dash strike)
+    fwd: { slot: 'fwd', input: ON.fwd, su: 6, ac: 6, rc: 14, dmg: 4.5, poise: 40, kb: [14, 2], boxes: [[0.0, 1.6, 0.0, 0.7]], step: 9, cancel: CANCEL.evadeOrAttack, react: 'wallBounce' },
+    down: { slot: 'down', input: ON.down, su: 5, ac: 4, rc: 14, dmg: 3.5, poise: 35, kb: [3, 5], boxes: [[0.0, 1.8, 0.0, 0.5]], step: 1, cancel: CANCEL.evadeOrAttack, react: 'knockdown' },
+    dash: { slot: 'dash', input: ON.dash, su: 4, ac: 5, rc: 14, dmg: 4.5, poise: 40, kb: [8, 6], boxes: [[0.1, 1.3, 0.6, 1.2]], step: 8, cancel: CANCEL.evadeOrAttack, react: 'stagger',
+      lift: { vy: 5, ticks: 2 } },
     // axe kick
     air1: { slot: 'air1', input: ON.air, su: 4, ac: 5, rc: 10, dmg: 4, poise: 25, kb: [6, -2], boxes: [[0.1, 1.4, 0.0, 1.4]], step: 1.5, cancel: CANCEL.evadeOrAttack, react: 'airHit' },
+    // air roundhouse
+    air2: { slot: 'air2', input: ON.air, su: 4, ac: 4, rc: 12, dmg: 4, poise: 28, kb: [9, 4], boxes: [[0.0, 1.6, 0.3, 1.3]], step: 0, cancel: CANCEL.evadeOrAttack, react: 'airHit' },
+    // diving optic stomp: down and Attack in the air; it drives a Sentinel into the floor to bounce
+    airDown: { slot: 'airDown', input: ON.airDown, su: 6, ac: 10, rc: 14, dmg: 5, poise: 45, kb: [2, -12], boxes: [[-0.4, 1.2, -0.4, 0.9]], step: 0, cancel: CANCEL.evade, react: 'groundBounce',
+      dive: { vy: 20 } },
     // rising kick, the launcher: it carries him up a little
     up: { slot: 'up', input: ON.up, su: 5, ac: 5, rc: 16, dmg: 4, poise: 45, kb: [2, 15], boxes: [[0.0, 1.1, 0.6, 2.4]], step: 1.5, cancel: CANCEL.launcher, react: 'launch',
       launch: true, lift: { vy: 7, ticks: 2 } },

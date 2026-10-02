@@ -146,12 +146,14 @@ for (const hero of ['cyclops', 'wolverine', 'jean']) {
   assert(yes && !slow && !back && !air, `a dash is running the way they face at ${DASH.speed * 100}% of run speed or more, on the ground`);
 }
 {
-  // Inside a chain, forward is not read: walking into a fight keeps the string
+  // Inside a chain, forward is not read: walking on through a string keeps it (the opener reads it: a lunge)
   const { p, run, log } = arena('cyclops');
   let last = false;
-  run(i => { const m = p.move, ready = !m || m.t > 10; const press = ready && !last; last = press; return { mx: 1, b: press ? BTN.attack : 0 }; }, 60);
+  run(i => { const m = p.move, ready = !m || m.t > 10; const press = ready && !last; last = press; return { mx: i > 2 ? 1 : 0, b: press ? BTN.attack : 0 }; }, 70);
   const swings = log.filter(v => v.type === 'swing').map(v => v.move);
-  assert(swings.slice(0, 3).join(' ') === 'g1 g2 g3', `holding forward through a chain keeps the chain (${swings.slice(0, 4).join(' ')})`);
+  assert(swings.slice(0, 4).join(' ') === 'g1 g2 g3 g4', `holding forward through a chain keeps the chain (${swings.slice(0, 4).join(' ')})`);
+  const F = arena('cyclops'); F.run({ mx: 1, b: BTN.attack });
+  assert(F.log.find(v => v.type === 'swing').move === 'fwd', 'forward and Attack to open is the forward strike');
 }
 {
   // The launcher, on hit, cancels into a jump to follow the Sentinel up; then Attack in the air starts the air chain
