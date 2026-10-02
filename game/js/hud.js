@@ -7,7 +7,7 @@
 import { HEROES, GAUGE, ADAPT, SQUAD } from './sim/config.js';
 import { SECTIONS, MISSION_NAME } from './sim/mission.js';
 import { PLAYER_COLORS, HERO_LOOKS } from './looks.js';
-import { SETTINGS, saveSettings } from './settings.js';
+import { SETTINGS, saveSettings, bindKey, resetKeys, keyLabel } from './settings.js';
 
 const ROLE = { cyclops: 'The tactician', wolverine: 'The berserker', jean: 'The mover' };
 const BLURB = {
@@ -16,6 +16,16 @@ const BLURB = {
   jean: 'Hold Power to grab what she aims at, a Sentinel, a crate, a shot, a teammate, and let go to throw it. Holding jump in the air, she levitates. Signature: the TK Shield.',
 };
 const COUNTER_TIP = { optic: 'Optic blasts glance off. Try claws, telekinesis or a team-up.', claws: 'Claws cannot bite. Try optic blasts, telekinesis or a team-up.', tk: 'Magnetic anchors: Jean cannot grip them. Try blasts, claws or a team-up.' };
+const HINTS_KEY = 'xmen-team-edition-hints';
+const loadHints = () => { try { return new Set(JSON.parse(localStorage.getItem(HINTS_KEY) || '[]')); } catch (e) { return new Set(); } };
+const PAD_LABEL = { attack: 'X', power: 'RB', jump: 'A', evade: 'B', sig: 'Y', team: 'LB' };
+const POWER_TIP = {
+  cyclops: k => `Hold ${k('power')} to open the visor wider, let go to fire: blasts bank off walls`,
+  wolverine: k => `Hold ${k('power')} to coil the Drill Claw, let go to lunge through everything in line`,
+  jean: k => `Hold ${k('power')} to grab what you aim at, let go to throw it`,
+};
+const KEY_ROWS = [['left', 'Move left'], ['right', 'Move right'], ['up', 'Up (aim, launcher)'], ['down', 'Down (drop through)'], ['jump', 'Jump'],
+  ['attack', 'Attack'], ['power', 'Power'], ['evade', 'Evade'], ['sig', 'Signature'], ['team', 'Team']];
 const el = (tag, cls, html) => { const e = document.createElement(tag); if (cls) e.className = cls; if (html !== undefined) e.innerHTML = html; return e; };
 const pct = (v, m) => `${Math.max(0, Math.min(100, (v / m) * 100)).toFixed(1)}%`;
 
@@ -28,6 +38,7 @@ export class UI {
     // Three columns: the mission caption (or the Sentinels' alert in its place), the X-Gauge, the kid
     const left = el('div', 'left'); this.hudTop.appendChild(left);
     this.adapt = el('div', 'adapt'); this.adapt.hidden = true; left.appendChild(this.adapt);
+    this.tipEl = el('div', 'tip'); this.tipEl.hidden = true; left.appendChild(this.tipEl);
     this.missionEl = el('div', 'mission'); left.appendChild(this.missionEl);
     this.top = el('div', 'topbar'); this.hudTop.appendChild(this.top);
     this.gauge = el('div', 'gauge', '<div class="lbl"><span>X-Gauge</span><span class="hint"></span></div><div class="meter"><i></i></div>'); this.top.appendChild(this.gauge);
@@ -39,7 +50,8 @@ export class UI {
     this.bannerEl = null; this.bannerT = 0;
     this.plateEls = new Map();
     this.hudTop.hidden = this.hudBottom.hidden = true;
-    this.screen = null; this.paused = false; this.helpOpen = false;
+    this.screen = null; this.pageKind = ''; this.paused = false; this.helpOpen = false; this.capturing = null;
+    this.hintsSeen = loadHints(); this.tipT = 0; this.devices = [];
     this.showStart();
   }
 
@@ -47,35 +59,61 @@ export class UI {
   page(html, cls = '') {
     this.closePage();
     const s = el('div', 'screen ' + cls, `<div class="page">${html}</div>`);
-    this.root.appendChild(s); this.screen = s;
-    s.querySelectorAll('[data-act]').forEach(b => b.addEventListener('click', () => this.act(b.dataset.act)));
+    this.root.appendChild(s); this.screen = s; this.pageKind = cls;
+    s.querySelectorAll('[data-act]').forEach(b => b.addEventListener('click', () => this.act(b.dataset.act, b.dataset)));
     this.sel = 0; this.focusSel();
     return s;
   }
-  closePage() { if (this.screen) { this.screen.remove(); this.screen = null; } }
-  act(a) {
+  closePage() { if (this.screen) { this.screen.remove(); this.screen = null; this.pageKind = ''; } this.capturing = null; }
+  act(a, d = {}) {
     if (a === 'resume') this.A.resume();
     else if (a === 'restart') this.A.restart();
     else if (a === 'help') this.toggleHelp(true);
     else if (a === 'settings') this.showSettings();
-    else if (a === 'back') { this.helpOpen = false; if (this.paused) this.showPause(); else if (!this.started) this.showStart(); else this.closePage(); }
+    else if (a === 'back') this.back();
     else if (a === 'again') this.A.restart();
+    else if (a === 'title') this.A.title();
+    else if (a === 'heroes') this.A.heroes();
+    else if (a === 'start') this.A.start();
+    else if (a === 'pick') this.A.pick(+d.i, +d.dir);
+    else if (a === 'leave') this.A.leave(+d.i);
+    else if (a === 'ask-restart') this.confirm('Restart the mission?', 'Everyone goes back to the rooftop, and this run is lost.', 'restart');
+    else if (a === 'ask-title') this.confirm('Quit to the title page?', 'This run is lost. Everyone joins again from the cover.', 'title');
+    else if (a === 'bind') this.captureKey(d.k);
+    else if (a === 'reset-keys') { resetKeys(); this.showSettings(); }
+    else if (a === 'hints-again') { this.hintsSeen.clear(); this.saveHints(); this.showSettings(); }
+  }
+  // Out of a sub-page (controls, settings, a confirmation) to the page it came from. False when not on one.
+  back() {
+    if (this.capturing) return true;
+    if (this.helpOpen) { this.toggleHelp(false); return true; }
+    if (!this.subPage()) return false;
+    this.parentPage();
+    return true;
+  }
+  subPage() { return this.pageKind === 'settings' || this.pageKind === 'confirm'; }
+  parentPage() {
+    if (this.paused) this.showPause();
+    else if (this.results) this.showResults(this.results);
+    else if (this.lobby) this.showLobby(this.lobby);
+    else if (!this.started) this.showStart();
+    else this.closePage();
   }
   // Gamepad and arrow keys move between the buttons on a page; confirm presses the selected one
   menuNav(ev) {
     if (!this.screen) return false;
     const bs = [...this.screen.querySelectorAll('.btn')];
     if (!bs.length) return false;
-    if (ev.type === 'up') this.sel = (this.sel - 1 + bs.length) % bs.length;
-    else if (ev.type === 'down') this.sel = (this.sel + 1) % bs.length;
+    if (ev.type === 'up' || ev.type === 'left') this.sel = (this.sel - 1 + bs.length) % bs.length;
+    else if (ev.type === 'down' || ev.type === 'right') this.sel = (this.sel + 1) % bs.length;
     else if (ev.type === 'confirm') { bs[this.sel].click(); return true; }
-    else if (ev.type === 'back') { this.act('back'); return true; }
+    else if (ev.type === 'back') { this.back(); return true; }
     this.focusSel(); return true;
   }
   focusSel() { if (!this.screen) return; const bs = [...this.screen.querySelectorAll('.btn')]; bs.forEach((b, i) => b.classList.toggle('sel', i === this.sel)); }
 
   showStart() {
-    this.started = false;
+    this.started = false; this.lobby = null; this.results = null;
     const cards = ['cyclops', 'wolverine', 'jean'].map(h => `<div class="hero" style="--hc:${HERO_LOOKS[h].base === '#f5c518' ? '#e0a800' : HERO_LOOKS[h].base}"><b>${HERO_LOOKS[h].name}</b><span>${ROLE[h]}</span><p>${BLURB[h]}</p></div>`).join('');
     this.page(`
       <span class="caption">Unofficial fan prototype · issue #1</span>
@@ -88,22 +126,57 @@ export class UI {
       <div class="btns"><button class="btn" data-act="help">Controls</button><button class="btn" data-act="settings">Settings</button></div>
       <p class="fine">An unofficial, non-commercial fan prototype made with placeholder art and synthesized sound. Not affiliated with, endorsed or sponsored by Marvel. X-Men, Cyclops, Wolverine, Jean Grey and the Sentinels are trademarks of Marvel Characters, Inc.</p>`, 'start');
   }
-  hideStart() { this.started = true; this.closePage(); this.hudTop.hidden = this.hudBottom.hidden = false; }
+  hideStart() { this.started = true; this.lobby = null; this.results = null; this.closePage(); this.hudTop.hidden = this.hudBottom.hidden = false; }
+  // Back to the cover: the HUD empties until the next mission
+  toTitle() {
+    this.paused = false; this.helpOpen = false;
+    for (const P of this.plateEls.values()) P.remove();
+    this.plateEls.clear();
+    if (this.bannerEl) { this.bannerEl.remove(); this.bannerEl = null; }
+    this.hudTop.hidden = this.hudBottom.hidden = true;
+    this.showStart();
+  }
+
+  // The lobby: each player who has joined, their device and the hero they pick
+  showLobby(lobby) {
+    this.lobby = lobby; this.results = null; this.started = false;
+    const dev = d => (d === 'kbm' ? 'Keyboard and mouse' : `Gamepad ${+d.slice(3) + 1}`);
+    const keys = d => (d === 'kbm' ? `<kbd>${keyLabel(SETTINGS.keys.left[0])}</kbd> <kbd>${keyLabel(SETTINGS.keys.right[0])}</kbd> or <kbd>←</kbd> <kbd>→</kbd> to change, <kbd>Esc</kbd> to leave` : 'D-pad ← → to change, B to leave');
+    const cards = lobby.map((l, i) => `<div class="slot" style="--pc:${PLAYER_COLORS[i]};--hc:${HERO_LOOKS[l.hero].energy}">
+        <div class="who"><b>P${i + 1}</b><span>${dev(l.dev)}</span></div>
+        <div class="pick"><button class="btn arrow" data-act="pick" data-i="${i}" data-dir="-1" aria-label="Previous hero">◀</button>
+          <div class="hn"><b>${HERO_LOOKS[l.hero].name}</b><span>${ROLE[l.hero]}</span></div>
+          <button class="btn arrow" data-act="pick" data-i="${i}" data-dir="1" aria-label="Next hero">▶</button></div>
+        <p class="keys">${keys(l.dev)}</p>
+        <button class="btn small" data-act="leave" data-i="${i}">Leave</button></div>`).join('');
+    const open = Array.from({ length: 4 - lobby.length }, (_, i) => `<div class="slot open"><b>P${lobby.length + i + 1}</b><span>Press a button on a gamepad, or a key, to join</span></div>`).join('');
+    const solo = lobby.length === 1 ? `<p class="lede">Alone, your pick leads the squad; tap <kbd>Team</kbd> in the mission to tag the others in.</p>` : `<p class="lede">Each player is one hero. Stand together and press <kbd>Team</kbd> for that pair's team-up.</p>`;
+    this.page(`<span class="caption">Ready room</span><h2>Who's going in?</h2>
+      <div class="slots">${cards}${open}</div>${solo}
+      <div class="btns"><button class="btn" data-act="start">Start the mission</button><button class="btn" data-act="help">Controls</button><button class="btn" data-act="title">Back</button></div>
+      <p class="fine">Anyone who has joined can start: <kbd>Enter</kbd> or A.</p>`, 'lobby');
+  }
+
+  confirm(title, text, yes) {
+    this.page(`<span class="caption">Are you sure?</span><h2>${title}</h2><p class="lede">${text}</p>
+      <div class="btns"><button class="btn" data-act="back">No, go back</button><button class="btn" data-act="${yes}">Yes</button></div>`, 'confirm');
+  }
 
   helpHtml() {
+    const K = SETTINGS.keys, kb = a => K[a].length ? K[a].map(c => `<kbd>${keyLabel(c)}</kbd>`).join(' or ') : '<em>unbound</em>';
     const hero = h => `<div class="hero" style="--hc:${HERO_LOOKS[h].energy}"><b>${HERO_LOOKS[h].name}</b><span>${ROLE[h]}</span><p>${BLURB[h]}</p></div>`;
     return `<h2>Controls</h2>
       <table><tr><th>Input</th><th>Keyboard and mouse</th><th>Gamepad</th><th>Does</th></tr>
-      <tr><td>Move</td><td><kbd>A</kbd> <kbd>D</kbd>, <kbd>W</kbd> <kbd>S</kbd> to aim up or down</td><td>Left stick</td><td>Down and Jump drops through a walkway</td></tr>
+      <tr><td>Move</td><td>${kb('left')} ${kb('right')}, ${kb('up')} ${kb('down')} to aim up or down (or the arrows)</td><td>Left stick</td><td>Down and Jump drops through a walkway</td></tr>
       <tr><td>Aim</td><td>Mouse</td><td>Right stick</td><td>Without aim, you aim the way you move</td></tr>
-      <tr><td>Attack</td><td><kbd>J</kbd> or left click</td><td>X</td><td>A close combo; hold for a heavy finisher</td></tr>
-      <tr><td>Power</td><td><kbd>K</kbd> or right click</td><td>RB / RT</td><td>Your hero's core power: tap for a quick one, hold to build it</td></tr>
-      <tr><td>Jump</td><td><kbd>Space</kbd></td><td>A</td><td>Jump; hold in the air for your hero's own movement</td></tr>
-      <tr><td>Evade</td><td><kbd>L</kbd> or <kbd>Shift</kbd></td><td>B</td><td>Dash through danger; timed into a hit, a perfect defence that opens a counter</td></tr>
-      <tr><td>Signature</td><td><kbd>I</kbd> or <kbd>E</kbd></td><td>Y</td><td>Your hero's special move</td></tr>
-      <tr><td>Team</td><td><kbd>U</kbd> or <kbd>Q</kbd></td><td>LB / LT</td><td>Next to (or aiming at) an ally: your pair's team-up. Alone: tap to tag, hold for an assist</td></tr>
+      <tr><td>Attack</td><td>${kb('attack')} or left click</td><td>X</td><td>A close combo of quick strikes; with up held, a launcher; in the air, an air strike. Right after a perfect Evade, a heavy counter</td></tr>
+      <tr><td>Power</td><td>${kb('power')} or right click</td><td>RB / RT</td><td>Your hero's core power: tap for a quick one, hold to build it</td></tr>
+      <tr><td>Jump</td><td>${kb('jump')}</td><td>A</td><td>Jump; hold in the air for your hero's own movement</td></tr>
+      <tr><td>Evade</td><td>${kb('evade')}</td><td>B</td><td>Dash through danger; timed into a hit, a perfect defence that opens a counter</td></tr>
+      <tr><td>Signature</td><td>${kb('sig')}</td><td>Y</td><td>Your hero's special move</td></tr>
+      <tr><td>Team</td><td>${kb('team')}</td><td>LB / LT</td><td>Next to (or aiming at) an ally: your pair's team-up. Alone: tap to tag, hold for an assist</td></tr>
       <tr><td>Team ultimate</td><td>Team and Signature</td><td>LB and Y</td><td>With a full X-Gauge: To Me, My X-Men</td></tr>
-      <tr><td>Pause, controls</td><td><kbd>Esc</kbd>, <kbd>H</kbd></td><td>Start, View</td><td></td></tr></table>
+      <tr><td>Pause, controls</td><td><kbd>Esc</kbd>, <kbd>H</kbd></td><td>Start, View</td><td>Keys can be changed in Settings</td></tr></table>
       <div class="roster" style="margin-top:14px">${hero('cyclops')}${hero('wolverine')}${hero('jean')}</div>
       <h3>Team-ups</h3>
       <table><tr><td><b>Fastball Special</b></td><td>Jean and Wolverine: she holds him over her head, aims, and throws him claws-first through everything in line</td></tr>
@@ -116,31 +189,51 @@ export class UI {
   toggleHelp(on = !this.helpOpen) {
     this.helpOpen = on;
     if (on) this.page(this.helpHtml(), 'help');
-    else if (this.paused) this.showPause(); else if (!this.started) this.showStart(); else this.closePage();
+    else this.parentPage();
   }
   showPause() {
     this.page(`<span class="caption">Paused</span><h2>Meanwhile, at the Sentinel Works...</h2>
-      <div class="btns" style="flex-direction:column;align-items:flex-start"><button class="btn" data-act="resume">Resume</button><button class="btn" data-act="restart">Restart the mission</button>
-      <button class="btn" data-act="help">Controls</button><button class="btn" data-act="settings">Settings</button></div>`, 'pause');
+      <div class="btns" style="flex-direction:column;align-items:flex-start"><button class="btn" data-act="resume">Resume</button>
+      <button class="btn" data-act="help">Controls</button><button class="btn" data-act="settings">Settings</button>
+      <button class="btn" data-act="ask-restart">Restart the mission</button><button class="btn" data-act="ask-title">Quit to the title page</button></div>`, 'pause');
   }
   setPaused(on) { this.paused = on; if (on) this.showPause(); else { this.helpOpen = false; this.closePage(); } }
   showSettings() {
     const rows = [
       ['volume', 'Sound volume', 'range'], ['music', 'Music volume', 'range'], ['shake', 'Screen shake', 'check'], ['impactPanels', 'Impact panels', 'check'],
-      ['sfxWords', 'Lettered sound effects', 'check'], ['rumble', 'Controller rumble', 'check'], ['holdToggle', 'Power hold as a toggle', 'check'], ['quality', 'Quality', 'select'],
+      ['sfxWords', 'Lettered sound effects', 'check'], ['rumble', 'Controller rumble', 'check'], ['holdToggle', 'Power hold as a toggle', 'check'], ['hints', 'First-time hints', 'check'], ['quality', 'Quality', 'select'],
     ];
     const html = rows.map(([k, label, kind]) => {
       if (kind === 'range') return `<label class="setting"><span>${label}</span><input type="range" min="0" max="1" step="0.05" value="${SETTINGS[k]}" data-k="${k}"></label>`;
       if (kind === 'check') return `<label class="setting"><span>${label}</span><input type="checkbox" ${SETTINGS[k] ? 'checked' : ''} data-k="${k}"></label>`;
       return `<label class="setting"><span>${label}</span><select data-k="${k}"><option value="high" ${SETTINGS.quality === 'high' ? 'selected' : ''}>High (shadows, halftone)</option><option value="low" ${SETTINGS.quality === 'low' ? 'selected' : ''}>Low</option></select></label>`;
     }).join('');
-    const s = this.page(`<h2>Settings</h2><div class="settings">${html}</div><div class="btns"><button class="btn" data-act="back">Back</button></div>`, 'settings');
-    s.querySelectorAll('[data-k]').forEach(inp => inp.addEventListener('input', () => {
+    const keys = KEY_ROWS.map(([a, label]) => `<div class="setting"><span>${label}</span><button class="btn small key${SETTINGS.keys[a].length ? '' : ' unbound'}" data-act="bind" data-k="${a}">${SETTINGS.keys[a].map(keyLabel).join(' / ') || 'unbound'}</button></div>`).join('');
+    const s = this.page(`<h2>Settings</h2><div class="settings">${html}</div>
+      <h3>Keyboard</h3><p class="fine" style="margin-top:0">Click an action, then press its new key (<kbd>Esc</kbd> cancels). A key taken from another action leaves it. Esc, P, H and Enter stay the menu keys; the arrows always move.</p>
+      <div class="settings">${keys}</div>
+      <div class="btns"><button class="btn" data-act="back">Back</button><button class="btn small" data-act="reset-keys">Default keys</button><button class="btn small" data-act="hints-again">Show the hints again</button></div>`, 'settings');
+    s.querySelectorAll('[data-k]:not(button)').forEach(inp => inp.addEventListener('input', () => {
       const k = inp.dataset.k; SETTINGS[k] = inp.type === 'checkbox' ? inp.checked : inp.type === 'range' ? +inp.value : inp.value;
       saveSettings();
     }));
   }
+  // Wait for the next key and bind it to the action; Esc cancels
+  captureKey(action) {
+    const btn = this.screen && this.screen.querySelector(`button[data-k="${action}"]`);
+    if (!btn) return;
+    this.capturing = action; btn.textContent = 'Press a key…'; btn.classList.add('listening');
+    const onKey = e => {
+      e.preventDefault(); e.stopImmediatePropagation();
+      window.removeEventListener('keydown', onKey, true);
+      const was = this.capturing; this.capturing = null;
+      if (e.code !== 'Escape' && was) bindKey(was, e.code);
+      if (this.pageKind === 'settings') this.showSettings();
+    };
+    window.addEventListener('keydown', onKey, true);
+  }
   showResults(S) {
+    this.results = S;
     const T = S.mission.stats, d = T.dmg, total = Object.values(d).reduce((a, b) => a + b, 0) || 1;
     const secs = Math.round(S.mission.t / 60), mm = Math.floor(secs / 60), ss = String(secs % 60).padStart(2, '0');
     const share = k => `${Math.round((d[k] / total) * 100)}%`;
@@ -151,7 +244,7 @@ export class UI {
         <tr><td>Assists</td><td>${T.assists}</td></tr><tr><td>Perfect defences</td><td>${T.perfects}</td></tr><tr><td>Heroes down</td><td>${T.downs}</td></tr><tr><td>Sections restarted</td><td>${T.fails}</td></tr></table>
       <table><tr><th>Damage by</th><th></th></tr><tr><td>Team play</td><td>${share('team')}</td></tr><tr><td>Optic blasts</td><td>${share('optic')}</td></tr>
         <tr><td>Claws</td><td>${share('claws')}</td></tr><tr><td>Telekinesis</td><td>${share('tk')}</td></tr><tr><td>Everything else</td><td>${share('plain')}</td></tr></table></div>
-      <div class="btns"><button class="btn" data-act="again">Play again</button></div>`, 'results');
+      <div class="btns"><button class="btn" data-act="again">Play again</button><button class="btn" data-act="heroes">Change heroes</button><button class="btn" data-act="title">Title page</button></div>`, 'results');
   }
 
   banner(text, sub = '', bad = false, secs = 2.2) {
@@ -161,6 +254,11 @@ export class UI {
   }
 
   onEvent(ev, S) {
+    // A standard tell close to a hero: how to answer it
+    if (ev.type === 'telegraph' && ev.cat === 'standard' && S) {
+      const p = S.players.find(q => Math.abs(q.x - ev.x) < 5 && Math.abs(q.y - ev.y) < 4);
+      if (p) this.hint('evade', p, k => `A white glint: ${k('evade')} just as it lands, then ${k('attack')} to counter`);
+    }
     switch (ev.type) {
       case 'sectionStart': this.banner(ev.name, ev.sec === 1 ? 'Break the cell door' : ev.sec === 3 ? 'The Mk-II guards the X-Jet' : 'Sentinels incoming'); break;
       case 'sectionClear': this.banner('Clear!', ev.sec === 1 ? 'Keep her close: Collectors come for her' : 'The way ahead is open'); break;
@@ -172,8 +270,11 @@ export class UI {
     }
   }
 
-  update(S, dt, slotsToDevices) {
+  update(S, dt, devices = []) {
     if (!S) return;
+    this.devices = devices;
+    if (this.tipT > 0 && (this.tipT -= dt) <= 0) this.tipEl.hidden = true;
+    this.hints(S);
     if (this.bannerEl && (this.bannerT -= dt) <= 0) { this.bannerEl.remove(); this.bannerEl = null; }
     const M = S.mission;
     this.missionEl.textContent = `${MISSION_NAME} · ${SECTIONS[M.sec] ? SECTIONS[M.sec].name : ''}`;
@@ -211,6 +312,29 @@ export class UI {
     }
     for (const [id, P] of this.plateEls) if (!seen.has(id)) { P.remove(); this.plateEls.delete(id); }
   }
+
+  // ---- First-time hints --------------------------------------------------------------------------------------
+  // One line in the top band, in the mission caption's place, each shown once (remembered in this browser) and
+  // never over the game view. Keys are named for the player's own device and bindings.
+  hints(S) {
+    if (!SETTINGS.hints || this.tipT > 0) return;
+    for (const p of S.players) {
+      if (p.state === 'downed') continue;
+      if (S.enemies.some(e => !e.dead && Math.abs(e.x - p.x) < 9 && Math.abs(e.y - p.y) < 5)) this.hint('power-' + p.hero, p, POWER_TIP[p.hero]);
+      if (p.squad && p.hp < p.maxHp * 0.5 && p.tagCd === 0) this.hint('tag', p, k => `Hurt? Tap ${k('team')} to tag in a fresh hero; hold it to call an assist`);
+      if (!p.squad && p.teamCd === 0 && S.players.some(q => q !== p && q.state !== 'downed' && Math.hypot(q.x - p.x, q.y - p.y) < 3.6)) this.hint('teamup', p, k => `Side by side: press ${k('team')} for your pair's team-up`);
+      if (this.tipT > 0) return;
+    }
+    if (S.gauge >= GAUGE.max && S.players[0]) this.hint('ult', S.players[0], k => `X-Gauge full: ${k('team')} and ${k('sig')} together call the team ultimate`);
+  }
+  hint(id, p, text) {
+    if (!SETTINGS.hints || this.tipT > 0 || this.hintsSeen.has(id)) return;
+    const dev = this.devices[p.slot] || 'kbm';
+    const k = a => `<kbd>${dev === 'kbm' ? keyLabel(SETTINGS.keys[a][0]) : PAD_LABEL[a]}</kbd>`;
+    this.hintsSeen.add(id); this.saveHints();
+    this.tipEl.innerHTML = `<b>P${p.slot + 1}</b> ${text(k)}`; this.tipEl.hidden = false; this.tipT = 5;
+  }
+  saveHints() { try { localStorage.setItem(HINTS_KEY, JSON.stringify([...this.hintsSeen])); } catch (e) { /* not remembered */ } }
 
   fillPlate(P, p, S) {
     const H = HEROES[p.hero], q = s => P.querySelector(s);

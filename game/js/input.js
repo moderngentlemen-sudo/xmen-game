@@ -5,10 +5,8 @@
 import { BTN } from './sim/config.js';
 import { SETTINGS } from './settings.js';
 
-const KEYMAP = {
-  Space: 'jump', KeyJ: 'attack', KeyK: 'power', KeyL: 'evade', ShiftLeft: 'evade', ShiftRight: 'evade',
-  KeyI: 'sig', KeyE: 'sig', KeyU: 'team', KeyQ: 'team',
-};
+// The keyboard's bindings are in SETTINGS.keys (settings.js), so they can be changed in the settings page
+const ACTIONS = ['jump', 'attack', 'power', 'evade', 'sig', 'team'];
 // Mouse: left Attack, right Power, middle Signature, back Team, forward Evade
 const MOUSE = { 0: 'attack', 2: 'power', 1: 'sig', 3: 'team', 4: 'evade' };
 // Gamepad (standard mapping): A jump, X attack, B evade, Y signature, RB or RT power, LB or LT team
@@ -27,7 +25,7 @@ export class Input {
     this.keys = new Set(); this.kbTapped = new Set();
     this.mouse = { x: 0, y: 0, buttons: 0, moved: 0 }; this.mouseTapped = new Set();
     this.devices = {}; this.prevPads = {}; this.gamepadBlocked = false;
-    this.menuEvents = []; this.anyKbm = false;
+    this.menuEvents = []; this.anyKbm = false; this.joinBlocked = new Set();
     window.addEventListener('keydown', e => {
       if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Tab'].includes(e.code)) e.preventDefault();
       if (e.repeat) return;
@@ -37,6 +35,8 @@ export class Input {
       if (e.code === 'Enter') this.menuEvents.push({ dev: 'kbm', type: 'confirm' });
       if (e.code === 'ArrowUp') this.menuEvents.push({ dev: 'kbm', type: 'up' });
       if (e.code === 'ArrowDown') this.menuEvents.push({ dev: 'kbm', type: 'down' });
+      if (e.code === 'ArrowLeft' || SETTINGS.keys.left.includes(e.code)) this.menuEvents.push({ dev: 'kbm', type: 'left' });
+      if (e.code === 'ArrowRight' || SETTINGS.keys.right.includes(e.code)) this.menuEvents.push({ dev: 'kbm', type: 'right' });
     });
     window.addEventListener('keyup', e => this.keys.delete(e.code));
     window.addEventListener('blur', () => { this.keys.clear(); this.mouse.buttons = 0; });
@@ -60,17 +60,23 @@ export class Input {
     catch (e) { this.gamepadBlocked = true; return []; }
   }
 
-  // Devices that pressed something and are not yet playing
+  // Devices that pressed something and are not yet playing. A device that just left cannot join again until
+  // everything on it is let go (otherwise the press that left would join it straight back).
   pollJoins(assigned) {
     const out = [];
-    if (this.anyKbm && !assigned.has('kbm')) out.push('kbm');
+    if (this.anyKbm && !assigned.has('kbm') && !this.joinBlocked.has('kbm')) out.push('kbm');
     this.anyKbm = false;
+    if (this.joinBlocked.has('kbm') && !this.keys.size && !this.mouse.buttons) this.joinBlocked.delete('kbm');
     for (const p of this.pads()) {
-      const id = 'pad' + p.index;
-      if (!assigned.has(id) && p.buttons.some((b, i) => b.pressed && i !== 9 && i !== 8)) out.push(id);
+      const id = 'pad' + p.index, down = p.buttons.some((b, i) => b.pressed && i !== 9 && i !== 8);
+      if (this.joinBlocked.has(id)) { if (!p.buttons.some(b => b.pressed)) this.joinBlocked.delete(id); continue; }
+      if (!assigned.has(id) && down) out.push(id);
     }
     return out;
   }
+  // Forget presses that would join (a key pressed in a menu must not join anyone once the cover is back)
+  clearJoins() { this.anyKbm = false; }
+  blockJoin(dev) { this.joinBlocked.add(dev); if (dev === 'kbm') this.anyKbm = false; }
 
   // Start, View and the D-pad drive the menus
   pollPadMenus() {
@@ -81,6 +87,8 @@ export class Input {
       if (edge(8)) this.menuEvents.push({ dev: id, type: 'help' });
       if (edge(12)) this.menuEvents.push({ dev: id, type: 'up' });
       if (edge(13)) this.menuEvents.push({ dev: id, type: 'down' });
+      if (edge(14)) this.menuEvents.push({ dev: id, type: 'left' });
+      if (edge(15)) this.menuEvents.push({ dev: id, type: 'right' });
       if (edge(0)) this.menuEvents.push({ dev: id, type: 'confirm' });
       if (edge(1)) this.menuEvents.push({ dev: id, type: 'back' });
       this.prevPads[id] = now;
@@ -94,10 +102,10 @@ export class Input {
     let raw = 0, mx = 0, my = 0, ax = 1, ay = 0, aim = false;
     const set = name => { raw |= BTN[name]; };
     if (dev === 'kbm') {
-      const k = c => this.keys.has(c);
-      mx = (k('KeyD') || k('ArrowRight') ? 1 : 0) - (k('KeyA') || k('ArrowLeft') ? 1 : 0);
-      my = (k('KeyW') || k('ArrowUp') ? 1 : 0) - (k('KeyS') || k('ArrowDown') ? 1 : 0);
-      for (const [code, b] of Object.entries(KEYMAP)) if (k(code) || this.kbTapped.has(code)) set(b);
+      const K = SETTINGS.keys, held = (list, arrow) => this.keys.has(arrow) || list.some(c => this.keys.has(c));
+      mx = (held(K.right, 'ArrowRight') ? 1 : 0) - (held(K.left, 'ArrowLeft') ? 1 : 0);
+      my = (held(K.up, 'ArrowUp') ? 1 : 0) - (held(K.down, 'ArrowDown') ? 1 : 0);
+      for (const b of ACTIONS) if (K[b].some(c => this.keys.has(c) || this.kbTapped.has(c))) set(b);
       for (const [i, b] of Object.entries(MOUSE)) if ((this.mouse.buttons & (1 << i)) || this.mouseTapped.has(+i)) set(b);
       this.kbTapped.clear(); this.mouseTapped.clear();
       // The mouse aims once it has moved over the game in the last few seconds

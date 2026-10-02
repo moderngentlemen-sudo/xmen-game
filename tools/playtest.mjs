@@ -1,5 +1,5 @@
 // A real-input playtest:  NODE_USE_ENV_PROXY=1 node tools/playtest.mjs
-// Joins with a click, plays with the keyboard (walk, jump, strings, a held Power, tag, Evade, Signature, a held
+// Joins with a click, starts from the ready room with Enter, plays with the keyboard (walk, jump, strings, a held Power, tag, Evade, Signature, a held
 // Team for an assist), opens and closes the pause and controls screens, then races the mission to its end (the
 // script removes the Sentinels and walks the team on) and checks the debrief appears. Prints what it saw and
 // every console error. Screenshots go to tools/out/playtest-*.png.
@@ -15,15 +15,17 @@ const until = async (fn, ms = 20000) => { try { await page.waitForFunction(fn, n
 const shot = name => page.screenshot({ path: outPath(`playtest-${name}.png`), timeout: 180000 });
 const out = [];
 
-// Join with a click on the game
+// Join with a click on the game: the ready room opens; Enter starts the mission
 await page.mouse.click(640, 400);
+out.push(['ready room', await until(() => !!document.querySelector('.screen.lobby'))]);
+await page.keyboard.press('Enter');
 out.push(['joined', await until(() => window.__X.S.players.length === 1), await stats()]);
 // Walk right, jump, attack
 await page.keyboard.down('KeyD'); await page.waitForTimeout(1500); await page.keyboard.press('Space'); await page.waitForTimeout(600); await page.keyboard.up('KeyD');
 out.push(['walked', await stats()]);
 for (let i = 0; i < 4; i++) { await page.keyboard.press('KeyJ'); await page.waitForTimeout(200); }
-// Optic blast: hold Power (K), then let go
-await page.keyboard.down('KeyK'); await page.waitForTimeout(900); await page.keyboard.up('KeyK'); await page.waitForTimeout(300);
+// Optic blast: hold Power (K) past the end of the combo (Power waits until the hero is free), then let go
+await page.keyboard.down('KeyK'); await page.waitForTimeout(1600); await page.keyboard.up('KeyK'); await page.waitForTimeout(300);
 out.push(['optic strain', await page.evaluate(() => window.__X.S.players[0].strain.toFixed(1))]);
 await shot('optic');
 // Tag to Wolverine (tap U), coil a Drill Claw

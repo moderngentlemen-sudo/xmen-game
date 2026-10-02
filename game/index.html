@@ -30,7 +30,13 @@ body { background: #1d1648; color: var(--text); font-family: var(--font-body); o
 #hud-top > .row { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 10px; padding: 0 10px 3px; }
 #hud-top .left { display: flex; align-items: center; min-width: 0; }
 #hud-top .right { display: flex; justify-content: flex-end; align-items: center; min-width: 0; }
-#hud-top .adapt:not([hidden]) + .mission { display: none; }   /* the Sentinels' alert takes the caption's place */
+/* The Sentinels' alert, else a first-time hint, takes the mission caption's place */
+#hud-top .adapt:not([hidden]) ~ .tip, #hud-top .adapt:not([hidden]) ~ .mission, #hud-top .tip:not([hidden]) ~ .mission { display: none; }
+.tip { box-sizing: border-box; min-width: 0; max-width: 100%; background: #fff; color: var(--ink); border: 3px solid var(--ink); box-shadow: 3px 3px 0 #000; padding: 3px 8px;
+  font-family: var(--font-display); font-weight: 700; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; animation: tipIn 0.25s ease-out; }
+.tip b { font-family: var(--font-comic); font-weight: 400; color: var(--ink); margin-right: 4px; }
+.tip kbd { font-size: 12px; padding: 0 4px; }
+@keyframes tipIn { from { transform: translateY(-6px); opacity: 0; } to { transform: none; opacity: 1; } }
 #game { outline: none; }
 #ink { pointer-events: none; }
 #ui { position: absolute; inset: 0; pointer-events: none; font-size: 15px; }
@@ -67,6 +73,20 @@ th { font-family: var(--font-display); text-transform: uppercase; letter-spacing
   padding: 6px 16px; cursor: pointer; pointer-events: auto; }
 .btn:hover, .btn.sel { background: #fff; }
 .btn:focus-visible { outline: 3px solid #ff3a24; outline-offset: 3px; }
+.btn.small { font-size: 17px; padding: 3px 10px; box-shadow: 3px 3px 0 var(--ink); }
+.btn.key { min-width: 90px; font-family: var(--font-display); font-weight: 800; font-size: 15px; }
+.btn.key.unbound { background: #ffd6cf; } .btn.key.listening { background: #ff3a24; color: #fff; }
+/* The ready room: a card per player */
+.slots { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; margin: 12px 0; }
+.slot { border: 3px solid var(--ink); background: #fff; box-shadow: 4px 4px 0 var(--ink); padding: 8px 10px; border-top: 8px solid var(--pc, #999); display: flex; flex-direction: column; gap: 6px; }
+.slot .who { display: flex; align-items: baseline; gap: 8px; } .slot .who b { font-family: var(--font-comic); font-size: 26px; color: var(--pc); -webkit-text-stroke: 1px var(--ink); }
+.slot .who span { font-family: var(--font-display); font-weight: 700; font-size: 13px; text-transform: uppercase; letter-spacing: 0.06em; }
+.slot .pick { display: flex; align-items: center; gap: 6px; } .slot .btn.arrow { font-size: 18px; padding: 2px 8px; box-shadow: 2px 2px 0 var(--ink); }
+.slot .hn { flex: 1; text-align: center; } .slot .hn b { display: block; font-family: var(--font-comic); font-size: 26px; color: var(--hc); -webkit-text-stroke: 1px var(--ink); }
+.slot .hn span { font-family: var(--font-display); font-weight: 800; font-size: 12px; text-transform: uppercase; letter-spacing: 0.1em; }
+.slot .keys { margin: 0; font-size: 12.5px; line-height: 1.5; } .slot .btn.small { align-self: flex-start; }
+.slot.open { border-style: dashed; border-top-width: 3px; background: rgba(255,255,255,0.5); box-shadow: none; justify-content: center; align-items: center; text-align: center; min-height: 120px; }
+.slot.open b { font-family: var(--font-comic); font-size: 24px; color: #8a8096; } .slot.open span { font-size: 13px; color: #5a5068; }
 .settings { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 8px 16px; margin: 8px 0; }
 .setting { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 6px 8px; border: 2px solid rgba(18,13,26,0.2); }
 .setting input[type=range] { width: 45%; accent-color: #ff3a24; }

@@ -1,6 +1,6 @@
 // A two-player co-op playtest:  NODE_USE_ENV_PROXY=1 node tools/coop.mjs
 // Player 1 on keyboard and mouse, player 2 on a scripted gamepad (tools/lib/browser.mjs replaces the Gamepad
-// API). Both join, walk, call a team-up with real inputs, and player 2 attacks; then Start pauses and A resumes,
+// API). Both join in the ready room, player 1 starts with Enter, they walk, call a team-up with real inputs, and player 2 attacks; then Start pauses and A resumes,
 // and rumble calls are counted. Screenshot: tools/out/coop-teamup.png.
 // The team-up checked is V2's Optic Edge (Cyclops + Wolverine): update it as the roster changes.
 import { ensureServer, launch, openGame, outPath } from './lib/browser.mjs';
@@ -17,6 +17,8 @@ const press = async (i, ms = 250) => { await page.evaluate(i => window.__press(i
 // Player 1 joins with a click, player 2 with A
 await page.mouse.click(640, 400); await page.waitForTimeout(500);
 await press(0, 300); await page.waitForTimeout(500);
+out.push(['ready room', await page.evaluate(() => (window.__X.lobby || []).map(l => `${l.dev}:${l.hero}`).join(' '))]);
+await page.keyboard.press('Enter'); await page.waitForTimeout(500);
 out.push(['joined', await team()]);
 // Player 2 walks on the stick, player 1 on D
 await page.evaluate(() => { window.__pad.axes[0] = 1; }); await page.keyboard.down('KeyD'); await ticks(60);

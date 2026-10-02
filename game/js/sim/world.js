@@ -35,9 +35,10 @@ export function createWorld({ seed = 1, players = 1 } = {}) {
 export const newId = S => S.nextId++;
 export function emit(S, type, data = {}) { S.events.push({ ...data, type, tick: S.tick }); }   // data never overrides the type
 
-// A player joins as the first hero nobody else is playing; alone, they run a squad of all three
-export function addPlayer(S, slot, solo = false) {
-  const hero = HERO_IDS.find(h => !S.players.some(p => p.hero === h)) || HERO_IDS[slot % HERO_IDS.length];
+// A player joins as the hero they picked, else the first hero nobody else is playing; alone, they run a squad of
+// all three, led by that hero
+export function addPlayer(S, slot, solo = false, pick = null) {
+  const hero = HERO_IDS.includes(pick) ? pick : HERO_IDS.find(h => !S.players.some(p => p.hero === h)) || HERO_IDS[slot % HERO_IDS.length];
   // Joining mid-mission: next to a teammate who is still standing, else at the section's start
   const lead = S.players.find(q => q.state !== 'downed' && q.state !== 'dead');
   const cp = lead ? { x: lead.x + 0.9, y: lead.y + 0.5 } : S.mission ? S.mission.spawn : { x: 0, y: 0 };
