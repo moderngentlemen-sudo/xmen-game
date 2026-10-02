@@ -1,13 +1,14 @@
 // A simple bot that plays the real mission with no cheats: it walks on, fights the nearest Sentinel (Power from
 // range, Attack up close), evades tells about to land, breaks the cell door, chases a Collector carrying the kid,
 // tags out of trouble in solo and calls team-ups in co-op. Used to check that the mission can always be finished
-// (no softlocks) and to get a feel for its length.
+// (no softlocks) and to get a feel for its length. `onStep(S)`, if given, runs after every tick (the golden
+// replays record from it). Any change to the bot changes its inputs, so the golden replays must be re-recorded.
 import { createWorld, step } from '../../game/js/sim/world.js';
 import { BTN, ENEMIES } from '../../game/js/sim/config.js';
 import { SECTIONS } from '../../game/js/sim/mission.js';
 import { CELL } from '../../game/js/sim/level.js';
 
-export function playMission({ players = 1, seed = 1, maxMin = 25 } = {}) {
+export function playMission({ players = 1, seed = 1, maxMin = 25, onStep = null } = {}) {
   const S = createWorld({ seed, players });
   const mem = S.players.map(() => ({ hold: 0, holdBtn: 0, evadeCd: 0, press: 0 }));
   let rng = seed >>> 0; const r = () => { rng = (rng * 1664525 + 1013904223) >>> 0; return rng / 4294967296; };
@@ -77,6 +78,7 @@ export function playMission({ players = 1, seed = 1, maxMin = 25 } = {}) {
   for (let t = 0; t < maxMin * 3600 && !S.mission.done; t++) {
     const cmds = {}; S.players.forEach((p, i) => { cmds[p.slot] = brain(p, i); });
     step(S, cmds);
+    if (onStep) onStep(S);
     for (const ev of S.events) {
       if (ev.type === 'sectionClear') sections.push(ev.name);
       if (ev.type === 'missionFail') fails.push(ev.why);
