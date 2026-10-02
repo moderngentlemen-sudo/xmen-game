@@ -1,10 +1,11 @@
 # Handoff: the Team Edition expansion (branch `v2-expansion`)
 
-> **Status, 2 October 2026:** **phase 0 is done and its gate passed**, and a menus and HUD pass the user asked for
-> came after it (section 3b): the HUD sits in bands above and below the game view and never covers play, there is
-> a ready room for picking heroes, first-time hints and key rebinding. That build is published (link below).
-> Phase 1 has not started. Before it, check the proposal doc's comment thread again, then refine phase 1's
-> checklist into steps.
+> **Status, 2 October 2026:** **phase 1 is under way.** Phase 0 and the menus and HUD pass are done (sections 3
+> and 3b). Phase 1's steps 1.1 to 1.6 are done, step 1.7 is two parts in (the strikes; throws, executions and the
+> power counter), and the contact-sheet tool (1.11) is done: in-sim hitstop, the charged heavy, twelve reactions,
+> combo scaling with a style rank and a three-bar meter on the plates, the input grammar, and 20 to 21 moves per
+> hero. `tests/gate/phase1.mjs` is 18 of 23 green. **Next: step 1.7's third part** (the power slots, Evade,
+> Signature, super and ultimate; see 1.7 below), then 1.8 to 1.10. Nothing of phase 1 is published yet.
 > **Update this box, the phase checklists and the log at the end of every session.**
 
 | | |
@@ -193,11 +194,19 @@ they arrive.
   in `enemies.js`), juggle weight with rising gravity, flip-out at the limit, OTG once, wall and ground bounce,
   crumple, spin-out, and stun from a broken poise bar. A move's `react` field picks the reaction; `hitEnemy` in
   `combat.js` hands the hit to `react()` instead of choosing stagger or launch itself. Numbers in section 5.3.
-- [ ] **1.5 Combo rules and the meter.** `game/js/sim/combo.js`: damage scaling (`comboScale(n, repeats)`), faster
+- [x] **1.5 Combo rules and the meter.** Done as planned; `sim/combo.js` documents it. Numbers: SCALING, STREAK (a
+  combo ends 50 ticks after its last hit, or when the hero is hurt), STYLE (points per hit, more for a fresh move or a
+  Sentinel in the air; ranks at 0, 60, 150, 280, 450, 700) and METER in `config.js`. The plate shows "N hits" and the
+  rank in the role's place while a combo lasts, and three meter pips; `tools/layout.mjs` checks it. The mission's
+  stats keep `bestCombo` and `bestRank` (the debrief does not show them yet). The plan was: `game/js/sim/combo.js`: damage scaling (`comboScale(n, repeats)`), faster
   scaling for repeated move ids, a per-player combo (`p.combo` is V2's chain index, so the combo is `p.streak`),
   a style rank D to X, and the personal three-bar meter (`METER` in `config.js`, `p.meter`). HUD: the combo
   counter, rank and meter go in the player's plate in the bottom band.
-- [ ] **1.6 Input grammar and the slot ids.** Grow `selectMove` and the tables' `input`: Attack and Power and
+- [x] **1.6 Input grammar and the slot ids.** Done: `schema.js` (SLOTS, `ON`, cancel windows
+  `{ into, on, from?, to? }`), `selectMove` (`dirOf`, `dashing`, `p.chainOf` so a chain continues only from its own
+  strike), V2's heavy split into `heavy` (hold) and `counter`, `air` renamed `air1`, the launcher's jump cancel on
+  hit. Inside a chain only up and down branch out (fwd and back read as neutral), so walking on through a string keeps
+  it; the opener does read forward (the lunge). The pairs came with the throws in 1.7. The plan was: Grow `selectMove` and the tables' `input`: Attack and Power and
   Signature as buttons, directions read relative to facing (fwd, back, up, down), contexts ground, air, dash
   (running at 80% or more of run speed), hold, stunned. Cancels become tick windows `{ into, on, from, to }`
   (section 5.1). Rename the move ids to the slot ids of section 5.2 in the tables, the clips, `moves-test`, and
@@ -207,7 +216,21 @@ they arrive.
     window cancels it into the throw (beside a Sentinel) or the execution (on a stunned one). Nothing waits for a
     possible pair, so single presses keep their startup.
   - Signature + forward is the super; Signature + up is the ultimate.
-- [ ] **1.7 Moves.** Fill the 29 slots for the three heroes from section 5.4, with a suite that walks every move of
+- [ ] **1.7 Moves.** Two parts done, one to go.
+  - [x] **Strikes:** g4 and the second ender g4alt (a press after a pause of `alt.pause` ticks into the chain window,
+    which grew to 20; Wolverine's chain is five with `g5`, an extra), fwd, down, dash, air2, airDown (a `dive` field).
+  - [x] **Throws, executions, the power counter:** pairs (`PAIR`, `THROW`, `EXEC` in `config.js`; `tryPair` in
+    `moveEngine.js`; `p.lastPress` ages presses separately from the buffers), grabs (`grab: true`: the target is
+    `held` and gets the move's hit on its first active tick; no hitbox), `invuln` windows, `counterP` (Power out of a
+    perfect defence).
+  - [ ] **Powers and Signature:** pTap, pHold, pFwd, pUp, pAir, evade, sig, super, ult. pTap, pHold, pAir, evade and
+    sig already exist in the hero modules (`sim/heroes/`): give them table entries that point at the module (a
+    `module` kind, without frame data, that the schema accepts), and build pFwd, pUp, super and ult from section 5.4.
+    Signature + forward is the super (1 bar), Signature + up the ultimate (2 bars); they need `cost` and the meter.
+    Then the gate's slot checks go green.
+  - The new moves use shared placeholder clips (`anim/clips/shared.js`) until 1.8.
+  - `tests/movelist-test.mjs` walks every move (the marker `EVERY_MOVE_TESTED`); a new kind of input needs a recipe in
+    its `reach`. The plan was: Fill the 29 slots for the three heroes from section 5.4, with a suite that walks every move of
   every table (it carries the marker `EVERY_MOVE_TESTED`, which the gate looks for): each move starts from its
   input, puts out its hitbox on its active ticks, and causes its reaction on a trooper.
 - [ ] **1.8 Animation.** Grow the skeleton to 19 joints (neck, chest, both wrists, both ankles) and add spring chains
@@ -219,7 +242,7 @@ they arrive.
 - [ ] **1.10 The Danger Room** (a mode, not a mission): the move list with live demos; frame data and hitbox
   readouts; sparring Sentinels with settings; 5 combo trials per hero in `game/js/sim/trials.js`, each also a test
   (`tests/trials-test.mjs`: scripted inputs, then the expected route and hit count).
-- [ ] **1.11 A contact-sheet tool**, `tools/contact.mjs`. It screenshots every move on its first active tick, one
+- [x] **1.11 A contact-sheet tool**, done ahead of order (the new moves needed it): `tools/contact.mjs`. The plan:, `tools/contact.mjs`. It screenshots every move on its first active tick, one
   page per hero. Reuse one page for many shots: a fresh page per shot costs 20 s or more in software GL.
 - [ ] **1.12 Gate.** `tests/gate/phase1.mjs` all green, every move has a test, the 15 trials pass, contact sheets
   are reviewed, the golden replays re-recorded at the end, and the build is published. Then ask the user to play it
@@ -558,6 +581,7 @@ V2's adaptation rule stays: one counter at a time, and team hits are never count
 
 | Date | What happened |
 |---|---|
+| 2026-10-02 | **Phase 1 started.** No new comments on the proposal doc (only our own approval question). Refined phase 1 into steps 1.1 to 1.12 and wrote its gate as `tests/gate/phase1.mjs` (23 checks). Done: 1.1 baseline (golden file renamed `replays.json`, labelled), 1.2 in-sim hitstop (`hitPause` retired for a client slow motion), 1.3 the charged heavy fires and the step is kept, 1.4 twelve reactions (`sim/reactions.js`), 1.5 combo scaling, style rank and meter (`sim/combo.js`, plate HUD), 1.6 the input grammar and slot ids, 1.7 in two of three parts (strikes; throws, executions, power counter), 1.11 `tools/contact.mjs`. Found and fixed: tagging out never called the old hero's `cancel` (the kid stayed in Jean's grip for ever); the bot could not climb to, or drop down to, a downed kid, nor reach a Sentinel above it; HUD class `r2` clashed with Jean's resource bar. New suites: `feel-test`, `reactions-test`, `movelist-test`. 163 checks pass; every bot seed tried finishes (solo 1 to 15, co-op 2 to 4 players). Gate 18 of 23. Not published yet. Next: 1.7's powers and Signature. |
 | 2026-10-02 | **Menus and HUD pass** (section 3b), asked for by the user before phase 1: HUD bands so nothing covers play, `tools/layout.mjs`, the ready room, honest controls text, confirmations, debrief routes, first-time hints, key rebinding. Tests (107), layout check, playtest and co-op clean. Published: https://claude.ai/artifact/UhSDGngLMLnCuq1W4CNjSj (also in the README on `main`). Next: phase 1. |
 | 2026-10-02 | **Phase 0 done; gate passed.** The user gave the go-ahead in chat (no comments on the doc). Golden replays recorded from V2 (seven cases), then the move table format, V2's three movesets, the move engine, the strike clips and the effect cues, each committed green. New: `tests/moves-test.mjs`, `tools/sidebyside.mjs`, `tools/plans/moves.mjs`. Gate: the golden replays and V2's state hashes match, 107 checks pass, the bot finishes, side-by-side runs against V2 are identical (whole state, poses, effect calls), screenshots match V2 by eye, the playtest and co-op runs are clean. Found for phase 1: V2's charged heavy never fires, and the step forward is mostly cancelled by `physics`. Next: phase 1. |
 | 2026-10-02 | Proposal written (doc linked above) and copied to `docs/`. A `v2.0` tag could not be pushed (this session's git proxy dropped tag pushes, while branch pushes worked), so the frozen `v2-first-proposal` marks V2 instead. `v2-expansion` created with `CLAUDE.md`, this handoff and `tools/`. The tools were verified from the repo: the six example screenshots, the playtest (menus, race, debrief, clean console) and the co-op check (pad join, team-up, pad pause, rumble). 78 checks pass. Next: phase 0. |
