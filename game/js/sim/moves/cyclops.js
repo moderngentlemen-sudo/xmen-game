@@ -1,0 +1,23 @@
+// Cyclops's moves: martial-arts strikes that knock Sentinels into blast lines. V2's moves and numbers, exactly
+// (phase 0 changes no behaviour); the fields are documented in schema.js. Holding Attack is meant to charge the
+// heavy from the first strike, but that strike ends at 16 ticks, before the 26-tick hold (see schema.js, charge).
+import { ON, CANCEL } from './schema.js';
+
+export default {
+  hero: 'cyclops',
+  chain: ['g1', 'g2', 'g3'],
+  moves: {
+    // backhand, elbow, driving punch
+    g1: { input: ON.chain, su: 4, ac: 3, rc: 9, dmg: 3, poise: 18, kb: [4, 2], boxes: [[0.2, 1.3, 0.6, 1.6]], step: 1.5, cancel: CANCEL.evadeOrAttack },
+    g2: { input: ON.chain, su: 4, ac: 3, rc: 10, dmg: 3, poise: 20, kb: [4, 2], boxes: [[0.2, 1.35, 0.5, 1.5]], step: 1.5, cancel: CANCEL.evadeOrAttack },
+    g3: { input: ON.chain, su: 6, ac: 4, rc: 16, dmg: 5, poise: 55, kb: [11, 6], boxes: [[0.2, 1.55, 0.2, 1.7]], step: 1.5, cancel: CANCEL.evadeOrAttack },
+    // axe kick
+    air: { input: ON.air, su: 4, ac: 5, rc: 10, dmg: 4, poise: 25, kb: [6, -2], boxes: [[0.1, 1.4, 0.0, 1.4]], step: 1.5, cancel: CANCEL.evadeOrAttack },
+    // rising kick, the launcher: it carries him up a little
+    up: { input: ON.up, su: 5, ac: 5, rc: 16, dmg: 4, poise: 45, kb: [2, 15], boxes: [[0.0, 1.1, 0.6, 2.4]], step: 1.5, cancel: CANCEL.evadeOrAttack,
+      launch: true, lift: { vy: 7, ticks: 2 } },
+    // the heavy: the counter out of a perfect defence (and a charge from the first strike)
+    heavy: { input: ON.counter, su: 14, ac: 5, rc: 20, dmg: 9, poise: 90, kb: [14, 6], boxes: [[0.2, 1.7, 0.3, 1.6]], step: 3, cancel: CANCEL.evade,
+      heavy: true, charge: { from: 'g1', hold: 26, release: 30, dmgMult: 1.2 }, counter: { dmgMult: 1.5, poiseMult: 1.5 } },
+  },
+};
