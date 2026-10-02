@@ -21,7 +21,11 @@ let S = createWorld({ seed: newSeed(), players: 0 });
 let devices = [];   // device per player slot, once the mission is on
 let picks = [];     // the hero each slot picked in the lobby (null: whoever is free)
 let lobby = null;   // before the mission: [{ dev, hero }], everyone who has joined and the hero they picked
-let started = false, paused = false, complete = false, hitPause = 0;
+let started = false, paused = false, complete = false;
+// Slow motion is a client time scale: fewer simulation ticks per real second, never a change to the simulation.
+// Hitstop itself lives in the simulation (per hero and Sentinel), so one player's hit never freezes another's play.
+let slow = { t: 0, scale: 1 };
+function slowMotion(secs, scale) { if (secs > 0 && (slow.t <= 0 || scale <= slow.scale)) slow = { t: Math.max(slow.t, secs), scale }; }
 function newSeed() { return ((Date.now() ^ (Math.random() * 0x7fffffff)) >>> 0) || 1; }
 
 const ui = new UI(document.getElementById('ui'), {
@@ -151,7 +155,7 @@ function stepSim() {
   for (const ev of S.events) {
     view.onEvent(ev, S); overlay.onEvent(ev); sound.play(ev); ui.onEvent(ev, S); haptics.onEvent(ev, deviceOf, devices);
     const k = panelFor(ev);
-    if (k) hitPause = Math.max(hitPause, overlay.impact(ev.x !== undefined ? ev.x : S.cam.x, ev.y !== undefined ? ev.y : S.cam.y, k));
+    if (k) slowMotion(overlay.impact(ev.x !== undefined ? ev.x : S.cam.x, ev.y !== undefined ? ev.y : S.cam.y, k), 0.4);
   }
 }
 
@@ -169,12 +173,12 @@ function frame(now) {
   tryJoin();
   const halted = paused || ui.helpOpen || complete || !started;
   if (!halted && !window.__X.manual) {
-    if (hitPause > 0) { hitPause -= dt; acc = 0; }   // an impact panel holds the world still
-    else {
-      acc += dt; let n = 0;
-      while (acc >= DT && n < 5) { stepSim(); acc -= DT; n++; }
-      if (n === 5) acc = 0;
-    }
+    // An impact panel slows the world for a moment (slow motion, above)
+    const scale = slow.t > 0 ? slow.scale : 1;
+    if (slow.t > 0) slow.t -= dt;
+    acc += dt * scale; let n = 0;
+    while (acc >= DT && n < 5) { stepSim(); acc -= DT; n++; }
+    if (n === 5) acc = 0;
   }
   music.update(dt, started ? S : null, halted && started);
   sound.update(started && !halted ? S : null);

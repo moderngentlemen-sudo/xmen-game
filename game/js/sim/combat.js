@@ -1,7 +1,7 @@
 // Combat: hitboxes (one tick each, with an instance id so a swing lands once per target), damage to enemies
 // (where adaptation, lifted targets and called targets apply), damage to heroes and to the kid (where Evade's
 // perfect defence and Jean's shield apply), projectiles, and the props: crates Jean can throw, the cell door.
-import { DT, GRAVITY, MAX_FALL, MERCY, HEROES, ENEMIES, ADAPT, GAUGE, TEAM, POWER_TYPES } from './config.js';
+import { DT, GRAVITY, MAX_FALL, MERCY, HEROES, ENEMIES, ADAPT, GAUGE, TEAM, POWER_TYPES, HITSTOP } from './config.js';
 import { moveBody, rayCast, BOXES } from './level.js';
 import { emit, newId, ent } from './world.js';
 import { invulnerable, perfectWindow, perfectDefence, stagger, downPlayer, isDown } from './player.js';
@@ -49,7 +49,11 @@ export function hitEnemy(S, e, h) {
   if (isPlayer) mult *= HERO[by.hero].dmgMult(by, h);
   if (e.armour > 0 && !h.heavy && !teamHit) mult *= 0.6;   // armoured plate turns light hits
   const dmg = h.dmg * mult;
-  e.hp -= dmg; e.flash = 6; e.hitstop = h.heavy ? 6 : 3;
+  e.hp -= dmg; e.flash = 6;
+  // Hitstop: the target freezes, and on a melee hit so does the hero who landed it
+  const stop = h.hitstop !== undefined ? h.hitstop : HITSTOP[h.heavy ? 'heavy' : 'light'];
+  e.hitstop = Math.max(e.hitstop, stop);
+  if (h.melee && isPlayer) by.hitstop = Math.max(by.hitstop || 0, stop);
   if (!teamHit && POWER_TYPES.includes(power)) S.adapt.log[power] += dmg;
   if (isPlayer) HERO[by.hero].onDealt(S, by, e, dmg, h);
   emit(S, 'hit', { id: e.id, by: h.owner, x: e.x, y: e.y + e.h * 0.6, dmg, power: teamHit ? 'team' : power, heavy: !!h.heavy, resisted, kind: h.kind || '' });
@@ -101,6 +105,10 @@ export function hurtPlayer(S, p, h) {
   const mod = HERO[p.hero];
   const dmg = h.dmg * (p.markedBy ? ENEMIES.hunter.mark.mult : 1) * mod.takenMult(p);
   p.hp -= dmg; p.mercy = h.heavy ? MERCY : 40; p.lastHurtT = 0;
+  // Hitstop: a Sentinel's blow freezes it and the hero together; a shot freezes only the hero
+  const stop = HITSTOP[h.heavy ? 'heavy' : 'light'];
+  p.hitstop = Math.max(p.hitstop || 0, stop);
+  if (src && src.kind === 'enemy' && !h.proj) src.hitstop = Math.max(src.hitstop, stop);
   mod.onHurt(S, p, dmg, h);
   emit(S, 'playerHit', { id: p.id, x: p.x, y: p.y + p.h * 0.6, dmg, heavy: !!h.heavy, marked: !!p.markedBy });
   if (p.hp <= 0) { downPlayer(S, p); return; }

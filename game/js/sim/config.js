@@ -15,6 +15,9 @@ export const COYOTE = 6;
 export const JUMP_BUFFER = 6;
 export const ACTION_BUFFER = 8;
 export const MERCY = 60;           // invulnerable ticks after being hit
+// Hitstop: a melee hit freezes the attacker and the target together for this many ticks (a shot freezes only its
+// target). A move's `hitstop` field picks the class, or gives ticks.
+export const HITSTOP = { light: 3, heavy: 8, super: 14 };
 
 // The six inputs. A command is { mx, my, ax, ay, aim, b }: move axes (-1..1), aim direction (unit vector,
 // `aim` true when it is free aim rather than the move direction), and `b`, the held buttons as bits.

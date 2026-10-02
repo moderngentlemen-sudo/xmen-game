@@ -5,7 +5,7 @@
 // Phase 0 moved V2's melee here from player.js with no change in behaviour: the order of operations and the float
 // arithmetic are V2's, down to the fractional clock under berserk, and tests/golden-test.mjs holds it to that. Its
 // state on the player is V2's too: p.move = { id, t, inst, counter, charged }, p.combo, p.comboT and p.atkHeld.
-import { ACTION_BUFFER, BTN, COMBO_WINDOW, HEROES, STICK } from './config.js';
+import { ACTION_BUFFER, BTN, COMBO_WINDOW, HEROES, HITSTOP, STICK } from './config.js';
 import { MOVESETS } from './moves/index.js';
 import { emit, newId } from './world.js';
 import { spawnHitbox } from './combat.js';
@@ -27,6 +27,8 @@ for (const [hero, set] of Object.entries(MOVESETS)) {
   RULES[hero] = { start, counter, chargeInto };
 }
 const holding = (p, name) => (p.held & BTN[name]) !== 0;
+// A move's hitstop in ticks (moves/schema.js, hitstop)
+export const hitstopOf = m => typeof m.hitstop === 'number' ? m.hitstop : HITSTOP[m.hitstop || (m.heavy ? 'heavy' : 'light')];
 
 // The move a perfect defence's counter starts
 export const counterMove = p => RULES[p.hero].counter;
@@ -85,7 +87,7 @@ export function runMove(S, p, cmd, E) {
       x0: p.x + p.facing * x0 - (p.facing < 0 ? w : 0), x1: p.x + p.facing * x0 + (p.facing > 0 ? w : 0),
       y0: p.y + y0, y1: p.y + y0 + h,
       dmg: m.dmg * (M.counter ? bonus.dmgMult : 1) * (M.charged ? charge.dmgMult : 1), poise: m.poise * (M.counter ? bonus.poiseMult : 1),
-      kb: [p.facing * m.kb[0], m.kb[1]], launch: !!m.launch, heavy: !!m.heavy,
+      kb: [p.facing * m.kb[0], m.kb[1]], launch: !!m.launch, heavy: !!m.heavy, melee: true, hitstop: hitstopOf(m),
     });
     if (m.lift && t <= m.su + m.lift.ticks) p.vy = Math.max(p.vy, m.lift.vy);   // the launcher carries the hero up a little
   }

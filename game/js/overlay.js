@@ -56,7 +56,7 @@ export class Overlay {
     if (!SETTINGS.impactPanels) return 0;
     if (this.panel && this.panel.t < this.panel.dur * 0.6) return 0;
     this.panel = { x, y, k, t: 0, dur: 0.32 + 0.12 * k, tilt: (Math.random() < 0.5 ? -1 : 1) * (0.025 + 0.02 * k) };
-    return 0.07 + 0.06 * k;   // the hit-pause the caller holds the simulation for
+    return 0.12 + 0.1 * k;   // how long the caller slows the world (main.js, slow motion)
   }
 
   draw(S, dt) {

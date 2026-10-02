@@ -17,7 +17,7 @@ export function makePlayer(S, slot, hero, x, y) {
     hp: H.hp, maxHp: H.hp, mercy: 0, state: 'normal', st: 0,
     held: 0, buf: {}, holdT: {}, mx: 0, my: 0, aimX: 1, aimY: 0, aimFree: false,
     coyote: 0, jumpsLeft: H.airJumps, wallLock: 0, wallSlide: false,
-    move: null, combo: 0, comboT: 0, atkHeld: 0,
+    move: null, combo: 0, comboT: 0, atkHeld: 0, hitstop: 0,
     evade: null, evadeCd: 0, counterT: 0,
     hitstunT: 0, downedT: 0, revive: 0, markedBy: 0, heldBy: 0, thrown: null,
     teamCd: 0, tagCd: 0, teamPress: 0, edge: null, squad: null, lastHurtT: 999, fastball: null,
@@ -44,9 +44,11 @@ export function updatePlayer(S, p, cmd, frozen) {
   const b = cmd.b | 0, pressed = b & ~p.held, released = p.held & ~b;
   p.held = b;
   const E = { b, pressed, released };
+  // In hitstop the buffers and hold counts do not age, so a press made during the freeze comes out after it
+  const stopped = p.hitstop > 0 && !frozen;
   for (const n of BTN_NAMES) {
-    p.buf[n] = has(pressed, n) ? 0 : Math.min(99, p.buf[n] + 1);
-    p.holdT[n] = has(b, n) ? p.holdT[n] + 1 : 0;
+    p.buf[n] = has(pressed, n) ? 0 : stopped ? p.buf[n] : Math.min(99, p.buf[n] + 1);
+    p.holdT[n] = has(b, n) ? (stopped ? p.holdT[n] : p.holdT[n] + 1) : 0;
   }
   p.mx = Math.max(-1, Math.min(1, cmd.mx || 0)); p.my = Math.max(-1, Math.min(1, cmd.my || 0));
   if (cmd.aim && (cmd.ax || cmd.ay)) { const m = Math.hypot(cmd.ax, cmd.ay); p.aimX = cmd.ax / m; p.aimY = cmd.ay / m; p.aimFree = true; }
@@ -56,6 +58,7 @@ export function updatePlayer(S, p, cmd, frozen) {
     else { p.aimX = p.facing; p.aimY = 0; }
   }
   if (frozen) return;
+  if (stopped) { p.hitstop--; return; }   // hitstop: frozen with whoever they hit, or whoever hit them
   p.st++;
   for (const k of ['mercy', 'evadeCd', 'counterT', 'comboT', 'teamCd', 'tagCd', 'dropT', 'wallLock', 'coyote']) if (p[k] > 0) p[k]--;
   p.lastHurtT = Math.min(9999, p.lastHurtT + 1);

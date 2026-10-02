@@ -28,7 +28,9 @@
 //              dmg × dmgMult. (In V2 the first strike always ends before the hold reaches `hold`, so a charge never
 //              happens by holding alone; phase 1 fixes that, and the tests check the rule itself.)
 //   counter    optional, { dmgMult, poiseMult }: what it deals extra as the counter out of a perfect defence
-const FIELDS = ['input', 'su', 'ac', 'rc', 'dmg', 'poise', 'kb', 'boxes', 'step', 'cancel', 'launch', 'heavy', 'lift', 'charge', 'counter'];
+//   hitstop    optional, 'light', 'heavy', 'super' (HITSTOP in config.js) or whole ticks: how long a hit freezes
+//              the hero and the target together. Without it: heavy for a `heavy` move, else light
+const FIELDS = ['input', 'su', 'ac', 'rc', 'dmg', 'poise', 'kb', 'boxes', 'step', 'cancel', 'launch', 'heavy', 'lift', 'charge', 'counter', 'hitstop'];
 const CTX = ['ground', 'air', 'counter'], DIRS = ['neutral', 'up', 'any'], CANCEL_INTO = ['evade', 'attack'];
 
 // Shorthands for the tables
@@ -85,6 +87,7 @@ export function validateMoves(set) {
     }
     if ('counter' in m && !(m.counter && num(m.counter.dmgMult) && m.counter.dmgMult > 0 && num(m.counter.poiseMult) && m.counter.poiseMult > 0))
       bad.push(`${at}: counter must be { dmgMult, poiseMult }, both above 0`);
+    if ('hitstop' in m && !(['light', 'heavy', 'super'].includes(m.hitstop) || tick(m.hitstop))) bad.push(`${at}: hitstop must be light, heavy, super or whole ticks`);
     if (I && I.ctx === 'counter' && !m.counter) bad.push(`${at}: the counter move needs its counter bonus`);
   }
   const charges = ids.filter(id => set.moves[id].charge).map(id => set.moves[id].charge.from);
