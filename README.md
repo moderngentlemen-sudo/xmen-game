@@ -2,15 +2,16 @@
 
 Three versions of an X-Men co-op action game, built from Nova Striker V9
 (`moderngentlemen-sudo/nova-striker-claude`, branch `claude/nova-striker-fresh-start-lqu8sn`,
-commit `eeeece5`). Each version lives on its own branch.
+commit `eeeece5`). Each version lives on its own branch, and the expansion of V2 has a branch of its own.
 
 | Branch | Version | Status |
 |---|---|---|
 | `v1-original` | **X-Men: Sentinel Strike**: Nova Striker V9 converted to five X-Men, Sentinels, Juggernaut and Magneto | Finished |
 | `v2-first-proposal` | **X-Men: Sentinel Strike, Team Edition**: the first concept proposal's vertical slice. Cyclops, Wolverine and Jean rebuilt around team-ups, Sentinels that adapt, one rescue mission, a comic-book look | Playable slice |
+| `v2-expansion` | **Team Edition expansion**: V2 grown to nine heroes with about 30 moves each, hits with real impact, and a five-layer 3D set around the fight. The plan and the handoff are in `HANDOFF-EXPANSION.md` | Planned; phase 0 is next |
 | `v3-sentinel-war` | **X-Men: Sentinel War**, Issue #1: co-op roguelite runs against a Master Mold that learns between runs | Not started |
 
-V2 branches from V1 and V3 from V2, so each branch's history shows what it reused.
+V2 branches from V1, and the expansion and V3 from V2, so each branch's history shows what it reused.
 
 ## Playing a version
 
@@ -40,6 +41,7 @@ node tests/run-all.mjs
 
 - First proposal: https://claude.ai/code/artifact/796973c5-6036-45a5-acbb-b10b9d5116f2
 - Sentinel War proposal: https://claude.ai/code/artifact/6844d2b2-2266-4a29-aa7c-02fe945de3f2
+- Team Edition expansion proposal: https://claude.ai/code/artifact/d44cd592-96ae-468d-aadf-b8784ff3bdba
 
 ## Not for public release
 
