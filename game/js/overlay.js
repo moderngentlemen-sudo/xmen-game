@@ -23,6 +23,9 @@ const WORDS = {
   kidGrabbed: () => ['HELP!', '#ffffff', 1.1],
   adapted: ev => ['ADAPTED!', HOSTILE, 1.2],
   snikt: () => ['SNIKT!', '#dfe9f5', 1],
+  styleRank: ev => ['A', 'S', 'X'].includes(ev.rank) ? [ev.rank === 'X' ? 'X-TREME!' : ev.rank + ' RANK!', '#ffd23f', ev.rank === 'X' ? 1.5 : 1.1] : null,
+  wallBounce: () => ['WHAM!', '#ffffff', 1],
+  groundBounce: () => ['KRAK!', '#ffffff', 1],
 };
 const CAP_PER_SEC = 4, MAX_ON = 8;
 

@@ -1,12 +1,13 @@
 // Combat: hitboxes (one tick each, with an instance id so a swing lands once per target), damage to enemies
 // (where adaptation, lifted targets and called targets apply), damage to heroes and to the kid (where Evade's
 // perfect defence and Jean's shield apply), projectiles, and the props: crates Jean can throw, the cell door.
-import { DT, GRAVITY, MAX_FALL, MERCY, HEROES, ENEMIES, ADAPT, GAUGE, TEAM, POWER_TYPES, HITSTOP } from './config.js';
+import { DT, GRAVITY, MAX_FALL, MERCY, HEROES, ENEMIES, ADAPT, GAUGE, TEAM, POWER_TYPES, HITSTOP, METER } from './config.js';
 import { moveBody, rayCast, BOXES } from './level.js';
 import { emit, newId, ent } from './world.js';
 import { invulnerable, perfectWindow, perfectDefence, stagger, downPlayer, isDown } from './player.js';
 import { HERO } from './heroes/index.js';
 import { react, hittable } from './reactions.js';
+import { streakHit, streakDealt, gainMeter, endStreak } from './combo.js';
 
 export function spawnHitbox(S, h) { S.hitboxes.push(h); return h; }
 const overlap = (h, x0, x1, y0, y1) => h.x0 < x1 && h.x1 > x0 && h.y0 < y1 && h.y1 > y0;
@@ -47,7 +48,7 @@ export function hitEnemy(S, e, h) {
   if (S.called && S.called.id === e.id && isPlayer && by.id !== S.called.by) { mult *= HEROES.cyclops.call.bonus; teamHit = true; S.gauge = Math.min(GAUGE.max, S.gauge + GAUGE.called * h.dmg); }
   let resisted = false;
   if (!teamHit && POWER_TYPES.includes(power) && S.adapt.active === power) { mult *= ADAPT.counters[power].mult; resisted = true; }
-  if (isPlayer) mult *= HERO[by.hero].dmgMult(by, h);
+  if (isPlayer) mult *= HERO[by.hero].dmgMult(by, h) * streakHit(S, by, e, h);   // the combo's damage scaling (combo.js)
   if (e.armour > 0 && !h.heavy && !teamHit) mult *= 0.6;   // armoured plate turns light hits
   const dmg = h.dmg * mult;
   e.hp -= dmg; e.flash = 6;
@@ -56,7 +57,7 @@ export function hitEnemy(S, e, h) {
   e.hitstop = Math.max(e.hitstop, stop);
   if (h.melee && isPlayer) by.hitstop = Math.max(by.hitstop || 0, stop);
   if (!teamHit && POWER_TYPES.includes(power)) S.adapt.log[power] += dmg;
-  if (isPlayer) HERO[by.hero].onDealt(S, by, e, dmg, h);
+  if (isPlayer) { HERO[by.hero].onDealt(S, by, e, dmg, h); streakDealt(by, dmg); }
   emit(S, 'hit', { id: e.id, by: h.owner, x: e.x, y: e.y + e.h * 0.6, dmg, power: teamHit ? 'team' : power, heavy: !!h.heavy, resisted, kind: h.kind || '' });
   if (e.hp <= 0) { killEnemy(S, e, h); return; }
   // Poise: enough of it breaks a guard (heavy hits break armour plates); then the reaction (reactions.js)
@@ -97,6 +98,7 @@ export function hurtPlayer(S, p, h) {
   p.hitstop = Math.max(p.hitstop || 0, stop);
   if (src && src.kind === 'enemy' && !h.proj) src.hitstop = Math.max(src.hitstop, stop);
   mod.onHurt(S, p, dmg, h);
+  gainMeter(p, dmg * METER.taken); endStreak(S, p);   // being hit ends the hero's combo, and feeds their meter
   emit(S, 'playerHit', { id: p.id, x: p.x, y: p.y + p.h * 0.6, dmg, heavy: !!h.heavy, marked: !!p.markedBy });
   if (p.hp <= 0) { downPlayer(S, p); return; }
   if (!mod.noStagger(p)) stagger(S, p, h.kb || [0, 3], h.heavy ? 26 : 16);

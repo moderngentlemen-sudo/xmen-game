@@ -4,7 +4,8 @@
 // The HUD lives in two bands above and below the game view (#hud-top, #hud-bottom), never over it: banners and
 // the team ultimate's letterbox take over the bands. Only the pages, on a paused or finished game, cover the view.
 // tools/layout.mjs checks that no HUD element reaches into the view.
-import { HEROES, GAUGE, ADAPT, SQUAD } from './sim/config.js';
+import { HEROES, GAUGE, ADAPT, SQUAD, METER } from './sim/config.js';
+import { STYLE_RANKS } from './sim/combo.js';
 import { SECTIONS, MISSION_NAME } from './sim/mission.js';
 import { PLAYER_COLORS, HERO_LOOKS } from './looks.js';
 import { SETTINGS, saveSettings, bindKey, resetKeys, keyLabel } from './settings.js';
@@ -304,7 +305,7 @@ export class UI {
       seen.add(p.id);
       let P = this.plateEls.get(p.id);
       if (!P) {
-        P = el('div', 'plate', `<div class="top"><span class="tag"></span><span class="name"></span><span class="role"></span></div><div class="meter hp"><i></i></div>
+        P = el('div', 'plate', `<div class="top"><span class="tag"></span><span class="name"></span><span class="role"></span><span class="combo" hidden></span><span class="pips" title="Meter"><i></i><i></i><i></i></span></div><div class="meter hp"><i></i></div>
           <div class="meter res r1"><i></i><b></b></div><div class="meter res r2"><i></i><b></b></div><div class="foot"><div class="chips"></div><div class="bench"></div></div>`);
         P.style.setProperty('--pc', PLAYER_COLORS[p.slot]); this.plates.appendChild(P); this.plateEls.set(p.id, P);
       }
@@ -339,6 +340,11 @@ export class UI {
   fillPlate(P, p, S) {
     const H = HEROES[p.hero], q = s => P.querySelector(s);
     q('.tag').textContent = `P${p.slot + 1}`; q('.name').textContent = H.name; q('.role').textContent = ROLE[p.hero];
+    // The combo (its hits and style rank) takes the role's place while it lasts; the meter is three pips
+    const K = p.streak, live = K && K.n >= 2, combo = q('.combo');
+    q('.role').hidden = live; combo.hidden = !live;
+    if (live) { const html = `${K.n} hits <em class="rank${K.rank}">${STYLE_RANKS[K.rank]}</em>`; if (combo.innerHTML !== html) combo.innerHTML = html; }
+    q('.pips').querySelectorAll('i').forEach((pip, i) => { const f = Math.max(0, Math.min(1, ((p.meter || 0) - i * METER.bar) / METER.bar)); pip.style.setProperty('--f', f); pip.classList.toggle('full', f >= 1); });
     const hp = q('.meter.hp'); hp.querySelector('i').style.width = pct(p.hp, p.maxHp); hp.classList.toggle('low', p.hp < p.maxHp * 0.3);
     const r1 = q('.r1'), r2 = q('.r2'), chips = [];
     const res = (m, v, max, color, label) => { m.hidden = false; m.style.setProperty('--rc', color); m.querySelector('i').style.width = pct(v, max); m.querySelector('b').textContent = label; };

@@ -73,7 +73,15 @@ export const HERO_IDS = ['cyclops', 'wolverine', 'jean'];
 // the move engine (sim/moveEngine.js). MOVES (each hero's moves by id) and COMBO (each hero's chain) are views of
 // the tables, for the client and the tools.
 export { MOVES, COMBO } from './moves/index.js';
-export const COMBO_WINDOW = 14;   // ticks after a hit's recovery in which the next press continues the chain
+export const COMBO_WINDOW = 14;
+// Combo rules and the personal meter (sim/combo.js). Damage scaling: full for `full` hits, then `step` less a hit
+// to `floor`; `repeat` less per earlier use of the same move in the combo. A combo ends `gap` ticks after its last
+// hit. Style points per hit (`fresh` more for a move new to the combo, `air` more on a Sentinel in the air); the
+// ranks D, C, B, A, S and X start at `ranks`; each rank adds `meterBonus` to the meter gained. The meter: three bars.
+export const SCALING = { full: 3, step: 0.1, floor: 0.4, repeat: 0.1 };
+export const STREAK = { gap: 50 };
+export const STYLE = { hit: 10, fresh: 20, air: 10, ranks: [0, 60, 150, 280, 450, 700], meterBonus: 0.1 };
+export const METER = { max: 300, bar: 100, dealt: 1, taken: 0.5, super: 100, ult: 200 };   // ticks after a hit's recovery in which the next press continues the chain
 
 // Perfect defence: an Evade timed into a hit (within its first `perfect` ticks) negates it, slows the attacker
 // and opens a counter: Attack inside the window does the heavy move at once with bonus damage

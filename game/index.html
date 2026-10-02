@@ -100,7 +100,13 @@ th { font-family: var(--font-display); text-transform: uppercase; letter-spacing
 .plate .top { display: flex; align-items: baseline; gap: 6px; line-height: 1.05; white-space: nowrap; overflow: hidden; }
 .plate .tag { font-family: var(--font-comic); font-size: 18px; color: var(--pc); -webkit-text-stroke: 1px var(--ink); }
 .plate .name { font-family: var(--font-comic); font-size: 20px; letter-spacing: 0.03em; }
-.plate .role { margin-left: auto; font-family: var(--font-display); font-weight: 700; font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.1em; color: #5a5068; overflow: hidden; text-overflow: ellipsis; }
+.plate .combo { min-width: 0; overflow: hidden; margin-left: auto; font-family: var(--font-comic); font-size: 15px; letter-spacing: 0.03em; color: var(--ink); white-space: nowrap; }
+.plate .combo em { font-style: normal; display: inline-block; min-width: 1.1em; text-align: center; padding: 0 3px; margin-left: 2px; background: var(--ink); color: #fff; transform: skewX(-8deg); }
+.plate .combo em.rank3 { color: #ffd23f; } .plate .combo em.rank4 { color: #ff8a1f; } .plate .combo em.rank5 { background: #ff3a24; color: #fff1b8; }
+.plate .pips { display: flex; gap: 2px; margin-left: 6px; align-self: center; flex: none; }
+.plate .pips i { width: 12px; height: 8px; border: 2px solid var(--ink); background: linear-gradient(90deg, #b06cff calc(var(--f, 0) * 100%), #e9e1cf 0); }
+.plate .pips i.full { background: #b06cff; box-shadow: 0 0 4px #b06cff; }
+.plate .role { min-width: 0; margin-left: auto; font-family: var(--font-display); font-weight: 700; font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.1em; color: #5a5068; overflow: hidden; text-overflow: ellipsis; }
 .meter { position: relative; height: 9px; margin: 2px 0; border: 2px solid var(--ink); background: #e9e1cf; overflow: hidden; }
 .meter i { position: absolute; left: 0; top: 0; bottom: 0; }
 .meter.hp i { background: #39c46a; } .meter.hp.low i { background: #ff3a24; }

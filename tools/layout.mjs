@@ -20,6 +20,7 @@ const STATES = {
   banner: `X.ui.banner('The assembly hall', 'Sentinels incoming', false, 99);`,
   'kid taken': `S.kid.state = 'carried';`,
   'four players': `X.join('pad1'); X.join('pad2'); X.join('pad3');`,
+  'combos and full meters': `for (const p of S.players) { p.streak.n = 123; p.streak.rank = 5; p.meter = 300; }`,
   'failure banner': `X.ui.banner('Mission failed', 'They took the kid', true, 99);`,
   'ultimate letterbox': `X.ui.letterbox.forEach(l => l.classList.add('on'));`,
 };

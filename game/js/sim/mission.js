@@ -47,7 +47,7 @@ export function startMission(S) {
   S.mission = {
     name: MISSION_NAME, sec: 0, secId: SECTIONS[0].id, x0: SECTIONS[0].x0, x1: SECTIONS[0].x1, phase: 'wait', wave: 0, waveT: 0, released: false,
     spawn: { ...SECTIONS[0].spawn }, door: { ...CELL.door }, failed: null, failT: 0, done: false, doneT: 0, t: 0,
-    stats: { kills: 0, teamups: 0, assists: 0, perfects: 0, downs: 0, fails: 0, dmg: { optic: 0, claws: 0, tk: 0, team: 0, plain: 0 } },
+    stats: { kills: 0, teamups: 0, assists: 0, perfects: 0, downs: 0, fails: 0, bestCombo: 0, bestRank: 0, dmg: { optic: 0, claws: 0, tk: 0, team: 0, plain: 0 } },
   };
   S.gates.G1 = S.gates.G2 = S.gates.G3 = true; S.gates.cell = true;
   S.kid = makeKid(CELL.x, CELL.y, 'caged');

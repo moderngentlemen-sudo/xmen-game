@@ -97,7 +97,7 @@ export function runMove(S, p, cmd, E) {
       y0: p.y + y0, y1: p.y + y0 + h,
       dmg: m.dmg * (M.counter ? bonus.dmgMult : 1) * (M.charged ? charge.dmgMult : 1), poise: m.poise * (M.counter ? bonus.poiseMult : 1),
       kb: [p.facing * m.kb[0], m.kb[1]], launch: !!m.launch, heavy: !!m.heavy, melee: true, hitstop: hitstopOf(m),
-      react: M.counter && bonus.react ? bonus.react : m.react, juggle: m.juggle,
+      react: M.counter && bonus.react ? bonus.react : m.react, juggle: m.juggle, move: M.id,
     });
     if (m.lift && t <= m.su + m.lift.ticks) p.vy = Math.max(p.vy, m.lift.vy);   // the launcher carries the hero up a little
   }

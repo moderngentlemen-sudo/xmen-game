@@ -9,6 +9,7 @@ import { setHero, downPlayer } from '../game/js/sim/player.js';
 import { bankPath } from '../game/js/sim/heroes/cyclops.js';
 import { makeKid } from '../game/js/sim/kid.js';
 import { resetAdapt } from '../game/js/sim/adapt.js';
+import { newStreak } from '../game/js/sim/combo.js';
 
 const assert = (c, m) => { console.log((c ? 'PASS ' : 'FAIL ') + m); if (!c) process.exitCode = 1; };
 const bits = (...names) => names.reduce((b, n) => b | BTN[n], 0);
@@ -311,7 +312,8 @@ function playRandom(seed, players, ticks, every) {
 {
   const { S, p, run, log } = setup({ heroes: ['cyclops'], x: 16 });
   const t = enemy(S, 'trooper', 30, 0, { hp: 9999, maxHp: 9999 }); t.hitstop = 1e9;
-  for (let i = 0; i < 10; i++) hitEnemy(S, t, { owner: p.id, team: 'p', inst: 9000 + i, dmg: 10, power: 'optic' });
+  // Each blast its own combo, so combo scaling (combo.js) stays out of this check
+  for (let i = 0; i < 10; i++) { p.streak = newStreak(); hitEnemy(S, t, { owner: p.id, team: 'p', inst: 9000 + i, dmg: 10, power: 'optic' }); }
   run({}, ADAPT.check + 2);
   assert(count(log, 'adapting', e => e.power === 'optic') === 1 && S.adapt.warn === 'optic', 'leaning on optic blasts: the Sentinels warn they are adapting');
   run({}, ADAPT.warn + 2);

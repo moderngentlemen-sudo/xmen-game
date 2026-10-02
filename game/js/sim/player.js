@@ -8,6 +8,7 @@ import { moveBody, hasHeadroom } from './level.js';
 import { emit, newId } from './world.js';
 import { HERO } from './heroes/index.js';
 import { tryAttack, startMove, runMove, counterMove } from './moveEngine.js';
+import { newStreak, tickStreak, endStreak } from './combo.js';
 
 export function makePlayer(S, slot, hero, x, y) {
   const H = HEROES[hero];
@@ -17,7 +18,7 @@ export function makePlayer(S, slot, hero, x, y) {
     hp: H.hp, maxHp: H.hp, mercy: 0, state: 'normal', st: 0,
     held: 0, buf: {}, holdT: {}, mx: 0, my: 0, aimX: 1, aimY: 0, aimFree: false,
     coyote: 0, jumpsLeft: H.airJumps, wallLock: 0, wallSlide: false,
-    move: null, combo: 0, comboT: 0, atkHeld: 0, hitstop: 0,
+    move: null, combo: 0, comboT: 0, atkHeld: 0, hitstop: 0, streak: newStreak(), meter: 0,
     evade: null, evadeCd: 0, counterT: 0,
     hitstunT: 0, downedT: 0, revive: 0, markedBy: 0, heldBy: 0, thrown: null,
     teamCd: 0, tagCd: 0, teamPress: 0, edge: null, squad: null, lastHurtT: 999, fastball: null,
@@ -31,6 +32,7 @@ export function makePlayer(S, slot, hero, x, y) {
 export function setHero(S, p, hero, hp) {
   // The hero leaving lets go of whatever they were doing first (Jean's grip on the kid once stayed shut for ever)
   HERO[p.hero].cancel(S, p);
+  endStreak(S, p);
   const H = HEROES[hero];
   p.hero = hero; p.w = H.w; p.h = H.h; p.maxHp = H.hp; p.hp = hp === undefined ? H.hp : hp;
   p.move = null; p.evade = null; p.combo = 0; p.state = 'normal'; p.st = 0; p.jumpsLeft = H.airJumps;
@@ -62,6 +64,7 @@ export function updatePlayer(S, p, cmd, frozen) {
   if (frozen) return;
   if (stopped) { p.hitstop--; return; }   // hitstop: frozen with whoever they hit, or whoever hit them
   p.st++;
+  tickStreak(S, p);
   for (const k of ['mercy', 'evadeCd', 'counterT', 'comboT', 'teamCd', 'tagCd', 'dropT', 'wallLock', 'coyote']) if (p[k] > 0) p[k]--;
   p.lastHurtT = Math.min(9999, p.lastHurtT + 1);
   if (p.edge && --p.edge.t <= 0) p.edge = null;
