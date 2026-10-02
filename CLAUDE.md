@@ -16,9 +16,12 @@ Deliberately short. The detail lives in the files below; this file holds the rul
 game/              the game: a static page of ES modules; three.js 0.170 from jsDelivr through an import map
   index.html       page, styles, import map
   js/sim/          the simulation: deterministic, no DOM, no three.js (see the rules)
+  js/sim/moves/    the move tables, one per hero (fields in schema.js); js/sim/moveEngine.js runs them
   js/*.js          the client: view, rigs, anim, fx, overlay, hud, input, audio, music, main (the loop)
+  js/anim/clips/   the strike clips, keyed by move id; js/vfx/cues.js holds each event's effect cue
 tests/             headless suites, run by `node tests/run-all.mjs` (Node 18+, no install)
   lib/bot.mjs      the bot that plays the mission; the no-softlock test and tools/probe.mjs use it
+  golden/          the golden replays: recorded behaviour that tests/golden-test.mjs replays and compares
 tools/             browser checks, the balance probe, publish prep (see tools/README.md)
 docs/              the expansion proposal
 ```
@@ -37,6 +40,9 @@ docs/              the expansion proposal
   that cannot be interrupted cleanly is a softlock waiting for the bot to find it.
 - **Tests before every push**: `node tests/run-all.mjs` must pass, including the mission bot, which must finish
   every run. Add tests with every feature; the phase gates in the handoff say which.
+- **The golden replays guard behaviour.** A change meant to keep behaviour must keep `tests/golden-test.mjs`
+  green. A change that alters behaviour on purpose re-records them (`node tests/golden/record.mjs`) in the same
+  commit, and the commit message says so.
 - **Look before you call a phase done**: run `tools/shots.mjs` with a plan for what changed,
   `tools/playtest.mjs` and `tools/coop.mjs`, open the screenshots, and get zero console errors.
 - **Keep `window.__X` working** (`game/js/main.js`): every browser tool drives the game through it.

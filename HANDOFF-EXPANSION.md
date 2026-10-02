@@ -1,8 +1,9 @@
 # Handoff: the Team Edition expansion (branch `v2-expansion`)
 
-> **Status, 2 October 2026:** the proposal is written and the tools are in the repo; **phase 0 has not started.**
-> The user was asked to approve the plan in a comment on the proposal doc's decision line. Read that thread
-> before you start, and fold any changes into this file first.
+> **Status, 2 October 2026:** **phase 0 is done and its gate passed**; phase 1 has not started. V2's melee runs on
+> one move engine from per-hero move tables, the client's strikes and effects are tables too, and golden replays
+> prove nothing changed (section 3). The user gave the go-ahead in chat with no changes; the proposal doc has no
+> comments. Before phase 1, check the doc's comment thread again, then refine phase 1's checklist into steps.
 > **Update this box, the phase checklists and the log at the end of every session.**
 
 | | |
@@ -20,12 +21,14 @@
    (`add_repo`), clone it, and check out `v2-expansion`. This clone has no fetch refspec, so fetch a branch by
    name: `git fetch origin v2-expansion`.
 2. **Check the baseline.** All three of these are green on a clean checkout:
-   - `node tests/run-all.mjs` gives 78 passed, 0 failed.
+   - `node tests/run-all.mjs` gives 107 passed, 0 failed, in about 15 s (the golden replays take 4 of them).
    - `node tools/probe.mjs 2 1` finishes the mission (`"done":true`, about 2 minutes of game time).
    - `NODE_USE_ENV_PROXY=1 node tools/shots.mjs tools/plans/rooms.mjs` writes six PNGs to `tools/out/`.
      Open one with the Read tool to see the V2 look.
 3. **Read the proposal and its comments.** Apply anything the user asked for to this file.
-4. **Start phase 0** (section 3). Commit and push after every step that leaves the tests green.
+4. **Start phase 1** (section 4). Refine its checklist into steps like phase 0's, write its gate down as tests
+   first, and make re-recording the golden replays its first commit. Commit and push after every step that leaves
+   the tests green.
 
 ## 2. The plan
 
@@ -35,80 +38,84 @@ on their own laptop) and phase 5 (they sign off the release).
 
 | Phase | Delivers | Gate | State |
 |---|---|---|---|
-| 0. Foundations | one move engine; V2's three heroes moved onto tables; animation clips and effect cues, still in V2's look | the same inputs give the same behaviour as V2 (golden replays); all 78 checks and the bot pass | not started |
-| 1. Feel | about 30 moves each for Cyclops, Wolverine and Jean; in-sim hitstop, 12 reactions, the new effects; the Danger Room | every move tested; 15 combo trials pass; the user approves the feel | |
+| 0. Foundations | one move engine; V2's three heroes moved onto tables; animation clips and effect cues, still in V2's look | the same inputs give the same behaviour as V2 (golden replays); all 78 checks and the bot pass | done 2 Oct, gate passed |
+| 1. Feel | about 30 moves each for Cyclops, Wolverine and Jean; in-sim hitstop, 12 reactions, the new effects; the Danger Room | every move tested; 15 combo trials pass; the user approves the feel | next |
 | 2. Depth | the play line on a 3D path; five layers; light, fog, depth of field; Extraction rebuilt in the new set, with depth knockbacks | the bot finishes Extraction in the set; 60 fps at Medium on the user's laptop | |
 | 3. Roster wave 1 | Storm, Colossus and Nightcrawler, with their team-ups; Bulwarks, Lancers and swarm drones | 29 move tests and 5 trials per hero; bots finish with random squads | |
 | 4. Roster wave 2 | Psylocke, Gambit and Rogue; team-ups for all 36 pairs; Wardens and siege walkers; mission 2, the Foundry Line | a test for every pair's team-up; bots finish both missions with all nine | |
 | 5. Content and polish | mission 3, Downtown, and the Giant; the full Danger Room; quality tiers; balance from bot stats; the release | 45 trials pass; bots finish all 3 missions; the user signs off | |
 
-## 3. Phase 0: Foundations (no visible change)
+## 3. Phase 0: Foundations (done, 2 October 2026)
 
 **Goal:** move the melee of V2's three heroes onto data tables run by one move engine, with **no change in
-behaviour**, and prove it. Everything after this builds on the engine, so this phase is about trust, not
-features.
+behaviour**, and prove it. All of it is done, and the gate passed.
 
-### How V2's melee works today (what you are porting)
+### Where the melee lives now
 
-- `game/js/sim/config.js` holds `MOVES[hero][id]` = `{ su, ac, rc, dmg, poise, kb, box, launch?, charge? }`
-  (ticks, damage, poise, knockback `[x, y]`, hitbox `[x0, width, y0, height]` relative to the feet, facing +x)
-  and `COMBO[hero]`, the chain order. The ids are `g1`–`g4`, `air`, `up` and `heavy`.
-- `game/js/sim/player.js`:
-  - `tryAttack` picks the move: a pending counter gives `heavy` with a bonus; in the air, `air`; up held
-    (`my > 0.55`), `up`; otherwise the next chain hit while `comboT` is open.
-  - `startMove` sets `p.move = { id, t, inst, counter, charged }`.
-  - `attack()` runs it:
-    - `M.t += 1 / attackSpeed`, so **`t` is fractional** while Wolverine is berserk.
-    - Holding Attack through the first chain hit charges `heavy`.
-    - A ground move steps forward at 1.5 m/s (3 for `heavy`), and the launcher lifts the hero (`vy` 7 in its
-      first two active ticks).
-    - On each active tick it spawns a hitbox. Damage is ×1.5 on a counter and ×1.2 when charged, and `heavy` is
-      flagged heavy.
-    - In recovery the move can cancel into Evade, or into the next chain hit.
-- `game/js/anim.js` reads `MOVES` for timing and maps move ids to strike poses (`MOVE_KEYS`). `fx.js` reacts to
-  the events (`swing`, `hit` and so on).
+- `game/js/sim/moves/<hero>.js`: one moveset `{ hero, chain, moves }` per hero, with V2's ids (`g1`–`g4`, `air`,
+  `up`, `heavy`) and V2's exact numbers. `moves/schema.js` documents every field and holds `validateMoves()`;
+  `moves/index.js` lists the tables. `config.js` keeps `HEROES`; its `MOVES` and `COMBO` are views of the tables,
+  which the client reads.
+- `game/js/sim/moveEngine.js`: `selectMove` (what Attack starts: inside the counter window the counter move, else
+  the move for the context and direction, else the chain), `startMove`, `runMove` (the clock, the charge rule, the
+  step, the hitbox on active ticks, the lift, the end, the cancels), plus `tryAttack` and `counterMove`.
+  `player.js` calls it. The player's move state is still V2's: `p.move = { id, t, inst, counter, charged }`,
+  `p.combo`, `p.comboT`, `p.atkHeld`.
+- `game/js/anim/clips/<hero>.js`: the strike keyframes, keyed by move id. A clip's fields carry the air stance,
+  the spin and the wind-up tremble (`clips/index.js` documents them). `anim.js` plays them.
+- `game/js/vfx/cues.js`: the table from simulation events to effect calls. `FX.onEvent` plays the event's cue.
+
+### How it was proved
+
+- **Golden replays** (`tests/golden/`): seven cases recorded from V2 into `v2.json` before any engine change. Three
+  are the mission bot over whole missions (alone with seed 2, 2 players with seed 1, 4 players with seed 3); four
+  are seeded random inputs for 1 to 4 players over 6,000 ticks. Each sample has a running digest of every tick
+  and a fingerprint every second, and the test names the first field that differs. The cases reach every move of
+  all three heroes, both counter paths, the cancels, the interruptions and berserk's fractional clock. They all
+  match, and so do V2's state hashes in all 1,036 samples, so the proposal's "same inputs give V2's state hashes"
+  holds literally.
+- **Side by side** (`tools/sidebyside.mjs` against a worktree of V2):
+  - the whole state is identical tick by tick, including with a head start on the hold count, so the charged
+    heavy happens (holding alone cannot reach it, see below);
+  - the heroes' poses are identical in 123,626 frames;
+  - the effect calls are identical for 12,682 events.
+- **Moves test** (`tests/moves-test.mjs`, 22 checks):
+  - every table is valid, and every cancel lands on a real move;
+  - hitboxes come out on active ticks only, also on the fractional clock;
+  - the Attack grammar, the counter rule and the charge rule;
+  - every move has a clip.
+- **Browser:** the rooms and mid-strike screenshots (`plans/rooms.mjs`, `plans/moves.mjs`) match V2 by eye, and
+  the playtest and co-op runs are clean.
+
+### What phase 0 found for phase 1
+
+- **V2's charged heavy never fires.** Holding Attack through the first strike counts `atkHeld`, but the strike ends
+  (after 13 to 17 ticks) before the count reaches `charge.hold` (24 to 28), and the pose only freezes after that. The
+  tables and the engine keep this exactly, and `moves-test` checks the rule itself with a head start. A fix changes
+  behaviour, so it belongs to phase 1. The recommendation: freeze the first strike at the end of its active ticks
+  while Attack is held, and fire the charge once the hold completes.
+- **The step forward is mostly lost in the same tick.** `runMove` sets `vx = facing × step`, then `physics`
+  decelerates toward 0 within that tick. From a 1.5 m/s step, Cyclops (deceleration 110) nets 0 m/s, Wolverine (70)
+  0.33 and Jean (100) 0. Tune it in the feel pass: apply the step after `physics`, or skip the deceleration during
+  a move.
+- `selectMove` reads one direction: up (`STICK.up` in `config.js`, 0.55). The grammar's other directions and
+  contexts are new work.
 
 ### Steps
 
-- [ ] **Golden replays, before touching any code.**
-  - Write `tests/golden/record.mjs`. It runs fixed cases and saves `tests/golden/v2.json`:
-    - the bot over whole missions (1 player seed 2, 2 players seed 1, 4 players seed 3);
-    - seeded random inputs for 1 to 4 players, 6,000 ticks each. Use its own LCG, never the world's
-      generator, and hold buttons and aims for random lengths so charges and holds happen.
-  - Record a **behavioural fingerprint** every 60 ticks: the exact numbers that matter, such as each player's
-    x, y, vx, vy, hp, state, facing and move id and `t`; each enemy's id, x, y, hp and state; the kid; the
-    gauge; the mission's section and phase; the generator state.
-  - Then write `tests/golden-test.mjs`, which replays the cases and compares fingerprints. Commit it on its own,
-    green.
-  - **Why not `hashState`:** it hashes `JSON.stringify` of the whole state, so it changes when a refactor merely
-    adds a field or creates an object's keys in a different order, even with identical behaviour. The
-    fingerprint catches behaviour changes and nothing else.
-- [ ] **The table format.** Write `game/js/sim/moves/schema.js`: the documented fields of a move and a
-  `validateMoves()` used by the tests. Start from section 5.1, but in phase 0 encode only what V2 does.
-- [ ] **The tables.** Write `game/js/sim/moves/{cyclops,wolverine,jean}.js` with V2's exact numbers.
-  - The behaviour hard-coded in `attack()` becomes fields: the step-forward speed, the launcher's lift, the
-    charge-from-first-hit rule, and the counter and charge multipliers.
-  - **Keep V2's move ids** (`g1`, `air`, `up`, `heavy` and so on): the ids are part of the state, and renaming
-    them is a phase 1 change.
-- [ ] **The engine.** Write `game/js/sim/moveEngine.js` with `selectMove` (what `tryAttack` does), `startMove` and
-  `runMove` (what `attack()` does), driven by the tables. **Keep the order of operations and the float
-  arithmetic identical**, including the fractional `t`. `player.js` calls the engine.
-  - `config.js` keeps `HEROES`. `MOVES` and `COMBO` either go or become views of the tables; the client imports
-    `MOVES`.
-- [ ] **The client side.**
-  - Write `game/js/anim/clips/<hero>.js`: the strike keyframes now in `anim.js`, keyed by move id, with
-    `anim.js` reading them.
-  - Write `game/js/vfx/cues.js`: a table from simulation events to the effect calls `fx.js` makes today.
-  - Nothing should look different.
-- [ ] **Tests.** Write `tests/moves-test.mjs`:
-  - every table passes `validateMoves`;
-  - every cancel names a real move;
-  - hitboxes appear only on active ticks;
-  - every hero has the slots V2 had.
-- [ ] **The gate.**
-  - The golden test matches, all 78 checks and the new ones pass, and the bot finishes.
-  - `tools/plans/rooms.mjs` screenshots look the same as on `v2-first-proposal` (compare by eye; rendering is not pixel-exact).
-  - Push. No publish is needed: nothing changed for a player.
+- [x] **Golden replays, before touching any code:** `tests/golden/record.mjs`, `cases.mjs` and `v2.json`, then
+  `tests/golden-test.mjs`, committed on their own, green.
+- [x] **The table format:** `game/js/sim/moves/schema.js`, encoding only what V2 does.
+- [x] **The tables:** `game/js/sim/moves/{cyclops,wolverine,jean}.js`, with V2's ids and exact numbers. The step,
+  the launcher's lift, the charge rule and the counter and charge multipliers are fields now.
+- [x] **The engine:** `game/js/sim/moveEngine.js`, with V2's order of operations and float arithmetic.
+- [x] **The client side:** `game/js/anim/clips/` and `game/js/vfx/cues.js`. Nothing looks different.
+- [x] **Tests:** `tests/moves-test.mjs`.
+- [x] **The gate:**
+  - the golden replays match, 107 checks pass and the bot finishes;
+  - the screenshots match V2 by eye (`game/` at this branch's start is byte-identical to `v2-first-proposal`);
+  - the playtest and co-op runs are clean;
+  - pushed. No publish was needed: nothing changed for a player.
 
 ## 4. Phases 1 to 5: checklists
 
@@ -116,8 +123,12 @@ Refine each into steps like phase 0's before starting it, and write its gate dow
 
 ### Phase 1: Feel (Cyclops, Wolverine, Jean)
 
-- [ ] Re-record the golden replays at the start of the phase. Behaviour now changes on purpose, so re-record
-  again at the end, and say so in the commit.
+- [ ] **Re-record the golden replays at the start of the phase** with `node tests/golden/record.mjs`, which prints
+  what the cases cover. Behaviour now changes on purpose, so re-record again at the end, and say so in the
+  commit. In between, check a refactor meant to change nothing with `tools/sidebyside.mjs` against a worktree of
+  the last commit (section 6).
+- [ ] **Fix the charged heavy**, which V2 never fires, and **tune the step forward**, which `physics` mostly
+  cancels (section 3, what phase 0 found).
 - [ ] **Hitstop in the simulation.** Freeze the attacker and the target together: 3, 8 or 14 ticks (section
   5.3). Enemies already have `e.hitstop`; add it for players. Retire `hitPause` in `main.js`, which freezes the
   whole world and is wrong for co-op.
@@ -128,7 +139,9 @@ Refine each into steps like phase 0's before starting it, and write its gate dow
   broken poise bar.
 - [ ] **Combo rules.** Add damage scaling, faster scaling for repeated moves, a combo counter, a style rank from D
   to X, and the personal three-bar meter.
-- [ ] **Input grammar.**
+- [ ] **Input grammar.** It grows in `moveEngine.js`'s `selectMove` and in the tables' `input`. Extend
+  `moves/schema.js` (its contexts, directions and `validateMoves`) with every new field, and turn cancels'
+  `when: 'recovery'` into the tick windows of section 5.1.
   - Read directions relative to facing.
   - Attack while running at 80% or more of run speed is a dash strike.
   - Attack and Power within a 3-tick window: an execution on a stunned Sentinel, a throw beside one.
@@ -136,7 +149,8 @@ Refine each into steps like phase 0's before starting it, and write its gate dow
     starts its move, and the second press inside the window cancels it into the throw.
   - Signature + forward is the super; Signature + up is the ultimate.
 - [ ] **Moves.** Fill the 29 slots for the three heroes from section 5.4. Rename the move ids to the slot ids in
-  section 5.2.
+  section 5.2: the tables, the clips' keys, the V2 check in `tests/moves-test.mjs`, and every client file that
+  names a move (grep for `'heavy'`, `'air'` and `'up'`; `audio.js` and `overlay.js` key Wolverine's snikt off `g1`).
 - [ ] **Animation.**
   - Grow the skeleton to 19 joints (neck, chest, both wrists, both ankles) and add spring chains for hair.
   - Clips get 6 to 10 keys with helpers for anticipation, smear, overshoot and settle.
@@ -242,6 +256,11 @@ For the wave:
 The proposal says what. This section pins down the how, as **starting values to tune** in the Danger Room.
 
 ### 5.1 A move's fields (a draft for `moves/schema.js`)
+
+Phase 0's `moves/schema.js` already has these: `input` (Attack only; `ctx` ground, air or counter; `dir` neutral,
+up or any), `su`, `ac`, `rc`, `dmg`, `poise`, `kb`, `boxes` (one box), `step`, `cancel` (into `evade` or `attack`,
+in recovery), `launch`, `heavy`, `lift`, `charge` and `counter` (the counter bonus). The rest of this table is
+phase 1's.
 
 | Field | Meaning |
 |---|---|
@@ -352,6 +371,14 @@ V2's adaptation rule stays: one counter at a time, and team hits are never count
 - **Look at your work.** Screenshots land in `tools/out/`; open them with the Read tool. Use a plan
   (`tools/plans/*.mjs`, helpers in `tools/plans/helpers.mjs`) for repeatable scenes.
 - **Run the game by hand:** `npm run serve`, then http://127.0.0.1:8770. The page's hooks are `window.__X`.
+- **Golden replays:** `node tests/golden/record.mjs` re-records `tests/golden/v2.json` and prints the cases'
+  coverage; `tests/golden-test.mjs` replays them in about 4 s. Only re-record when behaviour changes on purpose.
+- **Side by side with another commit:** `git worktree add --detach ../ref <commit>`, then
+  `node tools/sidebyside.mjs ../ref all` (`--state` compares the whole state, `--charge` forces charged heavies).
+  To shoot that tree's game with this tree's plan: copy `tools/.netcache/` across to skip the downloads, then
+  `cd ../ref && PORT=8771 NODE_USE_ENV_PROXY=1 node tools/shots.mjs <this repo>/tools/plans/moves.mjs`.
+- **Headless client checks:** client modules that do not import three.js load in Node (`anim.js`,
+  `anim/clips/`, `vfx/cues.js`, `looks.js`). `fx.js` loads with three.js stubbed, as `sidebyside.mjs` does.
 
 ## 7. Publishing a build
 
@@ -397,6 +424,8 @@ V2's adaptation rule stays: one counter at a time, and team hits are never count
   refactors (phase 0).
 - **Wolverine's berserk makes move time fractional** (`t += 1 / attackSpeed`). Keep that arithmetic exact when
   porting.
+- **V2's charged heavy never fires, and its step forward is mostly cancelled** in the same tick by `physics`.
+  Phase 0 kept both exactly; section 3 has the details for phase 1.
 - **Name collisions:** a module-level `M` was once shadowed inside the Hunter code. Use descriptive names in long
   functions.
 
@@ -421,11 +450,21 @@ V2's adaptation rule stays: one counter at a time, and team hits are never count
   verified the tools. That is not a bug.
 - **In an `inject` hook, count steps with a local counter.** The tick passed in is the world's absolute tick,
   not the step within your script.
+- **The golden replays catch arithmetic, not only outcomes.** A 1e-7 change to a multiplier fails them, and so
+  does writing `p.y + (y0 + h)` for `p.y + y0 + h` (one ulp in a hitbox). Adding a field to the state does not.
+  In a refactor that should change nothing, keep every float expression in its old order.
+- **A plan's page script shares one scope with `helpers.mjs`.** `X`, `S`, `C`, `BT`, `bits`, `E`, `MS`, `place`,
+  `spawn`, `run`, `settle` and `wait` are taken. Declaring one again fails every shot with "Identifier has
+  already been declared".
+- **Buttons are levels, not presses.** A button down on two ticks in a row is one press, so a tap is
+  `run(press, 1); run({}, 1)`.
 
 ### Repo
 
 - **One worktree per branch** (`git worktree add`).
 - **Fetching into the checked-out branch needs `--update-head-ok`.**
+- **The clone is shallow, with one fetch refspec.** To look at another branch, fetch it by name and use
+  `FETCH_HEAD`: `git fetch --depth 1 origin v2-first-proposal`.
 - **Push often.** The container is reclaimed when idle.
 
 ## 9. Conventions
@@ -455,7 +494,7 @@ V2's adaptation rule stays: one counter at a time, and team hits are never count
 
 ## 11. Open questions
 
-- Has the user approved the plan, and with what changes? See the comment thread on the doc's decision line.
+- Answered: the user approved the plan in chat on 2 October, with no changes and no comments on the doc.
 - The pairing rule for Attack + Power (phase 1). The recommendation is in section 4.
 - A link per phase, or one link updated? The proposal says one per phase.
 - Should V3 later branch from `v2-expansion`? That is the user's call.
@@ -464,6 +503,7 @@ V2's adaptation rule stays: one counter at a time, and team hits are never count
 
 | Date | What happened |
 |---|---|
+| 2026-10-02 | **Phase 0 done; gate passed.** The user gave the go-ahead in chat (no comments on the doc). Golden replays recorded from V2 (seven cases), then the move table format, V2's three movesets, the move engine, the strike clips and the effect cues, each committed green. New: `tests/moves-test.mjs`, `tools/sidebyside.mjs`, `tools/plans/moves.mjs`. Gate: the golden replays and V2's state hashes match, 107 checks pass, the bot finishes, side-by-side runs against V2 are identical (whole state, poses, effect calls), screenshots match V2 by eye, the playtest and co-op runs are clean. Found for phase 1: V2's charged heavy never fires, and the step forward is mostly cancelled by `physics`. Next: phase 1. |
 | 2026-10-02 | Proposal written (doc linked above) and copied to `docs/`. A `v2.0` tag could not be pushed (this session's git proxy dropped tag pushes, while branch pushes worked), so the frozen `v2-first-proposal` marks V2 instead. `v2-expansion` created with `CLAUDE.md`, this handoff and `tools/`. The tools were verified from the repo: the six example screenshots, the playtest (menus, race, debrief, clean console) and the co-op check (pad join, team-up, pad pause, rumble). 78 checks pass. Next: phase 0. |
 
 ## A prompt to start the next chat
@@ -471,5 +511,5 @@ V2's adaptation rule stays: one counter at a time, and team hits are never count
 > Continue the X-Men Team Edition expansion. The repo is moderngentlemen-sudo/xmen-game (private), branch
 > `v2-expansion`; if it isn't in this session, add it with push access and clone it. Read `CLAUDE.md` and
 > `HANDOFF-EXPANSION.md` on that branch, and check the proposal doc
-> (https://claude.ai/code/artifact/d44cd592-96ae-468d-aadf-b8784ff3bdba) for my comments. Then start phase 0.
+> (https://claude.ai/code/artifact/d44cd592-96ae-468d-aadf-b8784ff3bdba) for my comments. Then start phase 1.
 > Commit and push as you go, and update the handoff before you stop.
