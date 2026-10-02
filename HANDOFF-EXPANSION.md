@@ -1,11 +1,11 @@
 # Handoff: the Team Edition expansion (branch `v2-expansion`)
 
-> **Status, 2 October 2026:** **phase 1 is under way.** Phase 0 and the menus and HUD pass are done (sections 3
-> and 3b). Phase 1's steps 1.1 to 1.6 are done, step 1.7 is two parts in (the strikes; throws, executions and the
-> power counter), and the contact-sheet tool (1.11) is done: in-sim hitstop, the charged heavy, twelve reactions,
-> combo scaling with a style rank and a three-bar meter on the plates, the input grammar, and 20 to 21 moves per
-> hero. `tests/gate/phase1.mjs` is 18 of 23 green. **Next: step 1.7's third part** (the power slots, Evade,
-> Signature, super and ultimate; see 1.7 below), then 1.8 to 1.10. Nothing of phase 1 is published yet.
+> **Status, 2 October 2026 (end of the session that started phase 1):** **phase 1's simulation is done; its client
+> work is next.** Done: steps 1.1 to 1.7 (hitstop, the charged heavy, twelve reactions, combo scaling, style and the
+> meter, the input grammar, **all 29 slots for Cyclops, Wolverine and Jean**), the trial half of 1.10 (15 combo trials
+> in `sim/trials.js`, all passing) and 1.11 (`tools/contact.mjs`). `tests/gate/phase1.mjs` is **23 of 23** green and
+> `node tests/run-all.mjs` passes 186 checks. **Next: 1.8 animation, 1.9 effects, then the Danger Room's screens (the
+> rest of 1.10), then the gate (1.12): publish and ask the user to play it.** Nothing of phase 1 is published yet.
 > **Update this box, the phase checklists and the log at the end of every session.**
 
 | | |
@@ -216,18 +216,22 @@ they arrive.
     window cancels it into the throw (beside a Sentinel) or the execution (on a stunned one). Nothing waits for a
     possible pair, so single presses keep their startup.
   - Signature + forward is the super; Signature + up is the ultimate.
-- [ ] **1.7 Moves.** Two parts done, one to go.
+- [x] **1.7 Moves.** All three parts done: every hero fills all 29 slots (Wolverine has 30 moves with his `g5`).
   - [x] **Strikes:** g4 and the second ender g4alt (a press after a pause of `alt.pause` ticks into the chain window,
     which grew to 20; Wolverine's chain is five with `g5`, an extra), fwd, down, dash, air2, airDown (a `dive` field).
   - [x] **Throws, executions, the power counter:** pairs (`PAIR`, `THROW`, `EXEC` in `config.js`; `tryPair` in
     `moveEngine.js`; `p.lastPress` ages presses separately from the buffers), grabs (`grab: true`: the target is
     `held` and gets the move's hit on its first active tick; no hitbox), `invuln` windows, `counterP` (Power out of a
     perfect defence).
-  - [ ] **Powers and Signature:** pTap, pHold, pFwd, pUp, pAir, evade, sig, super, ult. pTap, pHold, pAir, evade and
-    sig already exist in the hero modules (`sim/heroes/`): give them table entries that point at the module (a
-    `module` kind, without frame data, that the schema accepts), and build pFwd, pUp, super and ult from section 5.4.
-    Signature + forward is the super (1 bar), Signature + up the ultimate (2 bars); they need `cost` and the meter.
-    Then the gate's slot checks go green.
+  - [x] **Powers and Signature:** pTap, pHold, pAir, evade and sig are module moves (`module`, `event`: the hero
+    module runs them; the table records the slot). pFwd and pUp are **Power taps with a direction** (a press let go
+    within `POWER_TAP.ticks`; `trySpecial`); holds still aim the core power anywhere, so walk-and-blast survives.
+    super is Signature + forward (100 meter), ult Signature + up (200), both invulnerable while they play, falling back
+    to the plain Signature (and a `meterLow` event) without the meter (`trySigMove`). New fields: `rehit`, `shots`,
+    `area`, `cost`, `spend`. The cancel ladder: strikes cancel on hit into a special (Power + direction pressed) or the
+    super; specials into the super; throws into a special or the super; launching specials into a jump.
+    Known gap: a Power tap let go during hitstop is not read as a special (the release tick is frozen); the module
+    then treats it as its own tap.
   - The new moves use shared placeholder clips (`anim/clips/shared.js`) until 1.8.
   - `tests/movelist-test.mjs` walks every move (the marker `EVERY_MOVE_TESTED`); a new kind of input needs a recipe in
     its `reach`. The plan was: Fill the 29 slots for the three heroes from section 5.4, with a suite that walks every move of
@@ -239,7 +243,9 @@ they arrive.
 - [ ] **1.9 Effects** under `game/js/vfx/`: instanced GPU particles; ribbon trails from bones; smear stretch; speed
   and focus lines (overlay); a screen-space distortion ring (post); **a fixed pool of 8 lights** (see the lessons);
   floor decals and Sentinel debris; super cut-ins; Clarity and Reduce flashing settings.
-- [ ] **1.10 The Danger Room** (a mode, not a mission): the move list with live demos; frame data and hitbox
+- [ ] **1.10 The Danger Room.** Half done: the 15 trials (`game/js/sim/trials.js`, `runTrial` plays one the way a
+  sharp player would and returns the world, for demos; `tests/trials-test.mjs`). Still to build: the mode itself. The
+  plan: (a mode, not a mission): the move list with live demos; frame data and hitbox
   readouts; sparring Sentinels with settings; 5 combo trials per hero in `game/js/sim/trials.js`, each also a test
   (`tests/trials-test.mjs`: scripted inputs, then the expected route and hit count).
 - [x] **1.11 A contact-sheet tool**, done ahead of order (the new moves needed it): `tools/contact.mjs`. The plan:, `tools/contact.mjs`. It screenshots every move on its first active tick, one
@@ -501,6 +507,15 @@ V2's adaptation rule stays: one counter at a time, and team hits are never count
 - **Name collisions:** a module-level `M` was once shadowed inside the Hunter code. Use descriptive names in long
   functions.
 
+- **Read a collision's speed before the collision.** `moveBody` zeroes the speed into a wall, so anything that
+  bounces must keep the speed it hit with (`e.flight` in `reactions.js`). The wall bounce came back at 3 m/s until
+  the combo trials caught it; a test that only checked the sign passed by luck.
+- **Every hero swap must call the old hero's `cancel`.** `setHero` did not, so Jean's grip on the kid stayed shut
+  for ever after she tagged out; the bot found it as a mission that never ended.
+- **Presses that look like a pair are a pair.** Attack then Power within 3 ticks is a throw; a script (or a bot)
+  that presses the next input before the last was taken will throw by accident. `runTrial` waits for each input
+  to be taken.
+
 ### Client and three.js
 
 - **Bake merged geometry correctly.** Call `group.updateMatrixWorld(true)` before baking a group into one
@@ -512,6 +527,11 @@ V2's adaptation rule stays: one counter at a time, and team hits are never count
 - **The cover page joins on `pointerdown` anywhere** (a window listener). A click on the canvas alone was missed.
 - **`main.js` freezes the whole simulation** for an impact panel (`hitPause`). Phase 1 replaces this with
   per-entity hitstop.
+
+- **CSS class names on the plates must not collide with the plate's own parts.** A style-rank badge with class
+  `r2` was found by `querySelector('.r2')` before Jean's second resource bar, and the HUD threw every frame.
+- **An invulnerable hero blinks.** Screenshot tools must set `mercy` to 0, or half the shots catch the hero
+  invisible (`tools/contact.mjs`).
 
 ### Tests and tools
 
@@ -581,6 +601,7 @@ V2's adaptation rule stays: one counter at a time, and team hits are never count
 
 | Date | What happened |
 |---|---|
+| 2026-10-02 | **Phase 1, same session, continued:** 1.7 finished (powers as module moves, directional specials on Power taps, supers and ultimates on Signature with the meter, the cancel ladder; all 29 slots for all three heroes), 1.10's 15 combo trials (`sim/trials.js`, `tests/trials-test.mjs`). The trials found that the wall bounce lost its speed to the collision (fixed). `tests/gate/phase1.mjs` 23 of 23; 186 checks pass; bot seeds tried all finish. The solo bot is slower since the power counter (it re-presses Power after its evades); see 1.7. Not published. Next: 1.8 animation, 1.9 effects, the Danger Room's screens, then the gate. |
 | 2026-10-02 | **Phase 1 started.** No new comments on the proposal doc (only our own approval question). Refined phase 1 into steps 1.1 to 1.12 and wrote its gate as `tests/gate/phase1.mjs` (23 checks). Done: 1.1 baseline (golden file renamed `replays.json`, labelled), 1.2 in-sim hitstop (`hitPause` retired for a client slow motion), 1.3 the charged heavy fires and the step is kept, 1.4 twelve reactions (`sim/reactions.js`), 1.5 combo scaling, style rank and meter (`sim/combo.js`, plate HUD), 1.6 the input grammar and slot ids, 1.7 in two of three parts (strikes; throws, executions, power counter), 1.11 `tools/contact.mjs`. Found and fixed: tagging out never called the old hero's `cancel` (the kid stayed in Jean's grip for ever); the bot could not climb to, or drop down to, a downed kid, nor reach a Sentinel above it; HUD class `r2` clashed with Jean's resource bar. New suites: `feel-test`, `reactions-test`, `movelist-test`. 163 checks pass; every bot seed tried finishes (solo 1 to 15, co-op 2 to 4 players). Gate 18 of 23. Not published yet. Next: 1.7's powers and Signature. |
 | 2026-10-02 | **Menus and HUD pass** (section 3b), asked for by the user before phase 1: HUD bands so nothing covers play, `tools/layout.mjs`, the ready room, honest controls text, confirmations, debrief routes, first-time hints, key rebinding. Tests (107), layout check, playtest and co-op clean. Published: https://claude.ai/artifact/UhSDGngLMLnCuq1W4CNjSj (also in the README on `main`). Next: phase 1. |
 | 2026-10-02 | **Phase 0 done; gate passed.** The user gave the go-ahead in chat (no comments on the doc). Golden replays recorded from V2 (seven cases), then the move table format, V2's three movesets, the move engine, the strike clips and the effect cues, each committed green. New: `tests/moves-test.mjs`, `tools/sidebyside.mjs`, `tools/plans/moves.mjs`. Gate: the golden replays and V2's state hashes match, 107 checks pass, the bot finishes, side-by-side runs against V2 are identical (whole state, poses, effect calls), screenshots match V2 by eye, the playtest and co-op runs are clean. Found for phase 1: V2's charged heavy never fires, and the step forward is mostly cancelled by `physics`. Next: phase 1. |
