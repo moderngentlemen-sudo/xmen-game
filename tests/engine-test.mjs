@@ -339,7 +339,7 @@ function playRandom(seed, players, ticks, every) {
   resolveHitboxes(S);
   assert(S.events.some(e => e.type === 'perfect') && p.hp === hp && t.slowT > 0, 'an Evade timed into a hit negates it and slows the attacker');
   run({ b: bits('attack') }, 2);
-  assert(p.move && p.move.id === 'heavy' && p.move.counter, 'Attack inside the window counters with the heavy finisher');
+  assert(p.move && p.move.id === 'counter' && p.move.counter, 'Attack inside the window counters (the counter: the heavy finisher\'s strike, at once)');
 }
 
 // ---- Hunters ------------------------------------------------------------------------------------------------------------

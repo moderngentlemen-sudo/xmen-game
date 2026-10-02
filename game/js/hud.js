@@ -170,7 +170,7 @@ export class UI {
       <table><tr><th>Input</th><th>Keyboard and mouse</th><th>Gamepad</th><th>Does</th></tr>
       <tr><td>Move</td><td>${kb('left')} ${kb('right')}, ${kb('up')} ${kb('down')} to aim up or down (or the arrows)</td><td>Left stick</td><td>Down and Jump drops through a walkway</td></tr>
       <tr><td>Aim</td><td>Mouse</td><td>Right stick</td><td>Without aim, you aim the way you move</td></tr>
-      <tr><td>Attack</td><td>${kb('attack')} or left click</td><td>X</td><td>A close combo of quick strikes; with up held, a launcher; in the air, an air strike. Right after a perfect Evade, a heavy counter</td></tr>
+      <tr><td>Attack</td><td>${kb('attack')} or left click</td><td>X</td><td>A string of quick strikes; hold it through the first for a charged heavy. Up and Attack: a launcher (jump straight after a hit to follow it up). In the air, an air strike. Right after a perfect Evade, a heavy counter</td></tr>
       <tr><td>Power</td><td>${kb('power')} or right click</td><td>RB / RT</td><td>Your hero's core power: tap for a quick one, hold to build it</td></tr>
       <tr><td>Jump</td><td>${kb('jump')}</td><td>A</td><td>Jump; hold in the air for your hero's own movement</td></tr>
       <tr><td>Evade</td><td>${kb('evade')}</td><td>B</td><td>Dash through danger; timed into a hit, a perfect defence that opens a counter</td></tr>
@@ -184,6 +184,8 @@ export class UI {
       <tr><td><b>Psychic Rapport</b></td><td>Cyclops and Jean: for a while her telekinesis bends his blasts round cover onto Sentinels he cannot see</td></tr>
       <tr><td><b>Optic Edge</b></td><td>Cyclops and Wolverine: a blast into his claws; his next strikes throw optic shockwaves</td></tr>
       <tr><td><b>Lift and Hold</b></td><td>Jean aiming at a Sentinel: she pins it in the air, and everyone's hits on it land harder</td></tr></table>
+      <h3>Combos</h3>
+      <p class="fine">Every hit freezes you and the Sentinel for a moment. Strings stagger and knock down; launchers send Sentinels up for air strikes, and the more hits they take in the air the faster they fall, until they flip out. One hit on a Sentinel lying down picks it back up. Damage tapers after the third hit of a combo, and faster for a move you repeat: mix your moves to climb the style rank from D to X, which fills the three-bar meter on your plate. Enough battering stuns a Sentinel.</p>
       <p class="fine">Team-ups, assists and Tactical Call hits are never countered by the Sentinels' adaptations, and they fill the shared X-Gauge. Every telegraph has a colour: white, parry or evade it; magenta, a heavy blow (a perfect Evade, or get clear); violet with "!!", unblockable (move).</p>
       <div class="btns"><button class="btn" data-act="back">Back</button></div>`;
   }

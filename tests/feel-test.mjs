@@ -1,8 +1,9 @@
 // Phase 1's feel rules, one section per step as they land (HANDOFF-EXPANSION.md, section 4): hitstop in the
 // simulation, the charged heavy and the step, reactions, combo rules and the meter.
 import { createWorld, step } from '../game/js/sim/world.js';
-import { BTN, HITSTOP, SCALING, STREAK, METER, STYLE } from '../game/js/sim/config.js';
+import { BTN, HITSTOP, SCALING, STREAK, METER, STYLE, DASH, HEROES } from '../game/js/sim/config.js';
 import { comboScale, STYLE_RANKS } from '../game/js/sim/combo.js';
+import { dirOf, dashing } from '../game/js/sim/moveEngine.js';
 import { setHero } from '../game/js/sim/player.js';
 import { createEnemy } from '../game/js/sim/enemies.js';
 import { spawnProjectile, hitEnemy, hurtPlayer } from '../game/js/sim/combat.js';
@@ -124,4 +125,42 @@ for (const hero of ['cyclops', 'wolverine', 'jean']) {
   const n = p.streak.n; p.mercy = 0;
   hurtPlayer(S, p, { owner: e.id, team: 'e', inst: newId(S), dmg: 5, kb: [0, 0] });
   assert(n === 2 && p.streak.n === 0, 'being hit ends the hero\'s combo');
+}
+
+// ---- 1.6 The input grammar -----------------------------------------------------------------------------------------
+{
+  // Directions are read relative to facing: the same stick reads forward one way and back the other
+  const p = { mx: 1, my: 0, facing: 1 }, q = { mx: 1, my: 0, facing: -1 };
+  const r = { mx: 0.2, my: 0.9, facing: 1 }, d = { mx: -1, my: -0.8, facing: 1 }, n = { mx: 0.3, my: 0.2, facing: -1 };
+  assert(dirOf(p) === 'fwd' && dirOf(q) === 'back' && dirOf(r) === 'up' && dirOf(d) === 'down' && dirOf(n) === 'neutral',
+    'directions are read relative to facing, up and down first');
+}
+{
+  // Running at 80% of run speed or more the way they face is a dash; slower, or backing off, is not
+  const { p } = arena('wolverine', { trooper: false });
+  const run = HEROES.wolverine.run;
+  p.facing = 1; p.vx = run * DASH.speed; const yes = dashing(p);
+  p.vx = run * DASH.speed * 0.9; const slow = dashing(p);
+  p.vx = -run; const back = dashing(p);
+  p.vx = run; p.onGround = false; const air = dashing(p);
+  assert(yes && !slow && !back && !air, `a dash is running the way they face at ${DASH.speed * 100}% of run speed or more, on the ground`);
+}
+{
+  // Inside a chain, forward is not read: walking into a fight keeps the string
+  const { p, run, log } = arena('cyclops');
+  let last = false;
+  run(i => { const m = p.move, ready = !m || m.t > 10; const press = ready && !last; last = press; return { mx: 1, b: press ? BTN.attack : 0 }; }, 60);
+  const swings = log.filter(v => v.type === 'swing').map(v => v.move);
+  assert(swings.slice(0, 3).join(' ') === 'g1 g2 g3', `holding forward through a chain keeps the chain (${swings.slice(0, 4).join(' ')})`);
+}
+{
+  // The launcher, on hit, cancels into a jump to follow the Sentinel up; then Attack in the air starts the air chain
+  const { p, e, run, log, until } = arena('jean');
+  run({ my: 1, b: BTN.attack });
+  until(() => p.move && p.move.hit, 30);
+  until(() => p.hitstop === 0, 20);
+  run({ b: BTN.jump });
+  const jumped = log.some(v => v.type === 'jump' && v.cancel === 'up') && p.vy > 10 && !p.move;
+  run({ b: BTN.jump }, 8); run({ b: BTN.jump | BTN.attack });
+  assert(jumped && p.move && p.move.id === 'air1' && e.state === 'launched', 'a launcher that hits cancels into a full jump, and Attack up there starts the air chain');
 }

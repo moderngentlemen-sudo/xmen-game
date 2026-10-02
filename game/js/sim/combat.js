@@ -48,6 +48,7 @@ export function hitEnemy(S, e, h) {
   if (S.called && S.called.id === e.id && isPlayer && by.id !== S.called.by) { mult *= HEROES.cyclops.call.bonus; teamHit = true; S.gauge = Math.min(GAUGE.max, S.gauge + GAUGE.called * h.dmg); }
   let resisted = false;
   if (!teamHit && POWER_TYPES.includes(power) && S.adapt.active === power) { mult *= ADAPT.counters[power].mult; resisted = true; }
+  if (isPlayer && by.move && by.move.inst === h.inst) by.move.hit = true;   // for cancels on hit (moveEngine.js)
   if (isPlayer) mult *= HERO[by.hero].dmgMult(by, h) * streakHit(S, by, e, h);   // the combo's damage scaling (combo.js)
   if (e.armour > 0 && !h.heavy && !teamHit) mult *= 0.6;   // armoured plate turns light hits
   const dmg = h.dmg * mult;

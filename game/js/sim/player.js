@@ -18,7 +18,7 @@ export function makePlayer(S, slot, hero, x, y) {
     hp: H.hp, maxHp: H.hp, mercy: 0, state: 'normal', st: 0,
     held: 0, buf: {}, holdT: {}, mx: 0, my: 0, aimX: 1, aimY: 0, aimFree: false,
     coyote: 0, jumpsLeft: H.airJumps, wallLock: 0, wallSlide: false,
-    move: null, combo: 0, comboT: 0, atkHeld: 0, hitstop: 0, streak: newStreak(), meter: 0,
+    move: null, combo: 0, airCombo: 0, comboT: 0, atkHeld: 0, hitstop: 0, streak: newStreak(), meter: 0,
     evade: null, evadeCd: 0, counterT: 0,
     hitstunT: 0, downedT: 0, revive: 0, markedBy: 0, heldBy: 0, thrown: null,
     teamCd: 0, tagCd: 0, teamPress: 0, edge: null, squad: null, lastHurtT: 999, fastball: null,

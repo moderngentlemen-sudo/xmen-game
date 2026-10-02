@@ -28,7 +28,8 @@ export default {
   g2: { keys: slash2 },
   g3: { keys: slash3 },
   g4: { keys: spin, spin: [1, 'y'] },
-  air: { keys: clawAir, base: 'air' },
+  air1: { keys: clawAir, base: 'air' },
   up: { keys: clawRise },
   heavy: { keys: clawHeavy, tremble: true },
+  counter: { keys: clawHeavy },   // the heavy's strike, at once: no wind-up tremble
 };

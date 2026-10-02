@@ -19,7 +19,8 @@ export default {
   g1: { keys: backhand },
   g2: { keys: elbow },
   g3: { keys: punch },
-  air: { keys: axe, base: 'air' },
+  air1: { keys: axe, base: 'air' },
   up: { keys: rise },
   heavy: { keys: punch, tremble: true },
+  counter: { keys: punch },   // the heavy's strike, at once: no wind-up tremble
 };

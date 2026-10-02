@@ -17,7 +17,8 @@ export default {
   g1: { keys: palm1 },
   g2: { keys: palm2 },
   g3: { keys: push },
-  air: { keys: palmAir, base: 'air' },
+  air1: { keys: palmAir, base: 'air' },
   up: { keys: lift },
   heavy: { keys: push, tremble: true },
+  counter: { keys: push },   // the heavy's strike, at once: no wind-up tremble
 };

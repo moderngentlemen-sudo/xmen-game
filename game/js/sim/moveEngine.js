@@ -1,28 +1,33 @@
 // The move engine: every hero's melee, run from their move tables (sim/moves/, documented in moves/schema.js). A
 // buffered Attack press picks a move (selectMove) and starts it (startMove); then the move runs a tick at a time
 // (runMove): its clock, the charge rule, the step forward, its hitbox on active ticks, the launcher's lift, its end,
-// and its cancels.
-// Phase 0 moved V2's melee here from player.js with no change in behaviour: the order of operations and the float
-// arithmetic are V2's, down to the fractional clock under berserk, and tests/golden-test.mjs holds it to that. Its
-// state on the player is V2's too: p.move = { id, t, inst, counter, charged }, p.combo, p.comboT and p.atkHeld.
-import { ACTION_BUFFER, BTN, COMBO_WINDOW, HEROES, HITSTOP, STICK } from './config.js';
+// and its cancel windows.
+// Phase 0 moved V2's melee here with no change in behaviour; phase 1 grows it into the move grammar (directions read
+// relative to facing, the dash and air chain contexts, cancel windows in ticks, cancels on hit). Its state on the
+// player: p.move = { id, t, inst, counter, charged, hit, posed, letGo }, p.combo (the ground chain's index),
+// p.airCombo (the air chain's), p.comboT (the window to continue a chain) and p.atkHeld (the charge hold).
+import { ACTION_BUFFER, BTN, COMBO_WINDOW, DASH, HEROES, HITSTOP, JUMP_BUFFER, STICK } from './config.js';
 import { MOVESETS } from './moves/index.js';
 import { emit, newId } from './world.js';
 import { spawnHitbox } from './combat.js';
 import { physics, setState, tryEvade } from './player.js';
 import { HERO } from './heroes/index.js';
 
-// Per hero, built once from the tables: what Attack starts in each context and direction (the chain covers the
-// ground with no direction), the counter move, and which move holding Attack through another winds up
+const DIRS = ['neutral', 'fwd', 'back', 'up', 'down'];
+// Per hero, built once from the tables: what Attack starts in each context and direction (the chains cover the
+// ground and the air with no direction; a move for 'any' direction yields to one for a specific direction), the
+// counter move, and which move holding Attack through another winds up
 const RULES = {};
 for (const [hero, set] of Object.entries(MOVESETS)) {
-  const start = { ground: {}, air: {} }, chargeInto = {};
+  const start = { ground: {}, air: {}, dash: {} }, chargeInto = {};
   let counter = null;
-  for (const [id, m] of Object.entries(set.moves)) {
-    if (m.charge) chargeInto[m.charge.from] = id;
-    if (set.chain.includes(id)) continue;
-    if (m.input.ctx === 'counter') counter = id;
-    else for (const dir of m.input.dir === 'any' ? ['neutral', 'up'] : [m.input.dir]) start[m.input.ctx][dir] = id;
+  const chains = [...set.chain, ...(set.airChain || [])];
+  for (const pass of ['any', 'specific']) for (const [id, m] of Object.entries(set.moves)) {
+    if (pass === 'any' && m.charge) chargeInto[m.charge.from] = id;
+    if (chains.includes(id) || m.input.ctx === 'hold') continue;
+    if (m.input.ctx === 'counter') { counter = id; continue; }
+    if ((m.input.dir === 'any') !== (pass === 'any')) continue;
+    for (const dir of m.input.dir === 'any' ? DIRS : [m.input.dir]) start[m.input.ctx][dir] = id;
   }
   RULES[hero] = { start, counter, chargeInto };
 }
@@ -33,20 +38,39 @@ export const hitstopOf = m => typeof m.hitstop === 'number' ? m.hitstop : HITSTO
 // The move a perfect defence's counter starts
 export const counterMove = p => RULES[p.hero].counter;
 
+// The direction held, relative to where the hero faces: up and down first, then forward and back
+export function dirOf(p) {
+  if (p.my > STICK.up) return 'up';
+  if (p.my < -STICK.up) return 'down';
+  const f = p.mx * p.facing;
+  return f > STICK.up ? 'fwd' : f < -STICK.up ? 'back' : 'neutral';
+}
+// Running flat out the way they face, on the ground: Attack is a dash strike
+export const dashing = p => p.onGround && p.vx * p.facing >= DASH.speed * HEROES[p.hero].run * HERO[p.hero].speedMult(p);
+
 // A buffered Attack press: { id, counter } for the move it starts, or null when there is no press to take. Inside a
-// perfect defence's counter window it is the counter move; otherwise the move for where the hero is and the
-// direction held; on the ground with no direction, the chain's next strike while the chain's window is open, else
-// its first.
+// perfect defence's counter window it is the counter move. Otherwise the context (the air; a dash; the ground) and
+// the direction pick the move. Inside a chain (its window still open) only up and down branch out; forward and back
+// read as no direction, so a hero walking into a fight keeps their string. With no move for the direction, it reads
+// as no direction; a dash with no dash strike reads as the ground; and no direction walks the chain for where the
+// hero is: its next strike while the chain's window is open, else its first.
 export function selectMove(S, p) {
   if (p.buf.attack > ACTION_BUFFER) return null;
   p.buf.attack = 99;
-  const R = RULES[p.hero];
+  const R = RULES[p.hero], set = MOVESETS[p.hero];
   if (p.counterT > 0) { p.counterT = 0; return { id: R.counter, counter: true }; }
-  const id = R.start[p.onGround ? 'ground' : 'air'][p.my > STICK.up ? 'up' : 'neutral'];
+  const inChain = p.comboT > 0, air = !p.onGround;
+  let dir = dirOf(p);
+  if (inChain && (dir === 'fwd' || dir === 'back')) dir = 'neutral';
+  const ctx = air ? 'air' : !inChain && dashing(p) ? 'dash' : 'ground';
+  const id = R.start[ctx][dir] || (ctx === 'dash' && R.start.ground[dir]) || (dir !== 'neutral' && R.start[ctx === 'dash' ? 'ground' : ctx].neutral);
   if (id) return { id, counter: false };
-  const chain = MOVESETS[p.hero].chain;
-  p.combo = p.comboT > 0 ? (p.combo + 1) % chain.length : 0;
-  return { id: chain[p.combo], counter: false };
+  if (air && set.airChain) {
+    p.airCombo = inChain ? (p.airCombo + 1) % set.airChain.length : 0;
+    return { id: set.airChain[p.airCombo], counter: false };
+  }
+  p.combo = inChain ? (p.combo + 1) % set.chain.length : 0;
+  return { id: set.chain[p.combo], counter: false };
 }
 export function tryAttack(S, p) {
   const pick = selectMove(S, p);
@@ -56,7 +80,7 @@ export function tryAttack(S, p) {
 }
 
 export function startMove(S, p, id, counter) {
-  p.move = { id, t: 0, inst: newId(S), counter, charged: false };
+  p.move = { id, t: 0, inst: newId(S), counter, charged: false, hit: false };
   p.atkHeld = 0;
   if (p.aimFree && Math.abs(p.aimX) > 0.2) p.facing = p.aimX > 0 ? 1 : -1;
   setState(p, 'attack');
@@ -103,13 +127,22 @@ export function runMove(S, p, cmd, E) {
   }
   physics(S, p, 0, cmd, E, true, stepping);
   if (t >= m.su + m.ac + m.rc) { p.move = null; p.comboT = COMBO_WINDOW; setState(p, 'normal'); return; }
-  // Cancels, in the table's order: into Evade, or into the next Attack (taken at the start of recovery, so a chain
-  // flows)
+  // Cancel windows, in the table's order: into Evade, a jump (kept as a full jump: the launcher's follow-up), or the
+  // next Attack (taken from the window's start, so a chain flows). A window runs after `from` up to `to` on the
+  // move's clock: by default from the first active tick for a cancel on hit (a hit can only come then), else from
+  // the recovery, to the end
   for (const c of m.cancel) {
-    if (c.when === 'recovery' && t <= m.su + m.ac) continue;
-    for (const to of c.into) {
-      if (to === 'evade') { if (tryEvade(S, p, cmd)) return; }
-      else if (to === 'attack' && p.buf.attack <= ACTION_BUFFER) { p.comboT = COMBO_WINDOW; p.move = null; setState(p, 'normal'); tryAttack(S, p); return; }
+    const from = c.from !== undefined ? c.from : c.on === 'hit' ? m.su : m.su + m.ac, to = c.to !== undefined ? c.to : Infinity;
+    if (t <= from || t > to || (c.on === 'hit' && !M.hit)) continue;
+    for (const into of c.into) {
+      if (into === 'evade') { if (tryEvade(S, p, cmd)) return; }
+      else if (into === 'jump' && p.buf.jump <= JUMP_BUFFER) {
+        p.move = null; p.comboT = COMBO_WINDOW; setState(p, 'normal');
+        p.vy = Math.max(p.vy, HEROES[p.hero].jumpV); p.onGround = false; p.buf.jump = 99;
+        emit(S, 'jump', { id: p.id, x: p.x, y: p.y, cancel: M.id });
+        return;
+      }
+      else if (into === 'attack' && p.buf.attack <= ACTION_BUFFER) { p.comboT = COMBO_WINDOW; p.move = null; setState(p, 'normal'); tryAttack(S, p); return; }
     }
   }
 }

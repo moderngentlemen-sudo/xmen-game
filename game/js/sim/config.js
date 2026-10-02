@@ -24,6 +24,8 @@ export const HITSTOP = { light: 3, heavy: 8, super: 14 };
 export const BTN = { attack: 1, power: 2, jump: 4, evade: 8, sig: 16, team: 32 };
 export const BTN_NAMES = Object.keys(BTN);
 export const STICK = { up: 0.55 };   // the stick past this reads as a direction for the moves (sim/moves/)
+// A dash strike: Attack while running the way the hero faces at `speed` of their run speed or more
+export const DASH = { speed: 0.8 };
 
 // Power types: the Sentinels log damage by type and adapt to whatever the team leans on. 'team' (team-ups
 // and the team ultimate) is never countered; 'plain' is environmental and unlogged.

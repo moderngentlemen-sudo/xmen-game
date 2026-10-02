@@ -20,10 +20,13 @@ function coverage() {
       if (ev.type === 'swing') {
         const p = S.players.find(q => q.id === ev.id), was = prev.get(ev.id);
         add(`swing ${ev.hero} ${ev.move}`);
-        if (p && p.move && p.move.counter) add(`counter heavy ${was && was.state === 'evade' ? 'out of the evade' : 'after the evade'}`);
+        if (p && p.move && p.move.counter) add(`counter ${was && was.state === 'evade' ? 'out of the evade' : 'after the evade'}`);
         if (was && was.state === 'attack') add(`attack cancel out of ${was.move}`);
       }
       if (ev.type === 'charged') add('charged heavy');
+      if (ev.type === 'jump' && ev.cancel) add(`jump cancel out of ${ev.cancel}`);
+      if (ev.type === 'react') add(`reaction ${ev.react}`);
+      if (ev.type === 'comboEnd') add(`combo of ${ev.n >= 10 ? '10 or more' : ev.n >= 5 ? '5 to 9' : '2 to 4'} hits`);
       if (ev.type === 'evade' && prev.get(ev.id) && prev.get(ev.id).state === 'attack') add('evade cancel out of a move');
       if (ev.type === 'perfect') add('perfect defence');
       if (ev.type === 'berserk') add('berserk');
@@ -32,7 +35,7 @@ function coverage() {
       const was = prev.get(p.id);
       if (p.move && p.move.t % 1 !== 0) add('move ticks with fractional t (berserk)');
       const m = p.move && MOVES[p.hero][p.move.id];
-      if (m && p.move.id === 'heavy' && p.buf.attack === 0 && p.move.t > m.su + m.ac) add('attack pressed in the heavy\'s recovery (no cancel)');
+      if (m && (p.move.id === 'heavy' || p.move.id === 'counter') && p.buf.attack === 0 && p.move.t > m.su + m.ac) add('attack pressed in a heavy\'s recovery (no cancel)');
       if (was && was.state === 'attack' && p.state !== 'attack' && !(p.state === 'normal' || p.state === 'evade')) add(`move interrupted: ${p.state}`);
       if (was && was.state === 'attack' && was.hero !== p.hero) add('move interrupted: tag');
       prev.set(p.id, { state: p.state, move: p.move ? p.move.id : null, hero: p.hero });

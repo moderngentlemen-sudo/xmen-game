@@ -29,31 +29,45 @@ for (const hero of HERO_IDS) {
   const bad = validateMoves(MOVESETS[hero]);
   assert(!bad.length, `${hero}'s move table is valid${bad.length ? ': ' + bad.slice(0, 4).join('; ') : ''}`);
 }
-// V2's moves, which phase 0 keeps (phase 1 renames them to the grammar's slots)
-const V2 = { cyclops: { chain: 'g1 g2 g3', moves: 'g1 g2 g3 air up heavy' }, wolverine: { chain: 'g1 g2 g3 g4', moves: 'g1 g2 g3 g4 air up heavy' }, jean: { chain: 'g1 g2 g3', moves: 'g1 g2 g3 air up heavy' } };
-for (const hero of Object.keys(V2)) {
-  const set = MOVESETS[hero];
-  assert(set && set.chain.join(' ') === V2[hero].chain && Object.keys(set.moves).join(' ') === V2[hero].moves, `${hero} has V2's moves (${V2[hero].moves}) and chain`);
+// Phase 1 named the moves after the grammar's slots: every move's id is its slot (or it is a hero's extra)
+for (const hero of HERO_IDS) {
+  const set = MOVESETS[hero], off = Object.entries(set.moves).filter(([id, m]) => m.slot !== id && m.slot !== 'extra').map(([id]) => id);
+  assert(!off.length && set.chain.every(id => set.moves[id]) && (set.airChain || []).every(id => set.moves[id]),
+    `${hero}'s moves are named after their slots (${Object.keys(set.moves).join(' ')})${off.length ? `; not: ${off.join(', ')}` : ''}`);
 }
-// Every cancel lands on something real: each move runs into its recovery, then takes each of its cancels. 'evade' must
-// start the hero's Evade; 'attack' must start a move of the hero's own table, whichever way Attack is pressed
-// (no direction, up, inside the counter window).
+// Every cancel lands on something real: each move runs to the start of each cancel window (a cancel on hit gets its
+// hit), then takes each of its cancels. 'evade' must start the hero's Evade; 'attack' must start a move of the
+// hero's own table, whichever way Attack is pressed (no direction, up, inside the counter window); 'jump' must leave
+// the hero rising, free.
 for (const hero of HERO_IDS) {
   const set = MOVESETS[hero], problems = [];
   for (const [id, m] of Object.entries(set.moves)) for (const c of m.cancel) for (const to of c.into) {
-    for (const how of to === 'attack' ? ['neutral', 'up', 'counter'] : ['evade']) {
+    const from = c.from !== undefined ? c.from : c.on === 'hit' ? m.su : m.su + m.ac;
+    for (const how of to === 'attack' ? ['neutral', 'up', 'counter'] : [to]) {
       const { S, p, run } = setup(hero);
       if (m.input.ctx === 'air') { p.y = 2.5; p.onGround = false; }
       startMove(S, p, id, false);
       const M = p.move;
-      while (p.move === M && M.t <= m.su + m.ac) run();
-      if (p.move !== M) { problems.push(`${id} ended before its recovery`); continue; }
+      while (p.move === M && M.t <= from) run();
+      if (p.move !== M) { problems.push(`${id} ended before its cancel window`); continue; }
+      if (c.on === 'hit') M.hit = true;
       if (how === 'counter') p.counterT = 10;
-      run({ my: how === 'up' ? 1 : 0, b: how === 'evade' ? BTN.evade : BTN.attack });
-      if (how === 'evade' ? p.state !== 'evade' : !(p.move && p.move !== M && set.moves[p.move.id])) problems.push(`${id} → ${to} (${how}) landed on ${p.state}${p.move ? ' ' + p.move.id : ''}`);
+      run({ my: how === 'up' ? 1 : 0, b: how === 'evade' ? BTN.evade : how === 'jump' ? BTN.jump : BTN.attack });
+      const ok = how === 'evade' ? p.state === 'evade' : how === 'jump' ? p.state === 'normal' && !p.move && p.vy > 0 && !p.onGround
+        : p.move && p.move !== M && set.moves[p.move.id];
+      if (!ok) problems.push(`${id} → ${to} (${how}) landed on ${p.state}${p.move ? ' ' + p.move.id : ''}`);
     }
   }
-  assert(!problems.length, `every cancel of ${hero}'s lands on a real move or the Evade${problems.length ? ': ' + problems.slice(0, 4).join('; ') : ''}`);
+  assert(!problems.length, `every cancel of ${hero}'s lands on a real move, the Evade or a jump${problems.length ? ': ' + problems.slice(0, 4).join('; ') : ''}`);
+}
+// A cancel on hit waits for the hit: the launcher whiffed cannot be jump-cancelled
+for (const hero of HERO_IDS) {
+  const { p, run } = setup(hero);
+  run({ my: 1, b: BTN.attack });
+  const M = p.move;
+  run({}, MOVESETS[hero].moves.up.su + 1);
+  run({ b: BTN.jump });
+  assert(M.id === 'up' && p.move === M, `${hero}: a launcher that hits nothing cannot be cancelled into a jump`);
 }
 
 // ---- Hitboxes on active ticks only ---------------------------------------------------------------------------------
@@ -82,7 +96,7 @@ for (const [hero, berserk] of [['cyclops', false], ['wolverine', false], ['wolve
 
 // ---- What Attack starts ----------------------------------------------------------------------------------------------
 for (const hero of HERO_IDS) {
-  const set = MOVESETS[hero], heavy = set.moves.heavy;
+  const set = MOVESETS[hero], counterM = set.moves.counter;
   // Taps landing in each strike's recovery walk the chain, and it starts over after the last
   const chain = (() => {
     const { p, run, log } = setup(hero);
@@ -107,9 +121,9 @@ for (const hero of HERO_IDS) {
     return { started, box };
   })();
   const want = [...set.chain, set.chain[0]].join(' ');
-  assert(chain === want && up === 'up' && air === 'air' && counter.started === 'heavy'
-    && counter.box && counter.box.dmg === heavy.dmg * heavy.counter.dmgMult && counter.box.poise === heavy.poise * heavy.counter.poiseMult && counter.box.heavy,
-    `${hero}: Attack walks the chain (${chain}), up starts the launcher, the air move in the air, and the counter window the heavy at ${heavy.counter.dmgMult}× damage and poise`);
+  assert(chain === want && up === 'up' && air === 'air1' && counter.started === 'counter'
+    && counter.box && counter.box.dmg === counterM.dmg * counterM.counter.dmgMult && counter.box.poise === counterM.poise * counterM.counter.poiseMult && counter.box.heavy,
+    `${hero}: Attack walks the chain (${chain}), up starts the launcher, the air chain in the air, and the counter window the counter at ${counterM.counter.dmgMult}× damage and poise`);
 }
 
 // ---- The charge rule --------------------------------------------------------------------------------------------------
