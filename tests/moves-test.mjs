@@ -9,6 +9,7 @@ import { startMove } from '../game/js/sim/moveEngine.js';
 import { MOVESETS } from '../game/js/sim/moves/index.js';
 import { validateMoves } from '../game/js/sim/moves/schema.js';
 import { CLIPS } from '../game/js/anim/clips/index.js';
+import { clipKeys } from '../game/js/anim.js';
 
 const assert = (c, m) => { console.log((c ? 'PASS ' : 'FAIL ') + m); if (!c) process.exitCode = 1; };
 const cmd = (o = {}) => ({ mx: o.mx || 0, my: o.my || 0, ax: 1, ay: 0, aim: false, b: o.b || 0 });
@@ -170,4 +171,23 @@ for (const hero of HERO_IDS) {
   }
   for (const id of Object.keys(clips)) if (!set.moves[id]) problems.push(`the clip ${id} has no move`);
   assert(!problems.length, `${hero}: every move has an animation clip, and every clip a move${problems.length ? ': ' + problems.join('; ') : ''}`);
+}
+
+// ---- Clips play with weight (phase 1, step 1.8) ----------------------------------------------------------------------
+// Polished (anim.js), every strike clip has 6 to 10 keys in time order inside its move, with an anticipation before
+// the strike and an overshoot after it where the clip has room for them
+for (const hero of HERO_IDS) {
+  const set = MOVESETS[hero], problems = [];
+  let antic = 0, over = 0, total = 0;
+  for (const [id, m] of Object.entries(set.moves)) {
+    if (m.module) continue;
+    const ks = clipKeys(hero, id), end = m.su + m.ac + m.rc;
+    total++;
+    if (ks.length < 6 || ks.length > 10) problems.push(`${id} has ${ks.length} keys`);
+    if (ks.some((q, i) => q.t < 0 || q.t > end || (i && q.t < ks[i - 1].t))) problems.push(`${id}'s keys are out of order`);
+    if (ks.some(q => q.tag === 'anticipation')) antic++;
+    if (ks.some(q => q.tag === 'overshoot')) over++;
+  }
+  assert(!problems.length && antic >= total * 0.8 && over >= total * 0.8,
+    `${hero}: every clip plays with 6 to 10 keys (anticipation in ${antic} of ${total}, overshoot in ${over})${problems.length ? ': ' + problems.join('; ') : ''}`);
 }

@@ -6,11 +6,14 @@ import { MOVES, HEROES } from './sim/config.js';
 import { CLIPS } from './anim/clips/index.js';
 import { AIR } from './anim/clips/keys.js';
 
-// Joints: spine pitch (+ leans forward), twist (torso turn), shoulders/elbows (near arm, far arm),
-// hips/knees, hip height, whole-body tilt, head pitch
-const J = ['spine', 'twist', 'shN', 'elN', 'shF', 'elF', 'hipN', 'knN', 'hipF', 'knF', 'hipY', 'bodyZ', 'head'];
-const REST = { spine: 0.04, twist: 0, shN: 0.12, elN: 0.3, shF: -0.1, elF: 0.3, hipN: 0.04, knN: -0.08, hipF: -0.04, knF: -0.08, hipY: 0.95, bodyZ: 0, head: 0 };
-const FIGHT = { spine: 0.18, twist: 0, shN: 0.7, elN: 1.0, shF: 0.35, elF: 1.1, hipN: 0.4, knN: -0.5, hipF: -0.32, knF: -0.35, hipY: 0.9, bodyZ: 0, head: -0.1 };
+// Joints: spine pitch (+ leans forward; the lower back and the chest share it, so the back curves), twist (torso
+// turn), shoulders/elbows (near arm, far arm), hips/knees, hip height, whole-body tilt, head pitch (the neck takes
+// part of it). Phase 1 added chest (extra pitch above mid-back), neck, wrists and ankles. Ankles are relative to a
+// foot kept flat on the floor while standing, so most poses leave them at 0.
+const J = ['spine', 'twist', 'shN', 'elN', 'shF', 'elF', 'hipN', 'knN', 'hipF', 'knF', 'hipY', 'bodyZ', 'head', 'chest', 'neck', 'wrN', 'wrF', 'anN', 'anF'];
+const XTRA = { chest: 0, neck: 0, wrN: 0, wrF: 0, anN: 0, anF: 0 };
+const REST = { spine: 0.04, twist: 0, shN: 0.12, elN: 0.3, shF: -0.1, elF: 0.3, hipN: 0.04, knN: -0.08, hipF: -0.04, knF: -0.08, hipY: 0.95, bodyZ: 0, head: 0, ...XTRA };
+const FIGHT = { spine: 0.18, twist: 0, shN: 0.7, elN: 1.0, shF: 0.35, elF: 1.1, hipN: 0.4, knN: -0.5, hipF: -0.32, knF: -0.35, hipY: 0.9, bodyZ: 0, head: -0.1, ...XTRA };
 
 const ease = k => k * k * (3 - 2 * k);
 const snapEase = k => 1 - Math.pow(1 - k, 3);
@@ -18,17 +21,44 @@ function mixPose(a, b, k, out) { for (const j of J) out[j] = a[j] + (b[j] - a[j]
 
 // ---- Strikes ----------------------------------------------------------------------------------------------
 // The move a hero is in plays its clip (anim/clips/<hero>.js) at the move's clock; its keyframes merge over FIGHT
-// (plus AIR for an air clip)
+// (plus AIR for an air clip), then polish() adds the keys that give a strike its weight.
 const clipOf = p => (CLIPS[p.hero] || {})[p.move.id] || CLIPS.cyclops.g1;
 const keyCache = new Map();
-function attackPose(p, out) {
-  const id = p.move.id, m = MOVES[p.hero][id], clip = clipOf(p), ck = p.hero + ':' + id;
+const lerpPose = (a, b, k) => { const o = {}; for (const j of J) o[j] = a[j] + (b[j] - a[j]) * k; return o; };
+// The keys a clip plays with, for a move's frame data: the clip's own keys over the base stance, plus
+//   anticipation  just before the strike, the wind-up pushed a little further back (18% past it, away from the hit)
+//   overshoot     just after it, the hit pose carried 12% past where it lands, before the follow-through
+//   settle        late in the recovery, a slight overshoot past the rest pose before it comes to rest
+// The strike is the clip's first snap key. 6 to 10 keys result (moves-test checks it).
+export function polish(ks) {
+  const out = ks.slice(), h = out.findIndex(q => q.snap);
+  if (h > 0) {
+    const wind = out[h - 1], hit = out[h], next = out[h + 1];
+    if (next) {
+      const tO = hit.t + Math.max(1, Math.min(3, (next.t - hit.t) * 0.35));
+      if (tO < next.t) out.splice(h + 1, 0, { t: tO, snap: false, pose: lerpPose(wind.pose, hit.pose, 1.12), tag: 'overshoot' });
+    }
+    const tA = hit.t - Math.max(1, Math.min(3, (hit.t - wind.t) * 0.4));
+    if (tA > wind.t) out.splice(h, 0, { t: tA, snap: false, pose: lerpPose(hit.pose, wind.pose, 1.18), tag: 'anticipation' });
+  }
+  const n = out.length, last = out[n - 1], prev = out[n - 2];
+  if (prev && last.t - prev.t > 4) out.splice(n - 1, 0, { t: prev.t + (last.t - prev.t) * 0.6, snap: false, pose: lerpPose(prev.pose, last.pose, 1.06), tag: 'settle' });
+  return out;
+}
+// A clip's polished keys for a hero's move (the tests read these too)
+export function clipKeys(hero, id) {
+  const ck = hero + ':' + id;
   let ks = keyCache.get(ck);
   if (!ks) {
+    const clip = (CLIPS[hero] || {})[id] || CLIPS.cyclops.g1, m = MOVES[hero][id];
     const base = clip.base === 'air' ? { ...FIGHT, ...AIR } : FIGHT;
-    ks = clip.keys(m).map(q => ({ t: q.t, snap: q.snap, pose: { ...base, ...q.pose } }));
+    ks = polish(clip.keys(m).map(q => ({ t: q.t, snap: q.snap, pose: { ...base, ...q.pose } })));
     keyCache.set(ck, ks);
   }
+  return ks;
+}
+function attackPose(p, out) {
+  const ks = clipKeys(p.hero, p.move.id);
   const u = p.move.t;
   if (u <= ks[0].t) return Object.assign(out, ks[0].pose);
   for (let i = 1; i < ks.length; i++) {
@@ -77,6 +107,8 @@ export function animateHero(rig, p, dt, t) {
     const clip = clipOf(p), sp = clip.spin, m = MOVES[hero][p.move.id];
     if (sp) { const a = Math.max(0, Math.min(1, (p.move.t - m.su) / m.ac)), ang = Math.PI * 2 * sp[0] * snapEase(a); if (sp[1] === 'z') roll = -ang; else yaw = ang; }
     if (clip.tremble && p.move.t < m.su) P.spine += (Math.random() - 0.5) * 0.03;   // trembling as it winds up
+    // The smear: on the first active ticks the body stretches along the strike for a frame or two
+    if (p.move.t > m.su && p.move.t <= m.su + 1.5) rig.smear = Math.max(rig.smear || 0, 0.14);
     rate = 48;
   } else if (st === 'evade' && p.evade) {
     const V = H.evade, u = Math.min(1, p.evade.t / V.ticks), back = p.evade.dir * p.facing < 0;
@@ -139,6 +171,9 @@ export function animateHero(rig, p, dt, t) {
   P.head += -P.spine * 0.45;
 
   applyPose(rig, P, rate, dt, yaw, roll, onGround, p.vy, st === 'downed' || st === 'dead');
+  // Hair on springs: the locks trail behind the way the hero moves and lift as they fall (client only: no effect on
+  // play, so it may use the frame time)
+  if (rig.extra.hair) swingHair(rig.extra.hair, (p.vx || 0) * p.facing, p.vy || 0, dt);
 
   // Suit details: Wolverine's claws come out to fight; Cyclops's visor blazes with the aperture
   const ex = rig.extra;
@@ -183,8 +218,21 @@ export function animateKid(rig, k, dt, t) {
   applyPose(rig, P, rate, dt, 0, 0, !!k.onGround, k.vy, k.state === 'downed');
 }
 
+// Each lock is a damped spring toward a trailing angle; dt is split so a long frame cannot blow it up
+function swingHair(locks, vf, vy, dt) {
+  const target = Math.max(-0.9, Math.min(0.4, -vf * 0.05 + Math.min(0, vy) * 0.035));
+  for (let s = 0, n = Math.max(1, Math.ceil(dt / (1 / 120))); s < n; s++) {
+    const h = dt / n;
+    for (const L of locks) { L.v += (L.k * (target - L.a) - 9 * L.v) * h; L.a += L.v * h; }
+  }
+  for (const L of locks) L.pivot.rotation.z = L.rest + L.a;
+}
+
 function applyPose(rig, P, rate, dt, yaw, roll, onGround, vy, lying) {
   const cur = rig.cur, a = 1 - Math.exp(-rate * dt);
+  // Wrists lag their elbows a little (follow-through): the change in elbow angle this frame, bent the other way
+  const wristLag = (el, prev) => Math.max(-0.6, Math.min(0.6, prev === undefined ? 0 : -(el - prev) * 0.8));
+  const lagN = wristLag(P.elN, cur.elN), lagF = wristLag(P.elF, cur.elF);
   for (const j of J) cur[j] = cur[j] === undefined ? P[j] : cur[j] + (P[j] - cur[j]) * a;
   // Squash on every landing (bigger the harder), a stretch on take-off
   if (!onGround && rig.wasGround && vy > 8) rig.stretch = Math.max(rig.stretch, 0.08);
@@ -193,13 +241,25 @@ function applyPose(rig, P, rate, dt, yaw, roll, onGround, vy, lying) {
   rig.stretch *= Math.exp(-dt * 10);
   const sy = 1 + rig.stretch, sxz = 1 / Math.sqrt(sy);
   const base = rig.body.userData.base || (rig.body.userData.base = rig.body.scale.x);
-  rig.body.scale.set(base * sxz, base * sy, base * sxz);
-  rig.spine.rotation.z = -cur.spine; rig.spine.rotation.y = cur.twist;
-  rig.head.rotation.z = -cur.head;
+  // The smear stretches the body along its facing for a frame or two of a strike
+  rig.smear = (rig.smear || 0) * Math.exp(-dt * 30);
+  rig.body.scale.set(base * sxz * (1 + rig.smear), base * sy, base * sxz);
+  // The back bends in two places (lower back and chest share the spine's pitch; the chest adds its own), the neck
+  // takes part of the head's pitch
+  if (rig.chest) {
+    rig.spine.rotation.z = -cur.spine * 0.5; rig.spine.rotation.y = cur.twist * 0.4;
+    rig.chest.rotation.z = -(cur.spine * 0.5 + cur.chest); rig.chest.rotation.y = cur.twist * 0.6;
+    rig.neck.rotation.z = -(cur.head * 0.4 + cur.neck); rig.head.rotation.z = -cur.head * 0.6;
+  } else { rig.spine.rotation.z = -cur.spine; rig.spine.rotation.y = cur.twist; rig.head.rotation.z = -cur.head; }
   rig.armN.top.rotation.z = cur.shN; rig.armN.joint.rotation.z = cur.elN;
   rig.armF.top.rotation.z = cur.shF; rig.armF.joint.rotation.z = cur.elF;
   rig.legN.top.rotation.z = cur.hipN; rig.legN.joint.rotation.z = cur.knN;
   rig.legF.top.rotation.z = cur.hipF; rig.legF.joint.rotation.z = cur.knF;
+  rig.armN.end.rotation.z = cur.wrN + lagN; rig.armF.end.rotation.z = cur.wrF + lagF;
+  // Feet stay flat on the floor while standing (ankle against hip and knee); in the air the toes point a little
+  const flat = onGround && !lying;
+  rig.legN.end.rotation.z = cur.anN + (flat ? -(cur.hipN + cur.knN) : -0.35);
+  rig.legF.end.rotation.z = cur.anF + (flat ? -(cur.hipF + cur.knF) : -0.35);
   rig.hips.position.y = cur.hipY;
   rig.body.rotation.z = cur.bodyZ;
   // Whole-body spins are driven directly (easing would unwind them); between spins they settle to 0

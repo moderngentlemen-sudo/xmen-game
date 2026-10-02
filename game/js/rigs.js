@@ -1,5 +1,7 @@
 // Procedural character rigs in the comic look (placeholder art: an unofficial fan take on each costume). Every
-// character shares one skeleton (hips, spine, head, two-segment arms and legs) so one animator drives them all.
+// character shares one skeleton so one animator drives them all: 19 joints since phase 1 (body, hips, the spine in
+// two parts, lumbar and chest, the collar, neck and head, and arms and legs of three joints each: shoulder, elbow,
+// wrist; hip, knee, ankle).
 // Read side-on, the way the camera sees them: +x is the way they face.
 //   Cyclops: navy suit, yellow gloves, boots and harness, the ruby visor
 //   Wolverine: yellow and blue, the finned cowl, three claws a hand that only come out to fight
@@ -58,6 +60,19 @@ function boots(R, mat, shinMat = null) {
 }
 function gloves(R, mat) { for (const a of R.arms) a.joint.add(mesh(rbox(0.15, 0.17, 0.16, 0.05), mat, 0.01, -0.21)); }
 function eyes(head, mat, z = 0.048, x = 0.128, y = 0.125, r = 0.018) { for (const s of [z, -z]) head.add(mesh(new THREE.SphereGeometry(r, 8, 6), mat, x, y, s)); }
+// Phase 1's joints: after a builder has dressed the spine, a chest joint is put in at mid-back and everything from
+// there up (chest, shoulders, arms, the collar, the head) moves onto it, so the back bends in two places; a neck goes
+// in under the head. The builders keep adding to R.spine as before.
+const CHEST_Y = 0.3;
+function chestAndNeck(R) {
+  const chest = group(0, CHEST_Y, 0);
+  for (const c of [...R.spine.children]) if (c.position.y >= CHEST_Y) { R.spine.remove(c); c.position.y -= CHEST_Y; chest.add(c); }
+  R.spine.add(chest);
+  const neck = group(R.head.position.x, R.head.position.y, R.head.position.z);
+  chest.remove(R.head); chest.add(neck); R.head.position.set(0, 0, 0); neck.add(R.head);
+  R.chest = chest; R.neck = neck;
+}
+
 // Long hair with volume: a crown fuller than the skull, swept back; side curtains past the jaw; locks down the back
 function hairDo(head, mat, { len = 2.6, width = 1.25, locks = 3, vol = 1.1, tilt = 0.3, bangs = true, sides = 1.6, back = 0 } = {}) {
   const crown = mesh(capGeo(0.158 * vol, 0.56), mat, -0.014, 0.112, 0); crown.rotation.z = tilt; head.add(crown);
@@ -66,11 +81,16 @@ function hairDo(head, mat, { len = 2.6, width = 1.25, locks = 3, vol = 1.1, tilt
     const side = mesh(new THREE.SphereGeometry(0.07, 14, 10), mat, -0.03, 0.06, z * vol);
     side.scale.set(1.15, sides, 0.6); side.rotation.z = -0.12; head.add(side);
   }
+  // The locks hang from pivots at the back of the crown, so the animator can swing them on springs (anim.js)
+  const hung = [];
   for (let i = 0; i < locks; i++) {
     const z = (i - (locks - 1) / 2) * 0.075;
-    const lock = mesh(new THREE.SphereGeometry(0.085 * vol, 12, 10), mat, -0.105 - Math.abs(z) * 0.2 - back, 0.02 - 0.06 * len, z);
-    lock.scale.set(0.8, len, width * (1 - Math.abs(z) * 2)); lock.rotation.z = -0.2; head.add(lock);
+    const pivot = group(-0.105 - Math.abs(z) * 0.2 - back, 0.1, z); pivot.rotation.z = -0.2; head.add(pivot);
+    const lock = mesh(new THREE.SphereGeometry(0.085 * vol, 12, 10), mat, 0, 0.02 - 0.06 * len - 0.1, 0);
+    lock.scale.set(0.8, len, width * (1 - Math.abs(z) * 2)); pivot.add(lock);
+    hung.push({ pivot, rest: -0.2, a: 0, v: 0, k: 70 + i * 9 });
   }
+  return hung;
 }
 
 // A hero, outlined in the player's colour (a rim round the silhouette: identity lives there, not in the costume)
@@ -84,8 +104,9 @@ export function buildHeroRig(id, playerColor = '#ffffff') {
   const R = { id, L, M, ...skeleton(M) };
   const extra = {};
   BUILD[id](R, extra);
+  chestAndNeck(R);
   R.root.traverse(o => { if (o.isMesh) o.receiveShadow = false; });
-  return { ...R, extra, mats: M, hero: id, cur: {}, phase: 0, stretch: 0, lastVy: 0, wasGround: true, yaw: 0, roll: 0, claws: 0 };
+  return { ...R, extra, mats: M, hero: id, cur: {}, phase: 0, stretch: 0, smear: 0, lastVy: 0, wasGround: true, yaw: 0, roll: 0, claws: 0 };
 }
 
 const BUILD = {
@@ -143,7 +164,7 @@ const BUILD = {
     for (const a of [0.55, -0.55]) { const w = mesh(rbox(0.02, 0.13, 0.03, 0.008), glow('#ffd27a', 0.9)); w.rotation.x = a; w.position.y = 0.02; em.add(w); }
     R.hips.add(mesh(rbox(0.36, 0.08, 0.41, 0.03), M.trim, 0, 0.1));
     head.add(mesh(new THREE.SphereGeometry(0.138, 24, 18), M.skin, 0, 0.1));
-    hairDo(head, M.hair, { len: 2.4, width: 1.55, locks: 4, vol: 1.12, tilt: 0.4, sides: 1.9, bangs: false });
+    extra.hair = hairDo(head, M.hair, { len: 2.4, width: 1.55, locks: 4, vol: 1.12, tilt: 0.4, sides: 1.9, bangs: false });
     eyes(head, toon('#1f6b4a'), 0.045, 0.126, 0.125, 0.016);
     const m = group(0.04, -0.09, 0); R.armN.end.add(m); extra.muzzle = m;
   },
@@ -155,7 +176,7 @@ const BUILD = {
     for (const a of R.arms) a.joint.add(mesh(new THREE.CylinderGeometry(0.075, 0.075, 0.06, 14), M.gold, 0, -0.22));
     R.hips.add(mesh(rbox(0.35, 0.06, 0.4, 0.025), M.gold, 0, 0.12));
     head.add(mesh(new THREE.SphereGeometry(0.138, 24, 18), M.skin, 0, 0.1));
-    hairDo(head, M.hair, { len: 3.6, width: 1.7, locks: 5, vol: 1.22, tilt: 0.42, bangs: false, sides: 2.3, back: 0.02 });
+    extra.hair = hairDo(head, M.hair, { len: 3.6, width: 1.7, locks: 5, vol: 1.22, tilt: 0.42, bangs: false, sides: 2.3, back: 0.02 });
     head.add(mesh(frontBand(0.16, 0.024, Math.PI * 0.62), M.gold, 0, 0.178));
     head.add(mesh(new THREE.OctahedronGeometry(0.032), M.gold, 0.162, 0.184, 0));
     eyes(head, glow('#eaf6ff', 1.2), 0.045, 0.126, 0.125, 0.017);
@@ -172,7 +193,7 @@ const BUILD = {
     hands(R, M.under, 0.066); boots(R, M.under, M.under);
     for (const a of R.arms) a.joint.add(mesh(new THREE.CylinderGeometry(0.074, 0.07, 0.16, 14), M.trim, 0, -0.17));
     head.add(mesh(new THREE.SphereGeometry(0.138, 24, 18), M.skin, 0, 0.1));
-    hairDo(head, M.hair, { len: 3.9, width: 1.35, locks: 3, vol: 1.08, tilt: 0.3, sides: 2.2 });
+    extra.hair = hairDo(head, M.hair, { len: 3.9, width: 1.35, locks: 3, vol: 1.08, tilt: 0.3, sides: 2.2 });
     eyes(head, toon('#20182e'), 0.045, 0.126, 0.125, 0.016);
     const psi = glow(L.energy, 1.1, { transparent: true, opacity: 0.92 }), g = new THREE.BoxGeometry(0.03, 0.64, 0.09);
     extra.blades = [mesh(g, psi, 0.02, -0.37, 0), mesh(g, psi, 0.02, -0.37, 0)];
@@ -193,6 +214,7 @@ export function buildKidRig() {
   R.head.add(mesh(new THREE.SphereGeometry(0.15, 24, 18), M.skin, 0, 0.1));
   R.head.add(mesh(capGeo(0.162, 0.5), M.hair, -0.01, 0.11));
   eyes(R.head, toon('#1a1a20'), 0.048, 0.138, 0.125, 0.02);
+  chestAndNeck(R);
   R.root.traverse(o => { if (o.isMesh) o.receiveShadow = false; });
-  return { ...R, extra: {}, mats: M, kid: true, cur: {}, phase: 0, stretch: 0, lastVy: 0, wasGround: true, yaw: 0, roll: 0 };
+  return { ...R, extra: {}, mats: M, kid: true, cur: {}, phase: 0, stretch: 0, smear: 0, lastVy: 0, wasGround: true, yaw: 0, roll: 0 };
 }
