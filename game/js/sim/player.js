@@ -1,12 +1,13 @@
 // Players: the movement feel kept from Version 9 (coyote time, input buffers, a variable jump, wall slides and
-// wall jumps, drop-through platforms), Evade with its perfect defence, the melee chain on Attack, hitstun,
-// downed and revive. What makes each hero different lives in their module (sim/heroes/): Power, Signature,
-// their resource, their own movement, and their states. Team is handled in team.js.
-import { DT, GRAVITY, FALL_MULT, RISE_CUT, MAX_FALL, COYOTE, JUMP_BUFFER, ACTION_BUFFER, MERCY, BTN, BTN_NAMES, HEROES, MOVES, COMBO, COMBO_WINDOW, PERFECT, GAUGE } from './config.js';
+// wall jumps, drop-through platforms), Evade with its perfect defence, hitstun, downed and revive. Attack runs on
+// the move engine (moveEngine.js, from the move tables in sim/moves/). What makes each hero different lives in
+// their module (sim/heroes/): Power, Signature, their resource, their own movement, and their states. Team is
+// handled in team.js.
+import { DT, GRAVITY, FALL_MULT, RISE_CUT, MAX_FALL, COYOTE, JUMP_BUFFER, ACTION_BUFFER, MERCY, BTN, BTN_NAMES, HEROES, PERFECT, GAUGE } from './config.js';
 import { moveBody, hasHeadroom } from './level.js';
 import { emit, newId } from './world.js';
-import { spawnHitbox } from './combat.js';
 import { HERO } from './heroes/index.js';
+import { tryAttack, startMove, runMove, counterMove } from './moveEngine.js';
 
 export function makePlayer(S, slot, hero, x, y) {
   const H = HEROES[hero];
@@ -71,14 +72,14 @@ export function updatePlayer(S, p, cmd, frozen) {
     return;
   }
   if (p.state === 'evade') { evade(S, p, cmd, E); return; }
-  if (p.state === 'attack') { attack(S, p, cmd, E); return; }
+  if (p.state === 'attack') { runMove(S, p, cmd, E); return; }
   if (mod.states && mod.states[p.state]) { mod.states[p.state](S, p, cmd, E); return; }
 
   // Normal: the hero's own buttons first, then the shared ones
   if (tryEvade(S, p, cmd)) return;
   if (mod.sig && p.buf.sig === 0 && !has(b, 'team')) { p.buf.sig = 99; mod.sig(S, p, cmd, E); if (p.state !== 'normal') return; }
   if (mod.power(S, p, cmd, E)) return;
-  if (tryAttack(S, p, cmd, E)) return;
+  if (tryAttack(S, p)) return;
   physics(S, p, H.run * mod.speedMult(p), cmd, E, false);
 }
 
@@ -149,7 +150,7 @@ function evade(S, p, cmd, E) {
   moveBody(p, DT, S.gates);
   if (ev.t >= V.ticks) { p.evade = null; p.evadeCd = V.cd; setState(p, 'normal'); }
   // A counter straight out of a perfect defence
-  if (ev.perfect && p.buf.attack <= ACTION_BUFFER) { p.evade = null; setState(p, 'normal'); startMove(S, p, 'heavy', true); }
+  if (ev.perfect && p.buf.attack <= ACTION_BUFFER) { p.evade = null; setState(p, 'normal'); startMove(S, p, counterMove(p), true); }
 }
 export const invulnerable = p => (p.state === 'evade' && p.evade && p.evade.t < HEROES[p.hero].evade.iframes) || p.mercy > 0 || p.state === 'held' || p.state === 'thrown' || p.state === 'ult' || p.state === 'tagout';
 export const perfectWindow = p => p.state === 'evade' && p.evade && p.evade.t < HEROES[p.hero].evade.perfect;
@@ -161,62 +162,8 @@ export function perfectDefence(S, p, attacker) {
   emit(S, 'perfect', { id: p.id, x: p.x, y: p.y + p.h * 0.6, hero: p.hero });
 }
 
-// ---- Attack: the melee chain ----------------------------------------------------------------------------
-function tryAttack(S, p, cmd, E) {
-  if (p.buf.attack > ACTION_BUFFER) return false;
-  p.buf.attack = 99;
-  if (p.counterT > 0) { p.counterT = 0; startMove(S, p, 'heavy', true); return true; }
-  let id;
-  if (!p.onGround) id = 'air';
-  else if (p.my > 0.55) id = 'up';
-  else {
-    const chain = COMBO[p.hero];
-    p.combo = p.comboT > 0 ? (p.combo + 1) % chain.length : 0;
-    id = chain[p.combo];
-  }
-  startMove(S, p, id, false);
-  return true;
-}
-export function startMove(S, p, id, counter) {
-  const m = MOVES[p.hero][id];
-  p.move = { id, t: 0, inst: newId(S), counter, charged: false };
-  p.atkHeld = 0;
-  if (p.aimFree && Math.abs(p.aimX) > 0.2) p.facing = p.aimX > 0 ? 1 : -1;
-  setState(p, 'attack');
-  emit(S, 'swing', { id: p.id, move: id, hero: p.hero, x: p.x, y: p.y, facing: p.facing });
-}
-function attack(S, p, cmd, E) {
-  const M = p.move, m = MOVES[p.hero][M.id], mod = HERO[p.hero], speed = 1 / mod.attackSpeed(p);
-  M.t += speed;
-  // Holding Attack through the first strike of a chain winds up the heavy finisher instead
-  if (M.id === COMBO[p.hero][0] && has(p.held, 'attack')) p.atkHeld++;
-  if (M.id === COMBO[p.hero][0] && p.atkHeld >= MOVES[p.hero].heavy.charge && M.t >= m.su + m.ac) {
-    if (!has(p.held, 'attack') || p.atkHeld >= MOVES[p.hero].heavy.charge + 30) { startMove(S, p, 'heavy', false); p.move.charged = true; emit(S, 'charged', { id: p.id, x: p.x, y: p.y + 1 }); return; }
-    M.t = m.su + m.ac;   // hold the pose while charging
-  }
-  const t = M.t;
-  // Air moves keep the body moving; ground moves step forward a little
-  const air = !p.onGround;
-  if (t <= m.su + m.ac && !air) p.vx = p.facing * (M.id === 'heavy' ? 3 : 1.5);
-  if (t > m.su && t <= m.su + m.ac) {
-    const [x0, x1, y0, h] = m.box;
-    spawnHitbox(S, {
-      owner: p.id, team: 'p', inst: M.inst, power: HEROES[p.hero].power,
-      x0: p.x + p.facing * x0 - (p.facing < 0 ? x1 : 0), x1: p.x + p.facing * x0 + (p.facing > 0 ? x1 : 0),
-      y0: p.y + y0, y1: p.y + y0 + h,
-      dmg: m.dmg * (M.counter ? 1.5 : 1) * (M.charged ? 1.2 : 1), poise: m.poise * (M.counter ? 1.5 : 1),
-      kb: [p.facing * m.kb[0], m.kb[1]], launch: !!m.launch, heavy: M.id === 'heavy',
-    });
-    if (M.id === 'up' && t <= m.su + 2) p.vy = Math.max(p.vy, 7);   // the launcher carries the hero up a little
-  }
-  physics(S, p, 0, cmd, E, true);
-  if (t >= m.su + m.ac + m.rc) { p.move = null; p.comboT = COMBO_WINDOW; setState(p, 'normal'); return; }
-  // Cancels: Evade out of recovery; the next chain press is taken at the start of recovery
-  if (t > m.su + m.ac) {
-    if (tryEvade(S, p, cmd)) return;
-    if (p.buf.attack <= ACTION_BUFFER && M.id !== 'heavy') { p.comboT = COMBO_WINDOW; p.move = null; setState(p, 'normal'); tryAttack(S, p, cmd, E); }
-  }
-}
+// ---- Attack ---------------------------------------------------------------------------------------------------
+// The melee runs on the move engine (moveEngine.js): tryAttack in the normal state, runMove in the 'attack' state.
 
 // ---- Hurt, downed, revive ----------------------------------------------------------------------------------
 export function stagger(S, p, kb, ticks) {

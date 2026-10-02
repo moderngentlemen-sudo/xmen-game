@@ -20,6 +20,7 @@ export const MERCY = 60;           // invulnerable ticks after being hit
 // `aim` true when it is free aim rather than the move direction), and `b`, the held buttons as bits.
 export const BTN = { attack: 1, power: 2, jump: 4, evade: 8, sig: 16, team: 32 };
 export const BTN_NAMES = Object.keys(BTN);
+export const STICK = { up: 0.55 };   // the stick past this reads as a direction for the moves (sim/moves/)
 
 // Power types: the Sentinels log damage by type and adapt to whatever the team leans on. 'team' (team-ups
 // and the team ultimate) is never countered; 'plain' is environmental and unlogged.
@@ -65,37 +66,10 @@ export const HEROES = {
 };
 export const HERO_IDS = ['cyclops', 'wolverine', 'jean'];
 
-// ---- Melee: each hero's attack button. [startup, active, recovery], damage, poise, knockback, and the hitbox
-// relative to the hero (x forward from the centre, y up from the feet). Holding Attack charges a finisher.
-const mv = (su, ac, rc, dmg, poise, kb, box, o = {}) => ({ su, ac, rc, dmg, poise, kb, box, ...o });
-export const MOVES = {
-  cyclops: {   // martial-arts strikes that knock enemies into blast lines
-    g1: mv(4, 3, 9, 3, 18, [4, 2], [0.2, 1.3, 0.6, 1.6]),
-    g2: mv(4, 3, 10, 3, 20, [4, 2], [0.2, 1.35, 0.5, 1.5]),
-    g3: mv(6, 4, 16, 5, 55, [11, 6], [0.2, 1.55, 0.2, 1.7], { launch: false }),
-    air: mv(4, 5, 10, 4, 25, [6, -2], [0.1, 1.4, 0.0, 1.4]),
-    up: mv(5, 5, 16, 4, 45, [2, 15], [0.0, 1.1, 0.6, 2.4], { launch: true }),
-    heavy: mv(14, 5, 20, 9, 90, [14, 6], [0.2, 1.7, 0.3, 1.6], { charge: 26 }),
-  },
-  wolverine: {   // the claw chain; every hit builds rage
-    g1: mv(3, 3, 7, 3, 16, [3, 1.5], [0.1, 1.4, 0.3, 1.5]),
-    g2: mv(3, 3, 7, 3, 16, [3, 1.5], [0.1, 1.4, 0.3, 1.5]),
-    g3: mv(4, 3, 9, 3.5, 22, [4, 2], [0.1, 1.5, 0.2, 1.6]),
-    g4: mv(5, 4, 15, 6, 60, [12, 7], [0.1, 1.7, 0.2, 1.7]),
-    air: mv(3, 6, 8, 3.5, 22, [5, -1], [0.0, 1.5, -0.1, 1.7]),
-    up: mv(4, 5, 14, 4, 45, [2, 15], [0.0, 1.2, 0.5, 2.5], { launch: true }),
-    heavy: mv(12, 6, 18, 10, 95, [15, 7], [0.1, 1.9, 0.2, 1.8], { charge: 24 }),
-  },
-  jean: {   // psychic strikes: short telekinetic pulses that reach a little further
-    g1: mv(5, 3, 9, 2.5, 20, [6, 2], [0.2, 1.8, 0.6, 1.4]),
-    g2: mv(5, 3, 10, 2.5, 22, [6, 2], [0.2, 1.8, 0.6, 1.4]),
-    g3: mv(7, 4, 15, 4.5, 60, [13, 7], [0.2, 2.1, 0.5, 1.6]),
-    air: mv(5, 5, 10, 3.5, 25, [7, 1], [0.0, 1.7, 0.1, 1.5]),
-    up: mv(6, 5, 15, 3.5, 45, [2, 15], [0.0, 1.3, 0.6, 2.5], { launch: true }),
-    heavy: mv(15, 5, 20, 8, 90, [16, 8], [0.2, 2.2, 0.4, 1.6], { charge: 28 }),
-  },
-};
-export const COMBO = { cyclops: ['g1', 'g2', 'g3'], wolverine: ['g1', 'g2', 'g3', 'g4'], jean: ['g1', 'g2', 'g3'] };
+// ---- Melee: each hero's moves live in a move table (sim/moves/<hero>.js, fields in sim/moves/schema.js), run by
+// the move engine (sim/moveEngine.js). MOVES (each hero's moves by id) and COMBO (each hero's chain) are views of
+// the tables, for the client and the tools.
+export { MOVES, COMBO } from './moves/index.js';
 export const COMBO_WINDOW = 14;   // ticks after a hit's recovery in which the next press continues the chain
 
 // Perfect defence: an Evade timed into a hit (within its first `perfect` ticks) negates it, slows the attacker
