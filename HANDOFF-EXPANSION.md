@@ -21,7 +21,7 @@
    (`add_repo`), clone it, and check out `v2-expansion`. This clone has no fetch refspec, so fetch a branch by
    name: `git fetch origin v2-expansion`.
 2. **Check the baseline.** All three of these are green on a clean checkout:
-   - `node tests/run-all.mjs` gives 107 passed, 0 failed, in about 15 s (the golden replays take 4 of them).
+   - `node tests/run-all.mjs` gives 107 passed, 0 failed, in about 11 s (the golden replays take 4 of them).
    - `node tools/probe.mjs 2 1` finishes the mission (`"done":true`, about 2 minutes of game time).
    - `NODE_USE_ENV_PROXY=1 node tools/shots.mjs tools/plans/rooms.mjs` writes six PNGs to `tools/out/`.
      Open one with the Read tool to see the V2 look.
