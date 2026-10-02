@@ -1,14 +1,15 @@
-// Records the golden replays:  node tests/golden/record.mjs [out = tests/golden/v2.json]
+// Records the golden replays:  node tests/golden/record.mjs [label] [out = tests/golden/replays.json]
 // Runs every case in cases.mjs and writes its samples, then prints what the cases exercised (moves by hero, charged
 // and counter heavies, cancels, interruptions, berserk's fractional move time), so a gap in coverage shows.
-// Re-record only when behaviour changes on purpose, and say so in the commit: phase 1 re-records at its start and
-// its end. tests/golden-test.mjs compares against the file.
+// Re-record only when behaviour changes on purpose, and say so in the commit; `label` names the behaviour recorded
+// (such as "phase 1: hitstop") and goes into the file. tests/golden-test.mjs compares against the file.
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { CASES, EVERY, LAYOUT, runCase } from './cases.mjs';
 import { MOVES } from '../../game/js/sim/config.js';
 
-const outPath = process.argv[2] || fileURLToPath(new URL('./v2.json', import.meta.url));
+const label = process.argv[2] || 'unlabelled';
+const outPath = process.argv[3] || fileURLToPath(new URL('./replays.json', import.meta.url));
 
 // What a case exercised, counted from the events and the players' states tick by tick
 function coverage() {
@@ -50,7 +51,7 @@ for (const c of CASES) {
   for (const [k, n] of Object.entries(cov.seen)) total[k] = (total[k] || 0) + n;
   console.log(`${c.name}: ${end.tick} ticks, ${samples.length} samples, ${((performance.now() - t0) / 1000).toFixed(1)} s${c.bot ? `, mission ${end.fp.mission[3] ? 'finished' : 'NOT finished'}` : ''}`);
 }
-const about = 'V2\'s behaviour, recorded by tests/golden/record.mjs; tests/golden-test.mjs replays the cases in tests/golden/cases.mjs and compares. Each sample is { tick, digest, hash, fp }: the running digest of every tick so far, hashState (for information only), and the fingerprint, whose rows LAYOUT names.';
+const about = `The behaviour of ${label}, recorded by tests/golden/record.mjs; tests/golden-test.mjs replays the cases in tests/golden/cases.mjs and compares. Each sample is { tick, digest, hash, fp }: the running digest of every tick so far, hashState (for information only), and the fingerprint, whose rows LAYOUT names.`;
 fs.writeFileSync(outPath, `{"about": ${JSON.stringify(about)},\n"node": ${JSON.stringify(process.version)},\n"every": ${EVERY},\n"layout": ${JSON.stringify(LAYOUT)},\n"cases": [\n${parts.join(',\n')}\n]}\n`);
 console.log(`\nwrote ${outPath} (${(fs.statSync(outPath).size / 1024).toFixed(0)} KB)\n\nCoverage over all cases:`);
 for (const k of Object.keys(total).sort()) console.log(`  ${String(total[k]).padStart(6)}  ${k}`);

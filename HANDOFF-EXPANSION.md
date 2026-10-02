@@ -69,7 +69,7 @@ behaviour**, and prove it. All of it is done, and the gate passed.
 
 ### How it was proved
 
-- **Golden replays** (`tests/golden/`): seven cases recorded from V2 into `v2.json` before any engine change. Three
+- **Golden replays** (`tests/golden/`): seven cases recorded from V2 into `v2.json` (now `replays.json`) before any engine change. Three
   are the mission bot over whole missions (alone with seed 2, 2 players with seed 1, 4 players with seed 3); four
   are seeded random inputs for 1 to 4 players over 6,000 ticks. Each sample has a running digest of every tick
   and a fingerprint every second, and the test names the first field that differs. The cases reach every move of
@@ -155,61 +155,68 @@ Refine each into steps like phase 0's before starting it, and write its gate dow
 
 ### Phase 1: Feel (Cyclops, Wolverine, Jean)
 
-- [ ] **Re-record the golden replays at the start of the phase** with `node tests/golden/record.mjs`, which prints
-  what the cases cover. Behaviour now changes on purpose, so re-record again at the end, and say so in the
-  commit. In between, check a refactor meant to change nothing with `tools/sidebyside.mjs` against a worktree of
-  the last commit (section 6).
-- [ ] **Keep the interface rules from section 3b.** New HUD (combo counter, style rank, meter) goes in the
-  bands and must pass `tools/layout.mjs`; add hints for the new grammar where they help; the controls page lists
-  moves as they arrive.
-- [ ] **Fix the charged heavy**, which V2 never fires, and **tune the step forward**, which `physics` mostly
-  cancels (section 3, what phase 0 found).
-- [ ] **Hitstop in the simulation.** Freeze the attacker and the target together: 3, 8 or 14 ticks (section
-  5.3). Enemies already have `e.hitstop`; add it for players. Retire `hitPause` in `main.js`, which freezes the
-  whole world and is wrong for co-op.
-  - Do slow motion on supers as a **client** time scale (fewer ticks per real second). The simulation stays the
-    same.
-- [ ] **Reactions.** Write `game/js/sim/reactions.js` with the twelve reactions, juggle weight with rising
-  gravity, flip-out at the limit, OTG once, wall bounce and ground bounce, crumple, spin-out, and stun from a
-  broken poise bar.
-- [ ] **Combo rules.** Add damage scaling, faster scaling for repeated moves, a combo counter, a style rank from D
-  to X, and the personal three-bar meter.
-- [ ] **Input grammar.** It grows in `moveEngine.js`'s `selectMove` and in the tables' `input`. Extend
-  `moves/schema.js` (its contexts, directions and `validateMoves`) with every new field, and turn cancels'
-  `when: 'recovery'` into the tick windows of section 5.1.
-  - Read directions relative to facing.
-  - Attack while running at 80% or more of run speed is a dash strike.
-  - Attack and Power within a 3-tick window: an execution on a stunned Sentinel, a throw beside one.
-    **Decide and document** how the first press of the pair is handled. The recommendation: the first press
-    starts its move, and the second press inside the window cancels it into the throw.
+Refined into steps on 2 October. **The gate is written down as `tests/gate/phase1.mjs`** (run it on its own:
+`node tests/gate/phase1.mjs`; `run-all` skips it because most of it fails until the phase is done). Each step turns
+some of its checks green; when one passes for good, its behaviour also gets a test in a `tests/<area>-test.mjs`
+suite. Every step that changes behaviour re-records the golden replays in the same commit
+(`node tests/golden/record.mjs "phase 1: <step>"`, which writes the label into `tests/golden/replays.json`) and
+says so in the commit message; a step meant to change nothing proves it with `tools/sidebyside.mjs` instead
+(section 6). The mission bot must finish after every step.
+
+Keep the interface rules from section 3b throughout: new HUD (combo counter, style rank, meter) goes in the bands
+and must pass `tools/layout.mjs`; add hints for the new grammar where they help; the controls page lists moves as
+they arrive.
+
+- [x] **1.1 Baseline.** The golden file is now `tests/golden/replays.json`, re-recorded as "V2 (the baseline phase 1
+  starts from)" (only its label changed); `record.mjs` takes a label. The gate spec `tests/gate/phase1.mjs`
+  (23 checks, 0 green at the start).
+- [ ] **1.2 Hitstop in the simulation.** `HITSTOP = { light: 3, heavy: 8, super: 14 }` in `config.js`; a move's
+  `hitstop` field (a class or ticks; default light, or heavy for `heavy` moves). A melee hit freezes the attacker
+  and the target together (`p.hitstop`, `e.hitstop`); shots freeze only the target. A frozen player still banks
+  presses (the buffers do not age while frozen), so a press during hitstop comes out after it. Retire `hitPause`
+  in `main.js`: the impact panels stay, and the world slows instead of stopping (a **client** time scale, fewer
+  ticks per real second; the simulation stays the same). A super will add 0.3 s at half speed the same way.
+- [ ] **1.3 The charged heavy and the step.** The first strike holds its pose at the end of its active ticks while
+  Attack is still held from its press; letting go before `charge.hold` lets it recover as normal, and once the
+  hold is reached the charged heavy fires on release or by itself at `hold + release`. Evade cancels out of the
+  held pose. The step: ground moves keep their step speed through startup and active (`physics` leaves `vx` alone
+  while the move steps), so the hero actually travels.
+- [ ] **1.4 Reactions.** `game/js/sim/reactions.js` with the twelve reactions of the proposal (flinch, stagger,
+  knockdown, launch, air hit, wall bounce, ground bounce, crumple, spin-out, stun, held, thrown; the last two exist
+  in `enemies.js`), juggle weight with rising gravity, flip-out at the limit, OTG once, wall and ground bounce,
+  crumple, spin-out, and stun from a broken poise bar. A move's `react` field picks the reaction; `hitEnemy` in
+  `combat.js` hands the hit to `react()` instead of choosing stagger or launch itself. Numbers in section 5.3.
+- [ ] **1.5 Combo rules and the meter.** `game/js/sim/combo.js`: damage scaling (`comboScale(n, repeats)`), faster
+  scaling for repeated move ids, a per-player combo (`p.combo` is V2's chain index, so the combo is `p.streak`),
+  a style rank D to X, and the personal three-bar meter (`METER` in `config.js`, `p.meter`). HUD: the combo
+  counter, rank and meter go in the player's plate in the bottom band.
+- [ ] **1.6 Input grammar and the slot ids.** Grow `selectMove` and the tables' `input`: Attack and Power and
+  Signature as buttons, directions read relative to facing (fwd, back, up, down), contexts ground, air, dash
+  (running at 80% or more of run speed), hold, stunned. Cancels become tick windows `{ into, on, from, to }`
+  (section 5.1). Rename the move ids to the slot ids of section 5.2 in the tables, the clips, `moves-test`, and
+  every client file that names a move (grep `'heavy'`, `'air'`, `'up'`; `audio.js` and `overlay.js` key Wolverine's
+  snikt off `g1`). `schema.js` exports `SLOTS`.
+  - **Attack + Power, decided:** the first press starts its move as usual, and the second press inside the 3-tick
+    window cancels it into the throw (beside a Sentinel) or the execution (on a stunned one). Nothing waits for a
+    possible pair, so single presses keep their startup.
   - Signature + forward is the super; Signature + up is the ultimate.
-- [ ] **Moves.** Fill the 29 slots for the three heroes from section 5.4. Rename the move ids to the slot ids in
-  section 5.2: the tables, the clips' keys, the V2 check in `tests/moves-test.mjs`, and every client file that
-  names a move (grep for `'heavy'`, `'air'` and `'up'`; `audio.js` and `overlay.js` key Wolverine's snikt off `g1`).
-- [ ] **Animation.**
-  - Grow the skeleton to 19 joints (neck, chest, both wrists, both ankles) and add spring chains for hair.
-  - Clips get 6 to 10 keys with helpers for anticipation, smear, overshoot and settle.
-  - The pose is driven by the move's tick.
-- [ ] **Effects.** Under `game/js/vfx/`:
-  - instanced GPU particles;
-  - ribbon trails from bones;
-  - smear stretch;
-  - speed and focus lines (overlay);
-  - a screen-space distortion ring (post);
-  - **a fixed pool of 8 lights** (see the lessons);
-  - floor decals and Sentinel debris;
-  - super cut-ins.
-  - Clarity and Reduce flashing settings.
-- [ ] **The Danger Room** (a mode, not a mission):
-  - the move list with live demos;
-  - frame data and hitbox readouts;
-  - sparring Sentinels with settings;
-  - 5 combo trials per hero.
-  - Each trial is also a test (`tests/trials-test.mjs`: scripted inputs, then the expected route and hit count).
-- [ ] **A contact-sheet tool.** It screenshots every move on its first active tick, one page per hero. Reuse one
-  page for many shots: a fresh page per shot costs 20 s or more in software GL.
-- [ ] **Gate.** Every move has a test, the 15 trials pass, contact sheets are reviewed, and the build is
-  published. Then ask the user to play it and approve the feel.
+- [ ] **1.7 Moves.** Fill the 29 slots for the three heroes from section 5.4, with a suite that walks every move of
+  every table (it carries the marker `EVERY_MOVE_TESTED`, which the gate looks for): each move starts from its
+  input, puts out its hitbox on its active ticks, and causes its reaction on a trooper.
+- [ ] **1.8 Animation.** Grow the skeleton to 19 joints (neck, chest, both wrists, both ankles) and add spring chains
+  for hair. Clips get 6 to 10 keys with helpers for anticipation, smear, overshoot and settle. The pose is driven by
+  the move's tick.
+- [ ] **1.9 Effects** under `game/js/vfx/`: instanced GPU particles; ribbon trails from bones; smear stretch; speed
+  and focus lines (overlay); a screen-space distortion ring (post); **a fixed pool of 8 lights** (see the lessons);
+  floor decals and Sentinel debris; super cut-ins; Clarity and Reduce flashing settings.
+- [ ] **1.10 The Danger Room** (a mode, not a mission): the move list with live demos; frame data and hitbox
+  readouts; sparring Sentinels with settings; 5 combo trials per hero in `game/js/sim/trials.js`, each also a test
+  (`tests/trials-test.mjs`: scripted inputs, then the expected route and hit count).
+- [ ] **1.11 A contact-sheet tool**, `tools/contact.mjs`. It screenshots every move on its first active tick, one
+  page per hero. Reuse one page for many shots: a fresh page per shot costs 20 s or more in software GL.
+- [ ] **1.12 Gate.** `tests/gate/phase1.mjs` all green, every move has a test, the 15 trials pass, contact sheets
+  are reviewed, the golden replays re-recorded at the end, and the build is published. Then ask the user to play it
+  and approve the feel.
 
 ### Phase 2: Depth
 
@@ -406,7 +413,7 @@ V2's adaptation rule stays: one counter at a time, and team hits are never count
 - **Look at your work.** Screenshots land in `tools/out/`; open them with the Read tool. Use a plan
   (`tools/plans/*.mjs`, helpers in `tools/plans/helpers.mjs`) for repeatable scenes.
 - **Run the game by hand:** `npm run serve`, then http://127.0.0.1:8770. The page's hooks are `window.__X`.
-- **Golden replays:** `node tests/golden/record.mjs` re-records `tests/golden/v2.json` and prints the cases'
+- **Golden replays:** `node tests/golden/record.mjs` re-records `tests/golden/replays.json` (give it a label: what behaviour it records) and prints the cases'
   coverage; `tests/golden-test.mjs` replays them in about 4 s. Only re-record when behaviour changes on purpose.
 - **Side by side with another commit:** `git worktree add --detach ../ref <commit>`, then
   `node tools/sidebyside.mjs ../ref all` (`--state` compares the whole state, `--charge` forces charged heavies).
@@ -536,7 +543,7 @@ V2's adaptation rule stays: one counter at a time, and team hits are never count
 ## 11. Open questions
 
 - Answered: the user approved the plan in chat on 2 October, with no changes and no comments on the doc.
-- The pairing rule for Attack + Power (phase 1). The recommendation is in section 4.
+- Answered: the pairing rule for Attack + Power is the recommended one (section 4, step 1.6).
 - A link per phase, or one link updated? The proposal says one per phase.
 - Should V3 later branch from `v2-expansion`? That is the user's call.
 

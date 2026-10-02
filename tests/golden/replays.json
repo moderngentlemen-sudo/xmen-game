@@ -1,4 +1,4 @@
-{"about": "V2's behaviour, recorded by tests/golden/record.mjs; tests/golden-test.mjs replays the cases in tests/golden/cases.mjs and compares. Each sample is { tick, digest, hash, fp }: the running digest of every tick so far, hashState (for information only), and the fingerprint, whose rows LAYOUT names.",
+{"about": "The behaviour of V2 (the baseline phase 1 starts from), recorded by tests/golden/record.mjs; tests/golden-test.mjs replays the cases in tests/golden/cases.mjs and compares. Each sample is { tick, digest, hash, fp }: the running digest of every tick so far, hashState (for information only), and the fingerprint, whose rows LAYOUT names.",
 "node": "v22.22.0",
 "every": 60,
 "layout": {"player":["slot","hero","x","y","vx","vy","hp","state","facing","move","move t","strain","rage","berserkT","conc","phoenix"],"enemy":["id","type","x","y","vx","vy","hp","state","dead"],"kid":["x","y","hp","state"],"mission":["sec","phase","wave","done","kills","teamups","perfects","downs","fails","dmg optic","dmg claws","dmg tk","dmg team","dmg plain"],"team":["rapportT","called","ult phase","adapt warn","adapt active"],"counts":["projectiles","props","assists"]},

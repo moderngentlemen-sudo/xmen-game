@@ -1,5 +1,5 @@
 // The golden replays: fixed cases (the bot playing whole missions, and seeded random inputs) and the behavioural
-// fingerprint taken from them. tests/golden/record.mjs runs the cases and writes v2.json; tests/golden-test.mjs runs
+// fingerprint taken from them. tests/golden/record.mjs runs the cases and writes replays.json; tests/golden-test.mjs runs
 // them again and compares. A refactor that keeps behaviour keeps every fingerprint.
 //
 // Why a fingerprint and not hashState: hashState hashes the whole serialised state, so it changes when a refactor
