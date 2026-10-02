@@ -1,11 +1,13 @@
 // Effects, driven by the simulation's events and state: optic beams that bank off walls, claw slashes and the
-// Drill Claw's streak, Jean's grip and shield, team-up flashes, Sentinel shots and tells, hits, wrecks.
+// Drill Claw's streak, Jean's grip and shield, team-up flashes, Sentinel shots and tells, hits, wrecks. Each event
+// plays its cue (vfx/cues.js); effects that last as long as a state are drawn from it every frame (update).
 // Particles are pooled sprites; beams are ribbons in the play plane. Colours follow looks.js: every threat in
 // hostile magenta (or violet for unblockables), every hero effect in that hero's power colour.
 import * as THREE from 'three';
-import { HOSTILE, TELL, POWER_COLORS, HERO_LOOKS } from './looks.js';
+import { HOSTILE, TELL, POWER_COLORS } from './looks.js';
 import { HEROES, ENEMIES } from './sim/config.js';
 import { groundBelow } from './sim/level.js';
+import { CUES } from './vfx/cues.js';
 
 function tex(size, draw) {
   const c = document.createElement('canvas'); c.width = c.height = size;
@@ -90,100 +92,10 @@ export class FX {
     return m;
   }
 
-  // ---- Events ------------------------------------------------------------------------------------------------
+  // ---- Events: each plays its cue (vfx/cues.js) -------------------------------------------------------------
   onEvent(ev, S) {
-    const pc = POWER_COLORS;
-    switch (ev.type) {
-      case 'optic': {
-        // The beam: a wide red ribbon, a hot white core, flares where it banks and where it ends
-        const col = ev.rapport ? pc.tk : pc.optic, w = (ev.width || 0.3) * 1.6 + 0.12;
-        this.ribbon(ev.pts, w * 2.2, col, 0.2); this.ribbon(ev.pts, w, col, 0.16); this.ribbon(ev.pts, w * 0.35, '#ffffff', 0.12, 0.4);
-        for (let i = 1; i < ev.pts.length; i++) this.flash(ev.pts[i][0], ev.pts[i][1], col, 1.2 + (ev.a || 0) * 1.5, 0.14, i < ev.pts.length - 1 ? 'star' : 'glow');
-        this.flash(ev.x, ev.y, '#ffffff', 0.9 + (ev.a || 0), 0.1);
-        break;
-      }
-      case 'apertureOpen': break;
-      case 'overheat': this.smoke(ev.x, ev.y, 5, '#9a8f98', 0.8); break;
-      case 'vault': this.ring(ev.x, ev.y + 0.05, pc.optic, 0.3, 2.4, 0.25, true); break;
-      case 'swing': {
-        if (ev.hero === 'wolverine') {
-          const p = this.spawn({ x: ev.x + ev.facing * 0.9, y: ev.y + 1.1, color: pc.claws, tex: 'slash', s0: 1.7, s1: 1.9, life: 0.13, rot: ev.facing > 0 ? -0.4 : Math.PI + 0.4 }); if (p) p.s.material.opacity = 0.9;
-        } else if (ev.hero === 'jean') this.spawn({ x: ev.x + ev.facing * 1.0, y: ev.y + 1.2, color: pc.tk, tex: 'ring', s0: 0.4, s1: 1.6, life: 0.16 });
-        break;
-      }
-      case 'drill': this.flash(ev.x, ev.y, pc.rage, 1.6 + ev.tier * 0.5, 0.15, 'star'); break;
-      case 'drillLevel': this.ring(ev.x, ev.y, pc.rage, 0.3, 1.4 + ev.level * 0.3, 0.2); break;
-      case 'berserk': this.ring(ev.x, ev.y, pc.rage, 0.5, 4, 0.35); this.sparks(ev.x, ev.y, pc.rage, 18, 12); break;
-      case 'pounce': case 'walljump': this.smoke(ev.x, ev.y + 0.8, 3, '#d8d0e0', 0.6); break;
-      case 'land': if (ev.vy < -14) this.smoke(ev.x, ev.y, 4, '#d8d0e0', 0.7); break;
-      case 'evade': {
-        const col = HERO_LOOKS[ev.hero] ? HERO_LOOKS[ev.hero].energy : '#fff';
-        this.spawn({ x: ev.x, y: ev.y + 0.9, color: col, s0: 1.4, s1: 0.2, life: 0.18 });
-        break;
-      }
-      case 'perfect': this.ring(ev.x, ev.y, '#ffffff', 0.4, 3.6, 0.28); this.flash(ev.x, ev.y, '#ffffff', 3, 0.16, 'star'); break;
-      case 'tkGrab': this.ring(ev.x, ev.y, pc.tk, 0.2, 1.6, 0.22); break;
-      case 'tkThrow': this.flash(ev.x, ev.y, pc.tk, 1.6, 0.14, 'star'); break;
-      case 'tkMiss': case 'anchored': break;
-      case 'shield': this.ring(ev.x, ev.y, pc.tk, 0.5, ev.r * 1.1, 0.3); break;
-      case 'shieldBlock': this.flash(ev.x, ev.y, pc.tk, 1.1, 0.12, 'star'); break;
-      case 'teamup': {
-        this.ring(ev.x, ev.y + 1, pc.team, 0.4, 4.5, 0.4); this.flash(ev.x, ev.y + 1, pc.team, 4, 0.22, 'star');
-        if (ev.kind === 'edge' && ev.from) this.ribbon([[ev.from.x, ev.from.y], [ev.x, ev.y]], 0.35, pc.optic, 0.25);
-        break;
-      }
-      case 'fastballThrow': this.flash(ev.x, ev.y + 0.8, pc.team, 2.4, 0.15, 'star'); break;
-      case 'fastballSlam': this.ring(ev.x, ev.y + 0.1, pc.team, 0.5, 5, 0.35, true); this.sparks(ev.x, ev.y + 0.6, pc.claws, 20, 14); this.smoke(ev.x, ev.y, 8, '#cfc8d8', 1.4); break;
-      case 'edgeWave': break;
-      case 'called': this.flash(ev.x, ev.y, '#ffd23f', 1.4, 0.2, 'reticle'); break;
-      case 'tag': this.ring(ev.x, ev.y + 1, HERO_LOOKS[ev.to] ? HERO_LOOKS[ev.to].energy : '#fff', 0.3, 2.6, 0.25); this.sparks(ev.x, ev.y + 1, '#ffffff', 10, 8); break;
-      case 'assist': this.flash(ev.x, ev.y + 1, HERO_LOOKS[ev.hero] ? HERO_LOOKS[ev.hero].energy : '#fff', 2.2, 0.2, 'star'); break;
-      case 'ultCast': this.ring(ev.x, ev.y + 1, pc.team, 0.5, 9, 0.6); break;
-      case 'ultStrike': this.ring(ev.x, ev.y, pc.team, 1, 30, 0.6); this.flash(ev.x, ev.y, '#ffffff', 30, 0.3); break;
-      case 'hit': {
-        const col = ev.resisted ? '#9aa4b4' : pc[ev.power] || '#ffffff';
-        this.sparks(ev.x, ev.y, col, ev.heavy ? 12 : 6, ev.heavy ? 12 : 8, ev.heavy ? 0.35 : 0.25);
-        this.flash(ev.x, ev.y, col, ev.heavy ? 1.8 : 1.1, 0.09, ev.resisted ? 'ring' : 'star');
-        break;
-      }
-      case 'armourBreak': this.chunks(ev.x, ev.y, 'grey', 6, 9); this.flash(ev.x, ev.y, '#ffffff', 2.5, 0.15, 'star'); break;
-      case 'kill': {
-        const big = ev.unit === 'mk2' || ev.unit === 'collector';
-        this.flash(ev.x, ev.y, HOSTILE, big ? 8 : 4, 0.25); this.flash(ev.x, ev.y, '#ffe9a8', big ? 5 : 2.5, 0.35);
-        this.chunks(ev.x, ev.y, 'sentinel', big ? 18 : 9, big ? 14 : 10); this.chunks(ev.x, ev.y, 'grey', big ? 10 : 4, 10);
-        this.smoke(ev.x, ev.y, big ? 16 : 7, '#3a3348', big ? 2.4 : 1.4); this.ring(ev.x, ev.y, '#ffb547', 0.5, big ? 9 : 4, 0.35);
-        break;
-      }
-      case 'stagger': break;
-      case 'telegraph': {
-        const col = TELL[ev.cat] || TELL.standard;
-        this.flash(ev.x, ev.y, col, ev.cat === 'standard' ? 1.3 : 2, 0.22, 'star');
-        if (ev.cat !== 'standard') this.ring(ev.x, ev.y, col, 0.2, ev.cat === 'heavy' ? 2 : 2.6, 0.3);
-        break;
-      }
-      case 'enemyShot': this.flash(ev.x, ev.y, HOSTILE, 0.9, 0.08); break;
-      case 'projWall': this.sparks(ev.x, ev.y, ev.team === 'e' ? HOSTILE : POWER_COLORS.tk, 5, 6, 0.2); break;
-      case 'slam': this.ring(ev.x, ev.y + 0.05, ev.big ? TELL.unblockable : HOSTILE, 0.5, ev.big ? 7 : 3.4, 0.3, true); this.smoke(ev.x, ev.y, ev.big ? 10 : 5, '#cfc8d8', ev.big ? 1.8 : 1.1); break;
-      case 'bossLand': this.ring(ev.x, ev.y + 0.05, '#ffffff', 1, 10, 0.5, true); this.smoke(ev.x, ev.y, 16, '#cfc8d8', 2.4); break;
-      case 'bossPhase': this.ring(ev.x, ev.y, HOSTILE, 1, 12, 0.6); this.chunks(ev.x, ev.y - 1, 'grey', 10, 12); break;
-      case 'markAim': break;
-      case 'marked': this.flash(ev.x, ev.y + 0.4, HOSTILE, 1.6, 0.25, 'reticle'); break;
-      case 'kidGrabbed': this.ring(ev.x, ev.y + 0.6, HOSTILE, 0.3, 2.4, 0.3); break;
-      case 'kidFreed': this.ring(ev.x, ev.y + 0.6, '#ffffff', 0.3, 2.4, 0.3); break;
-      case 'crateBreak': this.chunks(ev.x, ev.y, 'wood', 7, 8); this.smoke(ev.x, ev.y, 3, '#c9b28f', 0.8); break;
-      case 'doorHit': this.sparks(ev.x, ev.y, '#ffd27a', 8, 9); break;
-      case 'doorBroken': this.chunks(ev.x, ev.y, 'steel', 12, 12); this.flash(ev.x, ev.y, '#ffffff', 4, 0.2, 'star'); this.smoke(ev.x, ev.y - 1, 8, '#9a94a8', 1.5); break;
-      case 'gateOpen': this.sparks(ev.x, 3, '#3dff8a', 20, 8, 0.5); break;
-      case 'enemyDrop': this.flash(ev.x, ev.y + 7, HOSTILE, 2.4, 0.3); break;
-      case 'adapting': case 'adapted': {
-        // A scan sweeps every Sentinel: the machines studying the team
-        if (S) for (const e of S.enemies) if (!e.dead) this.ring(e.x, e.y + e.h / 2, ev.type === 'adapting' ? HOSTILE : '#ffffff', 0.4, e.h * 1.3, 0.45);
-        break;
-      }
-      case 'revived': this.ring(ev.x, ev.y + 0.1, '#7dff6a', 0.4, 2.6, 0.35, true); break;
-      case 'downed': this.flash(ev.x, ev.y + 0.5, '#ff4b4b', 2, 0.2); break;
-      case 'kidBoarded': this.ring(ev.x, ev.y + 0.6, '#7fd3ff', 0.4, 3, 0.4); break;
-    }
+    const cue = CUES[ev.type];
+    if (cue) cue(this, ev, S);
   }
 
   // ---- Per-frame: state-driven effects and the particle pool ------------------------------------------------

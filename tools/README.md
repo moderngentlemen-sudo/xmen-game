@@ -9,7 +9,12 @@ tools are what you use on top of them to look at the game.
 | `playtest.mjs` | Plays with real keyboard and mouse input, drives the menus, races the mission to the debrief, reports console errors | `NODE_USE_ENV_PROXY=1 node tools/playtest.mjs` |
 | `coop.mjs` | Two players: keyboard and mouse plus a scripted gamepad. Joins, a team-up with real inputs, pad-driven pause | `NODE_USE_ENV_PROXY=1 node tools/coop.mjs` |
 | `probe.mjs` | The test bot plays the mission with no cheats and prints time, failures, kills, team-ups and damage by power | `node tools/probe.mjs 2 1,4,7` |
+| `sidebyside.mjs` | Runs this tree beside a reference tree (a worktree of another commit) tick by tick: the simulation, the heroes' poses and the effect calls. Proves a refactor changes nothing, or finds where a golden replay diverged | `node tools/sidebyside.mjs ../ref all` |
 | `publish-prep.mjs` | Copies `game/` into a folder ready to publish as a claude.ai artifact and prints the publish arguments | `node tools/publish-prep.mjs <scratchpad>/publish` |
+
+Plans for `shots.mjs`: `plans/rooms.mjs` (each hero's core verb and V2's four rooms) and `plans/moves.mjs` (each hero
+mid-strike: a chain finisher, the launcher, a spin, the heavy, an air strike). A plan can shoot another tree's game:
+run that tree's `tools/shots.mjs` with this plan's path and another `PORT`. Phase 0 compared itself with V2 that way.
 
 Screenshots land in `tools/out/` (gitignored). Open them with the Read tool to look at them.
 

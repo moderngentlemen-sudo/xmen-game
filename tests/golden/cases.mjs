@@ -58,8 +58,8 @@ export function fingerprint(S) {
   return JSON.parse(JSON.stringify(fp));   // as the file stores it (undefined becomes null)
 }
 
-// What the running digest folds in every tick
-function tickRecord(S) {
+// What the running digest folds in every tick (tools/sidebyside.mjs compares it tick by tick)
+export function tickRecord(S) {
   return JSON.stringify([
     S.players.map(p => [p.x, p.y, p.vx, p.vy, p.hp, p.state, p.facing, p.move ? p.move.id : null, p.move ? p.move.t : null]),
     S.enemies.map(e => [e.id, e.x, e.y, e.vx, e.vy, e.hp, e.state]),

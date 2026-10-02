@@ -1,86 +1,32 @@
 // Procedural animation for every character rig, driven by the simulation's state. Strong, asymmetric
-// silhouettes, weight low and committed, anticipation before a strike and follow-through after it. Attacks are
-// keyframed per hero and move; every joint eases toward its target at a rate set per state, independent of
-// frame rate. (Kept from Version 9's animator, rebuilt for the team edition's states.)
+// silhouettes, weight low and committed, anticipation before a strike and follow-through after it. Strikes play
+// clips keyed by move id (anim/clips/); every joint eases toward its target at a rate set per state, independent
+// of frame rate. (Kept from Version 9's animator, rebuilt for the team edition's states.)
 import { MOVES, HEROES } from './sim/config.js';
+import { CLIPS } from './anim/clips/index.js';
+import { AIR } from './anim/clips/keys.js';
 
 // Joints: spine pitch (+ leans forward), twist (torso turn), shoulders/elbows (near arm, far arm),
 // hips/knees, hip height, whole-body tilt, head pitch
 const J = ['spine', 'twist', 'shN', 'elN', 'shF', 'elF', 'hipN', 'knN', 'hipF', 'knF', 'hipY', 'bodyZ', 'head'];
 const REST = { spine: 0.04, twist: 0, shN: 0.12, elN: 0.3, shF: -0.1, elF: 0.3, hipN: 0.04, knN: -0.08, hipF: -0.04, knF: -0.08, hipY: 0.95, bodyZ: 0, head: 0 };
 const FIGHT = { spine: 0.18, twist: 0, shN: 0.7, elN: 1.0, shF: 0.35, elF: 1.1, hipN: 0.4, knN: -0.5, hipF: -0.32, knF: -0.35, hipY: 0.9, bodyZ: 0, head: -0.1 };
-const AIR = { hipN: 0.9, knN: -1.35, hipF: 0.45, knF: -1.05, hipY: 0.95 };
 
 const ease = k => k * k * (3 - 2 * k);
 const snapEase = k => 1 - Math.pow(1 - k, 3);
 function mixPose(a, b, k, out) { for (const j of J) out[j] = a[j] + (b[j] - a[j]) * k; return out; }
 
-// ---- Attack keyframes ----------------------------------------------------------------------------------
-// Each strike returns [{ t, pose, snap }]; poses are partial and merge over FIGHT (plus AIR in the air)
-const k = (t, pose, snap = false) => ({ t, pose, snap });
-const END = m => m.su + m.ac + m.rc;
-const STRIKES = {
-  // Cyclops: martial-arts strikes, backhand, elbow, a driving punch, an axe kick, the rising uppercut
-  backhand: m => [k(0, { spine: 0.05, twist: -0.4, shN: -0.4, elN: 1.7, hipY: 0.9 }), k(m.su, { spine: 0.32, twist: 0.45, shN: 1.75, elN: 0.1, hipN: 0.65, knN: -0.7, hipF: -0.55, hipY: 0.86 }, true),
-    k(m.su + m.ac + 3, { spine: 0.28, twist: 0.3, shN: 1.45, elN: 0.35, hipN: 0.6, knN: -0.65, hipF: -0.5 }), k(END(m), {})],
-  elbow: m => [k(0, { twist: 0.4, shF: -0.35, elF: 2.2, shN: 0.9, elN: 1.4 }), k(m.su, { spine: 0.38, twist: -0.5, shF: 1.45, elF: 1.65, shN: -0.3, elN: 1.4, hipN: 0.7, knN: -0.75, hipF: -0.55, hipY: 0.86 }, true),
-    k(m.su + m.ac + 3, { spine: 0.3, twist: -0.35, shF: 1.2, elF: 1.4, shN: 0.2, elN: 1.3 }), k(END(m), {})],
-  punch: m => [k(0, { spine: 0.1 }), k(m.su - 1, { spine: -0.18, twist: -0.65, shN: -0.95, elN: 1.9, shF: 0.9, elF: 1.2, hipN: 0.2, knN: -0.95, hipF: -0.85, knF: -0.2, hipY: 0.8 }),
-    k(m.su + 1, { spine: 0.48, twist: 0.6, shN: 1.62, elN: 0.0, shF: -0.7, elF: 1.1, hipN: 0.95, knN: -0.72, hipF: -0.8, knF: -0.12, hipY: 0.8 }, true),
-    k(m.su + m.ac + 4, { spine: 0.4, twist: 0.45, shN: 1.5, elN: 0.15, shF: -0.5, hipN: 0.9, knN: -0.7, hipF: -0.75, hipY: 0.82 }), k(END(m), {})],
-  axe: m => [k(0, { ...AIR, spine: -0.1, hipN: 2.1, knN: -0.35, shN: 0.9, shF: 1.3 }), k(m.su, { ...AIR, spine: -0.25, hipN: 2.4, knN: -0.15, shN: 1.2, shF: 1.6 }),
-    k(m.su + 2, { ...AIR, spine: 0.45, hipN: 0.05, knN: -0.1, shN: 0.4, shF: 0.6, bodyZ: -0.2 }, true), k(END(m), { ...AIR })],
-  rise: m => [k(0, { hipY: 0.72, spine: 0.42, twist: -0.45, hipN: 1.25, knN: -1.9, hipF: 0.2, knF: -1.8, shN: -0.45, elN: 1.95, shF: 0.7, elF: 1.6 }),
-    k(m.su, { hipY: 0.95, spine: -0.2, twist: 0.4, shN: 3.05, elN: 0.04, shF: -0.45, elF: 1.25, hipN: 0.35, knN: -0.45, hipF: -0.25, knF: -1.15, head: 0.35 }, true),
-    k(m.su + m.ac, { hipY: 0.95, spine: -0.12, twist: 0.3, shN: 2.95, elN: 0.1, shF: -0.25, elF: 1.3, hipN: 0.6, knN: -1.0, hipF: 0.1, knF: -1.1, head: 0.25 }), k(END(m), { ...AIR })],
-  // Wolverine: the claw chain, a spinning finisher, the rising slash, a two-claw overhead heavy
-  slash1: m => [k(0, { spine: -0.05, twist: -0.35, shN: 2.6, elN: 1.0, hipN: 0.35, hipF: -0.25 }),
-    k(m.su, { spine: 0.42, twist: 0.5, shN: 0.55, elN: 0.08, shF: -0.4, hipN: 0.78, knN: -0.72, hipF: -0.58, knF: -0.3, hipY: 0.84 }, true),
-    k(m.su + m.ac + 2, { spine: 0.36, twist: 0.4, shN: 0.2, elN: 0.3, hipN: 0.72, knN: -0.7, hipF: -0.55, hipY: 0.85 }), k(END(m), {})],
-  slash2: m => [k(0, { twist: 0.45, shF: -0.55, elF: 0.6, shN: 0.9, elN: 1.2 }),
-    k(m.su, { spine: 0.3, twist: -0.45, shF: 2.45, elF: 0.12, shN: -0.45, elN: 0.8, hipN: 0.72, knN: -0.7, hipF: -0.55, hipY: 0.85 }, true),
-    k(m.su + m.ac + 2, { spine: 0.24, twist: -0.3, shF: 2.6, elF: 0.3, shN: -0.3 }), k(END(m), {})],
-  slash3: m => [k(0, { spine: -0.12, shN: 2.85, shF: 2.6, elN: 1.3, elF: 1.3, hipY: 0.92 }),
-    k(m.su, { spine: 0.48, shN: 0.85, shF: 0.7, elN: 0.05, elF: 0.1, hipN: 0.82, knN: -0.85, hipF: -0.62, knF: -0.25, hipY: 0.82 }, true),
-    k(m.su + m.ac + 2, { spine: 0.4, shN: 0.4, shF: 0.3, elN: 0.2, elF: 0.3, hipN: 0.8, knN: -0.82, hipF: -0.6, hipY: 0.83 }), k(END(m), {})],
-  spin: m => [k(0, { twist: -0.9, shN: 1.2, shF: 1.1, elN: 0.3, elF: 0.4, spine: 0.1, hipY: 0.86 }),
-    k(m.su, { twist: 0.2, shN: 1.62, shF: 1.58, elN: 0.05, elF: 0.05, spine: 0.3, hipN: 0.65, knN: -0.65, hipF: -0.62, hipY: 0.83 }, true),
-    k(m.su + m.ac, { twist: 0.4, shN: 1.5, shF: 1.5, elN: 0.1, elF: 0.1, spine: 0.3, hipN: 0.65, knN: -0.65, hipF: -0.62, hipY: 0.83 }), k(END(m), {})],
-  clawRise: m => [k(0, { hipY: 0.72, spine: 0.42, hipN: 1.2, knN: -1.85, hipF: 0.3, knF: -1.9, shN: -0.5, shF: -0.7 }),
-    k(m.su, { hipY: 0.95, spine: -0.1, shN: 2.9, shF: 2.7, elN: 0.1, elF: 0.2, hipN: 0.3, knN: -0.6, hipF: -0.3, knF: -0.95 }, true),
-    k(m.su + m.ac, { hipY: 0.95, spine: -0.05, shN: 2.8, shF: 2.6, elN: 0.2, elF: 0.3, hipN: 0.6, knN: -1.1, hipF: 0.2, knF: -1.0 }), k(END(m), { ...AIR })],
-  clawAir: m => [k(0, { ...AIR, spine: -0.25, shN: 2.7, shF: 2.5, elN: 0.4, elF: 0.5 }),
-    k(m.su, { ...AIR, spine: 0.65, shN: 0.5, shF: 0.4, elN: 0.1, elF: 0.15, bodyZ: -0.3 }, true), k(END(m), { ...AIR })],
-  clawHeavy: m => [k(0, { spine: 0.1 }), k(m.su - 1, { spine: -0.32, twist: -0.5, shN: 3.0, shF: 2.9, elN: 0.2, elF: 0.3, hipN: 0.6, knN: -0.8, hipF: -0.7, knF: -0.2, hipY: 0.84 }),
-    k(m.su + 1, { spine: 0.62, twist: 0.45, shN: 0.7, shF: 0.6, elN: 0.1, elF: 0.2, hipN: 0.95, knN: -0.95, hipF: -0.75, knF: -0.15, hipY: 0.79 }, true),
-    k(m.su + m.ac + 5, { spine: 0.5, twist: 0.3, shN: 0.5, shF: 0.4, hipN: 0.9, knN: -0.9, hipF: -0.72, hipY: 0.8 }), k(END(m), {})],
-  // Jean: open-palm telekinetic pushes, the far hand at her temple
-  palm1: m => [k(0, { twist: -0.3, shN: 0.6, elN: 1.6, shF: 2.6, elF: 2.3 }), k(m.su, { spine: 0.22, twist: 0.35, shN: 1.62, elN: 0.04, shF: 2.6, elF: 2.3, hipN: 0.55, knN: -0.6, hipF: -0.45, hipY: 0.88 }, true),
-    k(m.su + m.ac + 3, { spine: 0.18, twist: 0.25, shN: 1.55, elN: 0.1, shF: 2.5, elF: 2.2, hipN: 0.5, knN: -0.55, hipF: -0.4 }), k(END(m), {})],
-  palm2: m => [k(0, { twist: 0.35, shF: 0.4, elF: 1.6, shN: 2.5, elN: 2.2 }), k(m.su, { spine: 0.25, twist: -0.35, shF: 1.62, elF: 0.05, shN: 2.5, elN: 2.2, hipN: 0.6, knN: -0.6, hipF: -0.5, hipY: 0.87 }, true),
-    k(m.su + m.ac + 3, { spine: 0.2, twist: -0.25, shF: 1.5, elF: 0.12 }), k(END(m), {})],
-  push: m => [k(0, { spine: -0.1, shN: 0.4, elN: 1.9, shF: 0.3, elF: 1.9, hipY: 0.9 }),
-    k(m.su, { spine: 0.35, shN: 1.62, elN: 0.02, shF: 1.5, elF: 0.06, hipN: 0.8, knN: -0.7, hipF: -0.65, knF: -0.2, hipY: 0.84, head: -0.15 }, true),
-    k(m.su + m.ac + 4, { spine: 0.3, shN: 1.55, elN: 0.08, shF: 1.45, elF: 0.1, hipN: 0.75, knN: -0.7, hipF: -0.6, hipY: 0.85 }), k(END(m), {})],
-  palmAir: m => [k(0, { ...AIR, spine: -0.15, shN: 2.2, elN: 0.8, shF: 2.6, elF: 2.3 }), k(m.su, { ...AIR, spine: 0.4, shN: 1.1, elN: 0.05, shF: 2.5, elF: 2.2, bodyZ: -0.15 }, true), k(END(m), { ...AIR })],
-  lift: m => [k(0, { hipY: 0.82, spine: 0.3, shN: -0.3, elN: 0.6, shF: -0.4, elF: 0.6, hipN: 0.7, knN: -1.1, hipF: -0.1, knF: -0.9 }),
-    k(m.su, { hipY: 0.95, spine: -0.15, shN: 2.9, elN: 0.05, shF: 2.8, elF: 0.1, hipN: 0.3, knN: -0.5, hipF: -0.2, knF: -0.7, head: 0.35 }, true), k(END(m), { ...AIR })],
-};
-// Which strike each hero's move plays
-const MOVE_KEYS = {
-  cyclops: { g1: 'backhand', g2: 'elbow', g3: 'punch', air: 'axe', up: 'rise', heavy: 'punch' },
-  wolverine: { g1: 'slash1', g2: 'slash2', g3: 'slash3', g4: 'spin', air: 'clawAir', up: 'clawRise', heavy: 'clawHeavy' },
-  jean: { g1: 'palm1', g2: 'palm2', g3: 'push', air: 'palmAir', up: 'lift', heavy: 'push' },
-};
-const SPIN = { wolverine: { g4: [1, 'y'] } };
-
+// ---- Strikes ----------------------------------------------------------------------------------------------
+// The move a hero is in plays its clip (anim/clips/<hero>.js) at the move's clock; its keyframes merge over FIGHT
+// (plus AIR for an air clip)
+const clipOf = p => (CLIPS[p.hero] || {})[p.move.id] || CLIPS.cyclops.g1;
 const keyCache = new Map();
 function attackPose(p, out) {
-  const id = p.move.id, m = MOVES[p.hero][id], name = (MOVE_KEYS[p.hero] || {})[id] || 'backhand', ck = p.hero + ':' + id;
+  const id = p.move.id, m = MOVES[p.hero][id], clip = clipOf(p), ck = p.hero + ':' + id;
   let ks = keyCache.get(ck);
   if (!ks) {
-    const base = id === 'air' ? { ...FIGHT, ...AIR } : FIGHT;
-    ks = STRIKES[name](m).map(q => ({ t: q.t, snap: q.snap, pose: { ...base, ...q.pose } }));
+    const base = clip.base === 'air' ? { ...FIGHT, ...AIR } : FIGHT;
+    ks = clip.keys(m).map(q => ({ t: q.t, snap: q.snap, pose: { ...base, ...q.pose } }));
     keyCache.set(ck, ks);
   }
   const u = p.move.t;
@@ -128,9 +74,9 @@ export function animateHero(rig, p, dt, t) {
     rate = 60;
   } else if (st === 'attack' && p.move) {
     attackPose(p, P);
-    const sp = (SPIN[hero] || {})[p.move.id], m = MOVES[hero][p.move.id];
+    const clip = clipOf(p), sp = clip.spin, m = MOVES[hero][p.move.id];
     if (sp) { const a = Math.max(0, Math.min(1, (p.move.t - m.su) / m.ac)), ang = Math.PI * 2 * sp[0] * snapEase(a); if (sp[1] === 'z') roll = -ang; else yaw = ang; }
-    if (p.move.id === 'heavy' && p.move.t < m.su) P.spine += (Math.random() - 0.5) * 0.03;   // trembling as it winds up
+    if (clip.tremble && p.move.t < m.su) P.spine += (Math.random() - 0.5) * 0.03;   // trembling as it winds up
     rate = 48;
   } else if (st === 'evade' && p.evade) {
     const V = H.evade, u = Math.min(1, p.evade.t / V.ticks), back = p.evade.dir * p.facing < 0;

@@ -1,12 +1,14 @@
 // The move tables (game/js/sim/moves/) and the move engine (game/js/sim/moveEngine.js): every table is valid, every
-// cancel resolves to a real move, hitboxes come out on active ticks only, every hero keeps V2's moves, and the
-// Attack button picks what the grammar says (the chain, up, air, the counter, the charge).
+// cancel resolves to a real move, hitboxes come out on active ticks only, every hero keeps V2's moves, the Attack
+// button picks what the grammar says (the chain, up, air, the counter, the charge), and every move has its
+// animation clip (game/js/anim/clips/).
 import { createWorld, step } from '../game/js/sim/world.js';
 import { BTN, HEROES } from '../game/js/sim/config.js';
 import { setHero } from '../game/js/sim/player.js';
 import { startMove } from '../game/js/sim/moveEngine.js';
 import { MOVESETS } from '../game/js/sim/moves/index.js';
 import { validateMoves } from '../game/js/sim/moves/schema.js';
+import { CLIPS } from '../game/js/anim/clips/index.js';
 
 const assert = (c, m) => { console.log((c ? 'PASS ' : 'FAIL ') + m); if (!c) process.exitCode = 1; };
 const cmd = (o = {}) => ({ mx: o.mx || 0, my: o.my || 0, ax: 1, ay: 0, aim: false, b: o.b || 0 });
@@ -133,4 +135,19 @@ for (const hero of HERO_IDS) {
   const dmg = heavy.dmg * 1 * C.dmgMult;
   assert(release.charged && release.box && release.box.dmg === dmg && hold.charged && hold.box && hold.box.dmg === dmg && hold.after === C.release,
     `${hero}: with the hold reached, letting go fires the charged heavy (${dmg.toFixed(1)} damage), and holding on fires it ${C.release} ticks later`);
+}
+
+// ---- Every move has its animation clip -------------------------------------------------------------------------------
+// The client plays a clip per move id (game/js/anim/clips/, plain data that loads without three.js): every move needs
+// one, every clip needs its move, and a clip's keyframes start at 0 and run in time order within the move.
+for (const hero of HERO_IDS) {
+  const set = MOVESETS[hero], clips = CLIPS[hero] || {}, problems = [];
+  for (const [id, m] of Object.entries(set.moves)) {
+    const clip = clips[id];
+    if (!clip) { problems.push(`${id} has no clip`); continue; }
+    const ks = clip.keys(m), end = m.su + m.ac + m.rc;
+    if (!ks.length || ks[0].t !== 0 || ks.some((q, i) => q.t > end || (i && q.t < ks[i - 1].t))) problems.push(`${id}'s keyframes are out of order or outside its ${end} ticks`);
+  }
+  for (const id of Object.keys(clips)) if (!set.moves[id]) problems.push(`the clip ${id} has no move`);
+  assert(!problems.length, `${hero}: every move has an animation clip, and every clip a move${problems.length ? ': ' + problems.join('; ') : ''}`);
 }
